@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "purpose": "Machine-readable low-token index for OmniAgent agent context.",
+  "agents": [
+    {
+      "id": "omni-router-agent",
+      "card": "agents/OMNI_ROUTER_AGENT.md",
+      "primarySources": ["src/mastra/agents/omni-router-agent.ts"],
+      "contextPack": "Routing And Delegation",
+      "keywords": ["router", "intent", "inbox", "delegation", "main agent"]
+    },
+    {
+      "id": "code-agent",
+      "card": "agents/CODE_AGENT.md",
+      "primarySources": ["src/mastra/agents/code-agent.ts", "src/mastra/lib/code-task-store.ts", "src/mastra/tools/code-tools.ts"],
+      "contextPack": "CodeAgent / Claude Code",
+      "keywords": ["claude", "code", "cli", "spawn", "workspace", "team run"]
+    },
+    {
+      "id": "cron-agent",
+      "card": "agents/CRON_AGENT.md",
+      "primarySources": ["src/mastra/agents/cron-agent.ts", "src/mastra/lib/cron-store.ts", "src/mastra/tools/cron-tools.ts"],
+      "contextPack": "CronAgent / Scheduler",
+      "keywords": ["cron", "schedule", "scheduler", "due job", "manual run"]
+    },
+    {
+      "id": "knowledge-agent",
+      "card": "agents/KNOWLEDGE_AGENT.md",
+      "primarySources": ["src/mastra/agents/knowledge-agent.ts", "src/mastra/lib/docs-memory.ts", "src/mastra/tools/memory-tools.ts"],
+      "contextPack": "Docs Memory",
+      "keywords": ["docs", "memory", "index", "proposal", "knowledge"]
+    },
+    {
+      "id": "task-agent",
+      "status": "protocol-role",
+      "card": "agents/TASK_AGENT.md",
+      "primarySources": ["src/mastra/lib/team-runtime-store.ts", "src/mastra/tools/team-runtime-tools.ts"],
+      "contextPack": "TaskAgent / Team Runtime",
+      "keywords": ["task", "run", "event", "inbox", "result", "team runtime"]
+    }
+  ],
+  "globalDocs": ["START_HERE.md", "CONTEXT_PACKS.md", "knowledge/PITFALLS.md", "memory/OMNI.md"]
+}

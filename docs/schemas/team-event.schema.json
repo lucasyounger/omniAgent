@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TeamEvent",
+  "type": "object",
+  "required": ["eventId", "sourceAgentId", "type", "payload", "createdAt"],
+  "properties": {
+    "eventId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "runId": { "type": "string" },
+    "sourceAgentId": { "type": "string" },
+    "targetAgentId": { "type": "string" },
+    "type": { "type": "string" },
+    "payload": { "type": "object" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

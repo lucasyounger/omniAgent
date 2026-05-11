@@ -1,0 +1,4 @@
+{"type":"task_started","message":"Claude Code task started.","ts":"2026-05-10T13:53:43.463Z"}
+{"type":"stderr","message":"Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n","ts":"2026-05-10T13:53:49.929Z"}
+{"type":"stdout","message":"OMNI_TEAM_CRON_OK\n","ts":"2026-05-10T13:54:00.927Z"}
+{"type":"task_completed","message":"Claude Code exited with code 0.","ts":"2026-05-10T13:54:02.468Z"}

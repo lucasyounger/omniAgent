@@ -1,0 +1,41 @@
+[
+  {
+    "runId": "run-1778421164226-bygiam",
+    "taskId": "task-1778421164210-6yirlp",
+    "executorAgentId": "code-agent",
+    "status": "completed",
+    "startedAt": "2026-05-10T13:52:44.226Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778421164196-xknu42"
+    },
+    "completedAt": "2026-05-10T13:52:59.390Z",
+    "resultRef": "docs/runs/team/results/run-1778421164226-bygiam.json"
+  },
+  {
+    "runId": "run-1778421223453-hx9n4i",
+    "taskId": "task-1778421223435-0721k0",
+    "executorAgentId": "code-agent",
+    "status": "completed",
+    "startedAt": "2026-05-10T13:53:43.453Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778421223431-t5llvs"
+    },
+    "completedAt": "2026-05-10T13:54:02.473Z",
+    "resultRef": "docs/runs/team/results/run-1778421223453-hx9n4i.json"
+  },
+  {
+    "runId": "run-1778425088734-yceqpz",
+    "taskId": "task-1778425088704-z6ruk2",
+    "executorAgentId": "code-agent",
+    "status": "completed",
+    "startedAt": "2026-05-10T14:58:08.734Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778425088681-u2eosq"
+    },
+    "completedAt": "2026-05-10T15:00:40.866Z",
+    "resultRef": "docs/runs/team/results/run-1778425088734-yceqpz.json"
+  }
+]

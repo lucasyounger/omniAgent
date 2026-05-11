@@ -1,0 +1,47 @@
+[
+  {
+    "taskId": "task-1778421164210-6yirlp",
+    "sourceAgentId": "omni-router-agent",
+    "targetAgentId": "code-agent",
+    "requestedBy": "smoke-test",
+    "objective": "Return exactly: OMNI_TEAM_RUNTIME_OK",
+    "status": "completed",
+    "priority": "normal",
+    "createdAt": "2026-05-10T13:52:44.209Z",
+    "updatedAt": "2026-05-10T13:52:59.390Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778421164196-xknu42"
+    }
+  },
+  {
+    "taskId": "task-1778421223435-0721k0",
+    "sourceAgentId": "cron-agent",
+    "targetAgentId": "code-agent",
+    "requestedBy": "cron:cron-1778421223285-zpj69t",
+    "objective": "Return exactly: OMNI_TEAM_CRON_OK",
+    "status": "completed",
+    "priority": "normal",
+    "createdAt": "2026-05-10T13:53:43.435Z",
+    "updatedAt": "2026-05-10T13:54:02.473Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778421223431-t5llvs"
+    }
+  },
+  {
+    "taskId": "task-1778425088704-z6ruk2",
+    "sourceAgentId": "cron-agent",
+    "targetAgentId": "code-agent",
+    "requestedBy": "cron:cron-1778424952833-amfsvs",
+    "objective": "简洁版日报：汇总 L:\\Code\\Mastra-workspace\\OmniAgent 项目的代码变更和 commit 摘要，在会话中向用户汇报",
+    "status": "completed",
+    "priority": "normal",
+    "createdAt": "2026-05-10T14:58:08.704Z",
+    "updatedAt": "2026-05-10T15:00:40.866Z",
+    "metadata": {
+      "workspacePath": "L:\\Code\\Mastra-workspace\\OmniAgent",
+      "codeTaskId": "code-1778425088681-u2eosq"
+    }
+  }
+]

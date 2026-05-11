@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TeamTask",
+  "type": "object",
+  "required": ["taskId", "sourceAgentId", "targetAgentId", "objective", "status", "priority", "createdAt", "updatedAt"],
+  "properties": {
+    "taskId": { "type": "string" },
+    "sourceAgentId": { "type": "string" },
+    "targetAgentId": { "type": "string" },
+    "requestedBy": { "type": "string" },
+    "parentTaskId": { "type": "string" },
+    "objective": { "type": "string" },
+    "status": { "enum": ["queued", "running", "completed", "failed", "cancelled", "interrupted", "timed_out"] },
+    "priority": { "enum": ["low", "normal", "high"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "timeoutAt": { "type": "string", "format": "date-time" },
+    "retryOfTaskId": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

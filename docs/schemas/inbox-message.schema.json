@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InboxMessage",
+  "type": "object",
+  "required": ["messageId", "recipientAgentId", "sourceAgentId", "type", "summary", "status", "createdAt"],
+  "properties": {
+    "messageId": { "type": "string" },
+    "recipientAgentId": { "type": "string" },
+    "sourceAgentId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "runId": { "type": "string" },
+    "type": { "type": "string" },
+    "summary": { "type": "string" },
+    "resultRef": { "type": "string" },
+    "status": { "enum": ["unread", "read"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "readAt": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

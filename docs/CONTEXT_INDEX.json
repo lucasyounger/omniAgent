@@ -1,0 +1,47 @@
+{
+  "updatedAt": "2026-05-11T02:47:52.658Z",
+  "startHere": "START_HERE.md",
+  "architecture": "ARCHITECTURE.md",
+  "testing": "TESTING.md",
+  "contextPacks": "CONTEXT_PACKS.md",
+  "pitfalls": "knowledge/PITFALLS.md",
+  "agentIndex": "agents/AGENT_INDEX.json",
+  "defaultReadOrder": [
+    "memory/OMNI.md",
+    "agents/README.md",
+    "ARCHITECTURE.md",
+    "CONTEXT_PACKS.md"
+  ],
+  "avoidByDefault": [
+    "runs/**",
+    "memory/MEMORY_INDEX.json",
+    "memory/doc-update-proposals.jsonl"
+  ],
+  "packs": {
+    "routing": [
+      "agents/OMNI_ROUTER_AGENT.md",
+      "agents/TASK_AGENT.md",
+      "knowledge/TEAM_RUNTIME.md"
+    ],
+    "taskRuntime": [
+      "agents/TASK_AGENT.md",
+      "knowledge/TEAM_RUNTIME.md",
+      "knowledge/PITFALLS.md"
+    ],
+    "codeAgent": [
+      "agents/CODE_AGENT.md",
+      "knowledge/CLAUDE_CODE.md",
+      "agents/TASK_AGENT.md"
+    ],
+    "cronAgent": [
+      "agents/CRON_AGENT.md",
+      "knowledge/CRON.md",
+      "agents/TASK_AGENT.md"
+    ],
+    "docsMemory": [
+      "agents/KNOWLEDGE_AGENT.md",
+      "skills/doc-sync.md",
+      "skills/memory-maintenance.md"
+    ]
+  }
+}

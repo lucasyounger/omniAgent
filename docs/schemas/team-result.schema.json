@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunResult",
+  "type": "object",
+  "required": ["runId", "taskId", "executorAgentId", "status", "summary", "completedAt"],
+  "properties": {
+    "runId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "executorAgentId": { "type": "string" },
+    "status": { "enum": ["running", "completed", "failed", "cancelled", "interrupted", "timed_out"] },
+    "summary": { "type": "string" },
+    "output": { "type": "string" },
+    "error": { "type": "string" },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

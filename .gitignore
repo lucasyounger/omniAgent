@@ -1,0 +1,9 @@
+node_modules
+dist
+.mastra
+.env
+.env.development
+*.db
+*.db-*
+.mastra-dev*.log
+output.txt

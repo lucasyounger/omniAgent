@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CronJob",
+  "type": "object",
+  "required": ["id", "name", "schedule", "task", "status", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "schedule": { "type": "string" },
+    "task": { "type": "string" },
+    "targetAgent": { "type": "string" },
+    "status": { "type": "string", "enum": ["active", "paused"] },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemoryCard",
+  "type": "object",
+  "required": ["id", "kind", "title", "content", "confidence", "stability", "tags", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "type": "string" },
+    "kind": {
+      "type": "string",
+      "enum": ["user_preference", "project_fact", "procedure", "decision", "episode"]
+    },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "stability": {
+      "type": "string",
+      "enum": ["temporary", "stable", "canonical"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  }
+}

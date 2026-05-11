@@ -1,0 +1,347 @@
+{
+  "updatedAt": "2026-05-11T02:47:52.658Z",
+  "scope": "knowledge-docs",
+  "excludes": [
+    "runs/**",
+    "memory/MEMORY_INDEX.json",
+    "memory/doc-update-proposals.jsonl"
+  ],
+  "files": [
+    {
+      "path": "ARCHITECTURE.md",
+      "title": "Architecture",
+      "purpose": "Compact architecture and lifecycle overview.",
+      "bytes": 1675,
+      "updatedAt": "2026-05-11T02:41:32.221Z"
+    },
+    {
+      "path": "CONTEXT_INDEX.json",
+      "title": "CONTEXT_INDEX.json",
+      "purpose": "Docs file.",
+      "bytes": 1033,
+      "updatedAt": "2026-05-11T01:12:39.965Z"
+    },
+    {
+      "path": "CONTEXT_PACKS.md",
+      "title": "Context Packs",
+      "purpose": "Task-oriented doc bundles for focused context.",
+      "bytes": 1485,
+      "updatedAt": "2026-05-10T14:08:51.868Z"
+    },
+    {
+      "path": "README.md",
+      "title": "OmniAgent Docs Memory",
+      "purpose": "Docs file.",
+      "bytes": 1701,
+      "updatedAt": "2026-05-11T02:46:07.643Z"
+    },
+    {
+      "path": "START_HERE.md",
+      "title": "Start Here",
+      "purpose": "Default entry for low-token context assembly.",
+      "bytes": 1106,
+      "updatedAt": "2026-05-11T02:46:20.120Z"
+    },
+    {
+      "path": "TESTING.md",
+      "title": "Testing",
+      "purpose": "Testing contract and verification commands.",
+      "bytes": 821,
+      "updatedAt": "2026-05-11T02:45:56.621Z"
+    },
+    {
+      "path": "agents/AGENT_INDEX.json",
+      "title": "AGENT_INDEX.json",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 1831,
+      "updatedAt": "2026-05-11T01:11:34.548Z"
+    },
+    {
+      "path": "agents/CODE_AGENT.md",
+      "title": "CodeAgent",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 1252,
+      "updatedAt": "2026-05-10T14:03:08.943Z"
+    },
+    {
+      "path": "agents/CRON_AGENT.md",
+      "title": "CronAgent",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 1485,
+      "updatedAt": "2026-05-11T02:41:19.740Z"
+    },
+    {
+      "path": "agents/KNOWLEDGE_AGENT.md",
+      "title": "KnowledgeAgent",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 1137,
+      "updatedAt": "2026-05-10T14:03:36.998Z"
+    },
+    {
+      "path": "agents/OMNI_ROUTER_AGENT.md",
+      "title": "OmniRouterAgent",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 1355,
+      "updatedAt": "2026-05-10T14:02:52.873Z"
+    },
+    {
+      "path": "agents/README.md",
+      "title": "Agent Cards",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 961,
+      "updatedAt": "2026-05-10T14:02:13.221Z"
+    },
+    {
+      "path": "agents/TASK_AGENT.md",
+      "title": "TaskAgent",
+      "purpose": "Agent card or machine-readable agent index.",
+      "bytes": 3592,
+      "updatedAt": "2026-05-11T02:43:45.169Z"
+    },
+    {
+      "path": "context/code-agent-context.md",
+      "title": "CodeAgent Context",
+      "purpose": "Prompt context and context budget rules.",
+      "bytes": 202,
+      "updatedAt": "2026-05-10T05:45:23.091Z"
+    },
+    {
+      "path": "context/context-budget.md",
+      "title": "Context Budget",
+      "purpose": "Prompt context and context budget rules.",
+      "bytes": 655,
+      "updatedAt": "2026-05-11T01:12:05.781Z"
+    },
+    {
+      "path": "context/cron-agent-context.md",
+      "title": "CronAgent Context",
+      "purpose": "Prompt context and context budget rules.",
+      "bytes": 180,
+      "updatedAt": "2026-05-10T05:45:23.091Z"
+    },
+    {
+      "path": "context/knowledge-agent-context.md",
+      "title": "KnowledgeAgent Context",
+      "purpose": "Prompt context and context budget rules.",
+      "bytes": 186,
+      "updatedAt": "2026-05-10T05:45:23.091Z"
+    },
+    {
+      "path": "context/router-context.md",
+      "title": "Router Context",
+      "purpose": "Prompt context and context budget rules.",
+      "bytes": 343,
+      "updatedAt": "2026-05-10T05:45:23.089Z"
+    },
+    {
+      "path": "knowledge/CLAUDE_CODE.md",
+      "title": "Claude Code Integration",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 866,
+      "updatedAt": "2026-05-10T13:47:59.798Z"
+    },
+    {
+      "path": "knowledge/CODEBASES.md",
+      "title": "Codebases",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 526,
+      "updatedAt": "2026-05-10T05:45:23.073Z"
+    },
+    {
+      "path": "knowledge/CRON.md",
+      "title": "Cron Management",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 1776,
+      "updatedAt": "2026-05-11T02:40:49.320Z"
+    },
+    {
+      "path": "knowledge/MASTRA.md",
+      "title": "Mastra",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 338,
+      "updatedAt": "2026-05-10T05:45:23.076Z"
+    },
+    {
+      "path": "knowledge/PITFALLS.md",
+      "title": "Pitfalls Index",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 1746,
+      "updatedAt": "2026-05-11T01:11:19.834Z"
+    },
+    {
+      "path": "knowledge/PROJECTS.md",
+      "title": "Projects",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 237,
+      "updatedAt": "2026-05-10T05:45:23.073Z"
+    },
+    {
+      "path": "knowledge/TEAM_RUNTIME.md",
+      "title": "Team Runtime Protocol",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 2238,
+      "updatedAt": "2026-05-11T02:43:14.645Z"
+    },
+    {
+      "path": "knowledge/TOOLS.md",
+      "title": "Tools",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 433,
+      "updatedAt": "2026-05-10T05:45:23.076Z"
+    },
+    {
+      "path": "knowledge/TROUBLESHOOTING.md",
+      "title": "Troubleshooting",
+      "purpose": "Durable implementation knowledge and known pitfalls.",
+      "bytes": 323,
+      "updatedAt": "2026-05-10T05:45:23.076Z"
+    },
+    {
+      "path": "memory/CURRENT_CONTEXT.md",
+      "title": "Current Context",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 450,
+      "updatedAt": "2026-05-10T05:45:23.067Z"
+    },
+    {
+      "path": "memory/DECISIONS.md",
+      "title": "Decisions",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 690,
+      "updatedAt": "2026-05-10T05:45:23.068Z"
+    },
+    {
+      "path": "memory/EPISODIC_LOG.md",
+      "title": "Episodic Log",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 103,
+      "updatedAt": "2026-05-10T05:45:23.069Z"
+    },
+    {
+      "path": "memory/OMNI.md",
+      "title": "OmniAgent Memory",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 746,
+      "updatedAt": "2026-05-10T14:04:48.676Z"
+    },
+    {
+      "path": "memory/PREFERENCES.md",
+      "title": "Execution Preferences",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 348,
+      "updatedAt": "2026-05-10T05:45:23.063Z"
+    },
+    {
+      "path": "memory/USER.md",
+      "title": "User Memory",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 365,
+      "updatedAt": "2026-05-10T05:45:23.061Z"
+    },
+    {
+      "path": "memory/WORKSPACE.md",
+      "title": "Workspace Memory",
+      "purpose": "Canonical long-term memory.",
+      "bytes": 432,
+      "updatedAt": "2026-05-10T05:45:23.065Z"
+    },
+    {
+      "path": "schemas/cron-job.schema.json",
+      "title": "cron-job.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 537,
+      "updatedAt": "2026-05-10T05:45:23.095Z"
+    },
+    {
+      "path": "schemas/doc-update.schema.json",
+      "title": "doc-update.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 518,
+      "updatedAt": "2026-05-10T05:45:23.096Z"
+    },
+    {
+      "path": "schemas/inbox-message.schema.json",
+      "title": "inbox-message.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 787,
+      "updatedAt": "2026-05-10T13:49:43.437Z"
+    },
+    {
+      "path": "schemas/memory-card.schema.json",
+      "title": "memory-card.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 804,
+      "updatedAt": "2026-05-10T05:45:23.094Z"
+    },
+    {
+      "path": "schemas/task-result.schema.json",
+      "title": "task-result.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 349,
+      "updatedAt": "2026-05-10T05:45:23.094Z"
+    },
+    {
+      "path": "schemas/team-event.schema.json",
+      "title": "team-event.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 566,
+      "updatedAt": "2026-05-10T13:49:02.850Z"
+    },
+    {
+      "path": "schemas/team-result.schema.json",
+      "title": "team-result.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 751,
+      "updatedAt": "2026-05-11T02:47:25.403Z"
+    },
+    {
+      "path": "schemas/team-run.schema.json",
+      "title": "team-run.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 805,
+      "updatedAt": "2026-05-11T02:47:14.247Z"
+    },
+    {
+      "path": "schemas/team-task.schema.json",
+      "title": "team-task.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 962,
+      "updatedAt": "2026-05-11T02:47:00.791Z"
+    },
+    {
+      "path": "skills/code-task.md",
+      "title": "Code Task Skill",
+      "purpose": "Reusable playbook.",
+      "bytes": 415,
+      "updatedAt": "2026-05-10T05:45:23.083Z"
+    },
+    {
+      "path": "skills/cron-task.md",
+      "title": "Cron Task Skill",
+      "purpose": "Reusable playbook.",
+      "bytes": 209,
+      "updatedAt": "2026-05-10T05:45:23.085Z"
+    },
+    {
+      "path": "skills/doc-sync.md",
+      "title": "Doc Sync Skill",
+      "purpose": "Reusable playbook.",
+      "bytes": 424,
+      "updatedAt": "2026-05-11T02:46:34.764Z"
+    },
+    {
+      "path": "skills/memory-maintenance.md",
+      "title": "Memory Maintenance Skill",
+      "purpose": "Reusable playbook.",
+      "bytes": 267,
+      "updatedAt": "2026-05-10T05:45:23.088Z"
+    },
+    {
+      "path": "skills/repo-analysis.md",
+      "title": "Repo Analysis Skill",
+      "purpose": "Reusable playbook.",
+      "bytes": 249,
+      "updatedAt": "2026-05-10T05:45:23.085Z"
+    }
+  ]
+}

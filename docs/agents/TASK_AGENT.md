@@ -1,0 +1,102 @@
+# TaskAgent
+
+Status: protocol/tooling role, not yet a standalone Mastra `Agent`.
+
+TaskAgent is the conceptual owner of OmniAgent's Team Runtime. It defines how
+work is delegated, executed, reported, and recovered across all agents.
+
+## What It Owns
+
+- Durable tasks, runs, events, inbox messages, and results.
+- Agent-to-agent completion notification.
+- Low-token task/result lookup for the main agent.
+- The stable protocol future agents must use for delegated work.
+
+## Source Files
+
+- `src/mastra/lib/team-runtime-store.ts`
+- `src/mastra/tools/team-runtime-tools.ts`
+- `src/mastra/tools/index.ts`
+- `src/mastra/agents/omni-router-agent.ts`
+- `src/mastra/agents/code-agent.ts`
+- `src/mastra/agents/cron-agent.ts`
+
+## Runtime Files
+
+- `docs/runs/team/tasks.json`
+- `docs/runs/team/runs.json`
+- `docs/runs/team/events.jsonl`
+- `docs/runs/team/inbox/{agentId}.jsonl`
+- `docs/runs/team/results/{runId}.json`
+
+## Tools
+
+- `create-team-task`
+- `list-team-tasks`
+- `get-team-task`
+- `list-team-runs`
+- `list-team-events`
+- `list-agent-inbox`
+- `mark-inbox-message-read`
+- `get-run-result`
+- `send-agent-inbox-message`
+- `cancel-team-task`
+- `cancel-team-run`
+- `retry-team-task`
+- `recover-interrupted-team-runs`
+- `mark-timed-out-team-runs`
+
+## Contract
+
+- Any long-running or delegated work should have a Team Task.
+- Every execution attempt should have a Team Run.
+- Progress should be appended as Team Events.
+- Final output should be written as a Result file.
+- Inbox messages are notifications, not the source of truth.
+- Large outputs should be referenced through `resultRef`, not copied into inbox.
+- Completion should notify the source agent and normally `omni-router-agent`.
+- Runs left `running` across restart should be recovered as `interrupted`.
+- Overdue runs should be marked `timed_out`.
+
+## Current Behavior
+
+- CodeAgent automatically creates a Team Task if `start-claude-code-task` is
+  called without `teamTaskId`.
+- CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
+- CodeAgent writes completed or failed results and inbox messages.
+- Cron execution goes through CodeAgent and records `lastRunTeamTaskId` and
+  `lastRunTeamRunId` on cron job records.
+- Cancel, retry, timeout, and interrupted states are part of the protocol.
+
+## Known Pitfalls
+
+- Do not make Cron-specific result protocols. Cron is only one task source.
+- Do not make OmniRouterAgent poll code task logs directly when a Team Result
+  exists. Prefer inbox -> resultRef -> result.
+- Do not store secrets or raw credentials in task metadata, events, inbox, or
+  results.
+- The first implementation is file-backed. Avoid high-frequency event spam
+  until storage moves to LibSQL.
+- `teamRuntimeStoreBackend` is the current backend boundary for future LibSQL
+  migration.
+- Test messages in `omni-router-agent` inbox should be marked read, otherwise
+  the main agent may surface smoke-test results as real work.
+- If future code introduces a real Mastra `TaskAgent`, keep this file as the
+  role contract and link the new source file here.
+
+## Change Checklist
+
+- Update `docs/knowledge/TEAM_RUNTIME.md` when protocol behavior changes.
+- Update `docs/schemas/team-*.schema.json` and `inbox-message.schema.json`
+  when data shape changes.
+- Update tests under `tests/team-runtime-store.test.ts`.
+- Run `npm test` and `npm run typecheck`.
+
+## Related Docs
+
+- `docs/knowledge/TEAM_RUNTIME.md`
+- `docs/schemas/team-task.schema.json`
+- `docs/schemas/team-run.schema.json`
+- `docs/schemas/team-event.schema.json`
+- `docs/schemas/inbox-message.schema.json`
+- `docs/schemas/team-result.schema.json`

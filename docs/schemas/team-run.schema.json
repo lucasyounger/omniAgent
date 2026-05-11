@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TeamRun",
+  "type": "object",
+  "required": ["runId", "taskId", "executorAgentId", "status", "attempt", "startedAt"],
+  "properties": {
+    "runId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "executorAgentId": { "type": "string" },
+    "status": { "enum": ["running", "completed", "failed", "cancelled", "interrupted", "timed_out"] },
+    "attempt": { "type": "number" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "timeoutAt": { "type": "string", "format": "date-time" },
+    "resultRef": { "type": "string" },
+    "error": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

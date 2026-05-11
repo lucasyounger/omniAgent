@@ -1,0 +1,17 @@
+[
+  {
+    "id": "cron-1778424952833-amfsvs",
+    "name": "一次性日报 - 2026-05-10 21:11",
+    "schedule": "一次性执行，2026-05-10 22:58",
+    "task": "简洁版日报：汇总 L:\\Code\\Mastra-workspace\\OmniAgent 项目的代码变更和 commit 摘要，在会话中向用户汇报",
+    "targetAgent": "codeAgent",
+    "status": "paused",
+    "createdAt": "2026-05-10T14:55:52.832Z",
+    "updatedAt": "2026-05-10T14:58:08.675Z",
+    "lastRunAt": "2026-05-10T14:58:08.675Z",
+    "lastRunStatus": "started",
+    "lastRunTaskId": "code-1778425088681-u2eosq",
+    "lastRunTeamTaskId": "task-1778425088704-z6ruk2",
+    "lastRunTeamRunId": "run-1778425088734-yceqpz"
+  }
+]

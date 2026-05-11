@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocUpdateProposal",
+  "type": "object",
+  "required": ["id", "reason", "targetFiles", "risk", "proposedAt", "changes"],
+  "properties": {
+    "id": { "type": "string" },
+    "reason": { "type": "string" },
+    "targetFiles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+    "proposedAt": { "type": "string" },
+    "changes": { "type": "array" }
+  }
+}
