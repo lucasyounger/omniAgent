@@ -1,6 +1,7 @@
 node_modules
 dist
 .mastra
+.omc
 .env
 .env.development
 *.db
