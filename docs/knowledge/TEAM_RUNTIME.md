@@ -4,6 +4,11 @@ Team Runtime is OmniAgent's durable coordination protocol for all delegated
 work. It is not tied to Cron. Cron, OmniRouterAgent, CodeAgent, and future
 agents all use the same task/run/event/inbox/result model.
 
+TaskRuntime sits above this file-backed protocol as the user-facing lifecycle
+boundary. Team Runtime keeps durable tasks and runs; TaskRuntime controls
+runtime status transitions such as `waiting_user_confirm`, `retrying`, and
+`paused`.
+
 ## Core Records
 
 - Task: durable request for work from a source agent to a target agent.
@@ -30,6 +35,7 @@ today and should become the migration point for a future LibSQL implementation.
 
 ## Rules
 
+- Runtime lifecycle changes should go through `src/mastra/runtime/task-runtime.ts`.
 - Long-running or delegated work should create a Team Task.
 - Every execution attempt should create a Team Run.
 - Progress should be recorded as Team Events.
@@ -37,6 +43,40 @@ today and should become the migration point for a future LibSQL implementation.
 - Inbox messages notify agents; they should contain summaries and result refs,
   not large raw outputs.
 - Completion normally notifies the source agent and `omni-router-agent`.
+- Feature code should not directly write `metadata.runtimeStatus`; use
+  TaskRuntime transition helpers.
+
+## Runtime Status
+
+Backing Team Tasks still use the durable store statuses:
+
+```text
+queued
+running
+completed
+failed
+cancelled
+interrupted
+timed_out
+```
+
+TaskRuntime exposes richer runtime statuses:
+
+```text
+created
+pending
+running
+waiting_user_confirm
+succeeded
+failed
+cancelled
+retrying
+paused
+```
+
+The current file-backed implementation stores the runtime status in task
+metadata and maps it back to a Team Task status for compatibility. This is an
+intermediate migration step toward a dedicated runtime task store.
 
 ## Current Integrations
 
@@ -49,6 +89,8 @@ today and should become the migration point for a future LibSQL implementation.
 - Startup recovery marks runs left in `running` as `interrupted`.
 - Timeout scanning marks overdue running runs as `timed_out`.
 - Team Runtime supports cancellation and retry task creation.
+- TaskRuntime-created tasks start as runtime `pending`.
+- Invalid runtime transitions throw before task metadata is changed.
 
 ## Low-Token Entry Point
 

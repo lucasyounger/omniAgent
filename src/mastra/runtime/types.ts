@@ -27,5 +27,16 @@ export type ToolGatewayPolicy = {
   capability: string;
   requireApproval?: boolean;
   audit?: boolean;
+  sandboxRequired?: boolean;
+  allowedPaths?: string[];
+  deniedCommands?: string[];
 };
 
+export type ToolExecutionContext = {
+  actorId?: string;
+  sessionId?: string;
+  channel?: string;
+  requestId?: string;
+  approvalToken?: string;
+  capabilities?: string[];
+};

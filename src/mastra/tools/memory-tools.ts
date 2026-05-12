@@ -23,6 +23,8 @@ const memoryWritePolicy = {
   audit: true,
 } as const;
 
+const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
+
 export const listMemoryDocsTool = createTool({
   id: 'list-memory-docs',
   description: 'List files in the OmniAgent docs-backed long-term memory.',
@@ -56,6 +58,7 @@ export const appendEpisodicLogTool = createTool({
     summary: z.string(),
     tags: z.array(z.string()).optional(),
     sourceRunId: z.string().optional(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
     file: z.string(),
@@ -79,6 +82,7 @@ export const proposeDocUpdateTool = createTool({
         content: z.string(),
       }),
     ),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
     id: z.string(),
@@ -101,7 +105,9 @@ export const proposeDocUpdateTool = createTool({
 export const updateMemoryIndexTool = createTool({
   id: 'update-memory-index',
   description: 'Refresh docs/memory/MEMORY_INDEX.json from the current docs tree.',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    approvalToken: approvalTokenSchema,
+  }),
   outputSchema: z.object({
     updatedAt: z.string(),
     scope: z.string(),
@@ -127,6 +133,7 @@ export const upsertUserProfileFactTool = createTool({
     key: z.string().describe('Stable profile field, such as name.'),
     value: z.string().describe('User-provided value.'),
     source: z.string().optional().describe('Short source note.'),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
     file: z.string(),

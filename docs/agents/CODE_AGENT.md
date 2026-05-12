@@ -15,6 +15,9 @@ execution through Team Runtime.
 ## Key Behavior
 
 - Starts Claude Code with `start-claude-code-task`.
+- Claude Code execution must pass through Tool Gateway before spawning the CLI.
+- `run-code-task-workflow` also uses Tool Gateway and requires the same
+  approval path as the tool call.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
 - Captures stdout/stderr in `docs/runs/code-runs/{taskId}.jsonl`.
 - Writes Team Runtime events for progress.
@@ -28,6 +31,8 @@ execution through Team Runtime.
 - Current implementation uses PowerShell plus a temporary prompt file under
   `docs/runs/code-runs` to preserve full prompts.
 - Workspace paths must stay under `OMNI_ALLOWED_WORKSPACES`.
+- Approval-required execution without an `approvalToken` is blocked before
+  Claude Code is spawned.
 - In-memory code task status is lost after service restart; Team Runtime files
   are the durable source.
 

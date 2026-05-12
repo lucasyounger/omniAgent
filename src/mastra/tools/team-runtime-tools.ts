@@ -38,6 +38,7 @@ const teamControlPolicy = {
   audit: true,
 } as const;
 
+const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
 const metadataSchema = z.record(z.string(), z.unknown()).optional();
 const taskStatusSchema = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
 const runStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
@@ -124,6 +125,7 @@ export const createTeamTaskTool = createTool({
     priority: z.enum(['low', 'normal', 'high']).default('normal'),
     timeoutMs: z.number().int().positive().optional(),
     metadata: metadataSchema,
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: teamTaskSchema,
   execute: async input => executeWithToolGateway('create-team-task', teamWritePolicy, input, () => createTeamTask(input)),
@@ -183,6 +185,7 @@ export const markInboxMessageReadTool = createTool({
   inputSchema: z.object({
     recipientAgentId: z.string(),
     messageId: z.string(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: inboxMessageSchema,
   execute: async input => executeWithToolGateway('mark-inbox-message-read', teamWritePolicy, input, () => markInboxMessageRead(input)),
@@ -211,6 +214,7 @@ export const sendAgentInboxMessageTool = createTool({
     summary: z.string(),
     resultRef: z.string().optional(),
     payload: metadataSchema,
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: inboxMessageSchema,
   execute: async input => executeWithToolGateway('send-agent-inbox-message', teamWritePolicy, input, () => sendAgentInboxMessage(input)),
@@ -223,6 +227,7 @@ export const cancelTeamTaskTool = createTool({
     taskId: z.string(),
     reason: z.string().optional(),
     sourceAgentId: z.string().optional(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.union([teamTaskSchema, runResultSchema]),
   requireApproval: true,
@@ -237,6 +242,7 @@ export const cancelTeamRunTool = createTool({
     runId: z.string(),
     reason: z.string().optional(),
     sourceAgentId: z.string().optional(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: runResultSchema,
   requireApproval: true,
@@ -250,6 +256,7 @@ export const retryTeamTaskTool = createTool({
     taskId: z.string(),
     sourceAgentId: z.string().optional(),
     reason: z.string().optional(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: teamTaskSchema,
   execute: async input => executeWithToolGateway('retry-team-task', teamWritePolicy, input, () => retryTeamTask(input)),
@@ -260,6 +267,7 @@ export const recoverInterruptedTeamRunsTool = createTool({
   description: 'Mark Team Runtime runs left running across a restart as interrupted.',
   inputSchema: z.object({
     reason: z.string().optional(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.array(teamRunSchema),
   requireApproval: true,
@@ -270,7 +278,9 @@ export const recoverInterruptedTeamRunsTool = createTool({
 export const markTimedOutTeamRunsTool = createTool({
   id: 'mark-timed-out-team-runs',
   description: 'Mark Team Runtime runs past timeoutAt as timed out.',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    approvalToken: approvalTokenSchema,
+  }),
   outputSchema: z.array(teamRunSchema),
   requireApproval: true,
   execute: async input => executeWithToolGateway('mark-timed-out-team-runs', teamControlPolicy, input, () => markTimedOutTeamRuns()),

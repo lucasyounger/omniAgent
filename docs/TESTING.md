@@ -43,10 +43,20 @@ stable contract.
 - `tests/tool-gateway.test.ts`
   - successful call audit with sensitive-field redaction
   - failed call audit before rethrow
+  - approval-required calls are blocked without execution
+  - approval tokens allow approval-required calls
+  - missing capabilities and denied commands are blocked
+- `tests/task-runtime.test.ts`
+  - TaskRuntime-created tasks expose runtime `pending` status
+  - valid runtime transitions are accepted
+  - invalid runtime transitions are rejected
+  - failed tasks transition through `retrying` before retry task creation
 
 ## Add Tests When
 
 - Team Runtime schema or status changes.
+- TaskRuntime lifecycle transitions change.
+- Tool Gateway policy or audit behavior changes.
 - Cron schedule parsing or execution changes.
 - CodeAgent task lifecycle changes.
 - Docs index inclusion/exclusion rules change.

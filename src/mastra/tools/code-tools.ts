@@ -16,6 +16,8 @@ const readCodeTaskPolicy = {
   audit: true,
 } as const;
 
+const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
+
 export const startClaudeCodeTaskTool = createTool({
   id: 'start-claude-code-task',
   description: 'Start a Claude Code CLI task in an allowed local workspace and return a task id for progress polling.',
@@ -35,6 +37,7 @@ export const startClaudeCodeTaskTool = createTool({
     sourceAgentId: z.string().optional().describe('Agent that requested this task when no teamTaskId is provided.'),
     requestedBy: z.string().optional().describe('Human or system requester.'),
     parentTaskId: z.string().optional().describe('Optional parent Team Runtime task id.'),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
     taskId: z.string(),

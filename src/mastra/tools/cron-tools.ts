@@ -23,6 +23,8 @@ const scheduleRunPolicy = {
   audit: true,
 } as const;
 
+const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
+
 const cronJobSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -50,6 +52,7 @@ export const createCronJobTool = createTool({
     task: z.string().describe('Task to run on schedule.'),
     targetAgent: z.string().optional().describe('Preferred team member, such as codeAgent or knowledgeAgent.'),
     workspacePath: z.string().optional().describe('Workspace path for codeAgent execution.'),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: cronJobSchema,
   execute: async input => executeWithToolGateway('create-cron-job', scheduleWritePolicy, input, () => createCronJob(input)),
@@ -69,6 +72,7 @@ export const updateCronJobStatusTool = createTool({
   inputSchema: z.object({
     id: z.string(),
     status: z.enum(['active', 'paused']),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: cronJobSchema,
   execute: async input =>
@@ -80,6 +84,7 @@ export const deleteCronJobTool = createTool({
   description: 'Delete an OmniAgent scheduled job record.',
   inputSchema: z.object({
     id: z.string(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
     id: z.string(),
@@ -94,6 +99,7 @@ export const runCronJobNowTool = createTool({
   description: 'Run an OmniAgent scheduled job immediately and record the started task id.',
   inputSchema: z.object({
     id: z.string(),
+    approvalToken: approvalTokenSchema,
   }),
   outputSchema: cronJobSchema,
   requireApproval: true,

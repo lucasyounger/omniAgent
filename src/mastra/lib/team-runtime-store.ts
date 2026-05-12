@@ -186,6 +186,44 @@ export async function getTeamTask(taskId: string) {
   return task;
 }
 
+export async function setTeamTaskRuntimeStatus(input: {
+  taskId: string;
+  runtimeStatus: string;
+  reason?: string;
+  sourceAgentId?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const tasks = await readJsonArray<TeamTask>(tasksFile);
+  const task = tasks.find(item => item.taskId === input.taskId);
+  if (!task) {
+    throw new Error(`Team task not found: ${input.taskId}`);
+  }
+
+  const now = new Date().toISOString();
+  task.status = toTeamTaskStatus(input.runtimeStatus, task.status);
+  task.updatedAt = now;
+  task.metadata = {
+    ...(task.metadata || {}),
+    ...(input.metadata || {}),
+    runtimeStatus: input.runtimeStatus,
+    runtimeStatusReason: input.reason,
+    runtimeStatusUpdatedAt: now,
+  };
+
+  await writeJsonArray(tasksFile, tasks);
+  await appendTeamEvent({
+    taskId: input.taskId,
+    sourceAgentId: input.sourceAgentId || 'task-runtime',
+    targetAgentId: task.sourceAgentId,
+    type: 'runtime.task.transitioned',
+    payload: {
+      runtimeStatus: input.runtimeStatus,
+      reason: input.reason,
+    },
+  });
+  return task;
+}
+
 export async function startTeamTaskRun(input: {
   taskId: string;
   executorAgentId: string;
@@ -563,4 +601,25 @@ export async function getRunResult(input: { runId?: string; resultRef?: string }
 
 export async function listTeamRuns() {
   return readJsonArray<TeamRun>(runsFile);
+}
+
+function toTeamTaskStatus(runtimeStatus: string, fallback: TeamTaskStatus): TeamTaskStatus {
+  switch (runtimeStatus) {
+    case 'pending':
+    case 'created':
+    case 'waiting_user_confirm':
+    case 'retrying':
+    case 'paused':
+      return 'queued';
+    case 'running':
+      return 'running';
+    case 'succeeded':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return fallback;
+  }
 }

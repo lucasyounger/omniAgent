@@ -1,12 +1,21 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { startClaudeCodeTask } from '../lib/code-task-store';
+import { executeWithToolGateway } from '../runtime';
+
+const startClaudeCodeTaskWorkflowPolicy = {
+  risk: 'dangerous',
+  capability: 'code.execute_claude_code_task',
+  requireApproval: true,
+  audit: true,
+} as const;
 
 const codeTaskInputSchema = z.object({
   workspacePath: z.string(),
   objective: z.string(),
   contextBrief: z.string().optional(),
   dryRun: z.boolean().default(false),
+  approvalToken: z.string().optional(),
 });
 
 const codeTaskOutputSchema = z.object({
@@ -34,7 +43,10 @@ const startCodeTaskStep = createStep({
   description: 'Start a Claude Code task and persist progress events.',
   inputSchema: codeTaskInputSchema,
   outputSchema: codeTaskOutputSchema,
-  execute: async ({ inputData }) => startClaudeCodeTask(inputData),
+  execute: async ({ inputData }) =>
+    executeWithToolGateway('workflow.start-claude-code-task', startClaudeCodeTaskWorkflowPolicy, inputData, () =>
+      startClaudeCodeTask(inputData),
+    ),
 });
 
 export const runCodeTaskWorkflow = createWorkflow({

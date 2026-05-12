@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gatewayRunsRoot } from '../lib/paths';
-import type { ToolGatewayPolicy } from './types';
+import type { ToolExecutionContext, ToolGatewayPolicy } from './types';
 
 export type GatewayToolDefinition<TTool> = {
   tool: TTool;
@@ -20,14 +20,38 @@ export async function executeWithToolGateway<TInput, TOutput>(
   policy: ToolGatewayPolicy,
   input: TInput,
   execute: () => Promise<TOutput>,
+  context: ToolExecutionContext = {},
 ): Promise<TOutput> {
   const startedAt = new Date().toISOString();
+  const executionContext = normalizeExecutionContext(input, context);
+
+  try {
+    validateCapability(policy, executionContext);
+    validatePolicyGuards(policy, input);
+
+    if (policy.requireApproval && !executionContext.approvalToken) {
+      throw new ToolGatewayApprovalRequiredError(toolId, policy.capability);
+    }
+  } catch (error) {
+    await appendToolAudit({
+      toolId,
+      policy,
+      context: executionContext,
+      status: error instanceof ToolGatewayApprovalRequiredError ? 'pending_approval' : 'blocked',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      input,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 
   try {
     const output = await execute();
     await appendToolAudit({
       toolId,
       policy,
+      context: executionContext,
       status: 'succeeded',
       startedAt,
       completedAt: new Date().toISOString(),
@@ -39,6 +63,7 @@ export async function executeWithToolGateway<TInput, TOutput>(
     await appendToolAudit({
       toolId,
       policy,
+      context: executionContext,
       status: 'failed',
       startedAt,
       completedAt: new Date().toISOString(),
@@ -49,10 +74,28 @@ export async function executeWithToolGateway<TInput, TOutput>(
   }
 }
 
+export class ToolGatewayApprovalRequiredError extends Error {
+  constructor(
+    readonly toolId: string,
+    readonly capability: string,
+  ) {
+    super(`Approval required for tool ${toolId} (${capability}).`);
+    this.name = 'ToolGatewayApprovalRequiredError';
+  }
+}
+
+export class ToolGatewayBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToolGatewayBlockedError';
+  }
+}
+
 async function appendToolAudit(event: {
   toolId: string;
   policy: ToolGatewayPolicy;
-  status: 'succeeded' | 'failed';
+  context?: ToolExecutionContext;
+  status: 'succeeded' | 'failed' | 'pending_approval' | 'blocked';
   startedAt: string;
   completedAt: string;
   input: unknown;
@@ -67,6 +110,7 @@ async function appendToolAudit(event: {
   const auditFile = path.join(gatewayRunsRoot, 'tool-audit.jsonl');
   const record = {
     ...event,
+    context: sanitizeForAudit(event.context),
     input: sanitizeForAudit(event.input),
     output: sanitizeForAudit(event.output),
   };
@@ -99,4 +143,77 @@ function sanitizeForAudit(value: unknown): unknown {
 
 function isSensitiveKey(key: string) {
   return /(api[_-]?key|token|secret|password|credential|authorization|cookie)/i.test(key);
+}
+
+function normalizeExecutionContext(input: unknown, context: ToolExecutionContext): ToolExecutionContext {
+  const inputRecord = isRecord(input) ? input : {};
+  return {
+    ...context,
+    requestId: context.requestId || createRequestId(),
+    approvalToken: context.approvalToken || (typeof inputRecord.approvalToken === 'string' ? inputRecord.approvalToken : undefined),
+  };
+}
+
+function validateCapability(policy: ToolGatewayPolicy, context: ToolExecutionContext) {
+  if (!context.capabilities?.length) {
+    return;
+  }
+
+  if (!context.capabilities.includes(policy.capability)) {
+    throw new ToolGatewayBlockedError(`Missing capability ${policy.capability}.`);
+  }
+}
+
+function validatePolicyGuards(policy: ToolGatewayPolicy, input: unknown) {
+  if (policy.allowedPaths?.length) {
+    for (const candidate of collectStringFields(input, /path|file|dir|workspace/i)) {
+      const resolvedCandidate = path.resolve(candidate).toLowerCase();
+      const allowed = policy.allowedPaths.some(allowedPath => {
+        const resolvedAllowed = path.resolve(allowedPath).toLowerCase();
+        return resolvedCandidate === resolvedAllowed || resolvedCandidate.startsWith(`${resolvedAllowed}${path.sep}`);
+      });
+      if (!allowed) {
+        throw new ToolGatewayBlockedError(`Path is outside allowed policy scope: ${candidate}`);
+      }
+    }
+  }
+
+  if (policy.deniedCommands?.length) {
+    const denied = policy.deniedCommands.map(command => command.toLowerCase());
+    for (const command of collectStringFields(input, /command|cmd|shell|script/i)) {
+      const normalized = command.toLowerCase();
+      const matched = denied.find(deniedCommand => normalized.includes(deniedCommand));
+      if (matched) {
+        throw new ToolGatewayBlockedError(`Command is denied by policy: ${matched}`);
+      }
+    }
+  }
+}
+
+function collectStringFields(value: unknown, keyPattern: RegExp): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const found: string[] = [];
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (typeof nestedValue === 'string' && keyPattern.test(key)) {
+      found.push(nestedValue);
+    } else if (Array.isArray(nestedValue)) {
+      for (const item of nestedValue) {
+        found.push(...collectStringFields(item, keyPattern));
+      }
+    } else if (isRecord(nestedValue)) {
+      found.push(...collectStringFields(nestedValue, keyPattern));
+    }
+  }
+  return found;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function createRequestId() {
+  return `tool-request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-11T07:36:58.302Z",
+  "updatedAt": "2026-05-12T06:59:52.495Z",
   "scope": "knowledge-docs",
   "excludes": [
     "runs/**",
@@ -10,16 +10,23 @@
     {
       "path": "ARCHITECTURE.md",
       "title": "Architecture",
-      "purpose": "Compact architecture and lifecycle overview.",
-      "bytes": 1890,
-      "updatedAt": "2026-05-11T07:11:15.705Z"
+      "purpose": "Docs file.",
+      "bytes": 3976,
+      "updatedAt": "2026-05-12T06:56:53.547Z"
+    },
+    {
+      "path": "CODE_SEARCH.md",
+      "title": "Code Search And Indexing",
+      "purpose": "Docs file.",
+      "bytes": 2480,
+      "updatedAt": "2026-05-11T07:58:29.466Z"
     },
     {
       "path": "CONTEXT_INDEX.json",
       "title": "CONTEXT_INDEX.json",
       "purpose": "Docs file.",
       "bytes": 1292,
-      "updatedAt": "2026-05-11T07:13:15.224Z"
+      "updatedAt": "2026-05-11T07:36:58.362Z"
     },
     {
       "path": "CONTEXT_PACKS.md",
@@ -29,25 +36,32 @@
       "updatedAt": "2026-05-11T07:11:54.656Z"
     },
     {
+      "path": "GAP.md",
+      "title": "一、目前还存在的主要偏差",
+      "purpose": "Docs file.",
+      "bytes": 16437,
+      "updatedAt": "2026-05-12T06:31:52.942Z"
+    },
+    {
       "path": "README.md",
       "title": "OmniAgent Docs Memory",
       "purpose": "Docs file.",
-      "bytes": 1764,
-      "updatedAt": "2026-05-11T07:11:33.296Z"
+      "bytes": 1833,
+      "updatedAt": "2026-05-11T07:59:02.563Z"
     },
     {
       "path": "START_HERE.md",
       "title": "Start Here",
       "purpose": "Default entry for low-token context assembly.",
-      "bytes": 1106,
-      "updatedAt": "2026-05-11T02:46:20.120Z"
+      "bytes": 1319,
+      "updatedAt": "2026-05-11T07:58:47.298Z"
     },
     {
       "path": "TESTING.md",
       "title": "Testing",
-      "purpose": "Testing contract and verification commands.",
-      "bytes": 1022,
-      "updatedAt": "2026-05-11T07:12:40.588Z"
+      "purpose": "Docs file.",
+      "bytes": 2028,
+      "updatedAt": "2026-05-12T06:57:57.780Z"
     },
     {
       "path": "agents/AGENT_INDEX.json",
@@ -60,8 +74,8 @@
       "path": "agents/CODE_AGENT.md",
       "title": "CodeAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1252,
-      "updatedAt": "2026-05-10T14:03:08.943Z"
+      "bytes": 1539,
+      "updatedAt": "2026-05-12T06:58:48.730Z"
     },
     {
       "path": "agents/CRON_AGENT.md",
@@ -81,8 +95,8 @@
       "path": "agents/OMNI_ROUTER_AGENT.md",
       "title": "OmniRouterAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1355,
-      "updatedAt": "2026-05-10T14:02:52.873Z"
+      "bytes": 1939,
+      "updatedAt": "2026-05-12T03:17:10.193Z"
     },
     {
       "path": "agents/README.md",
@@ -95,41 +109,41 @@
       "path": "agents/TASK_AGENT.md",
       "title": "TaskAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 3592,
-      "updatedAt": "2026-05-11T02:43:45.169Z"
+      "bytes": 4328,
+      "updatedAt": "2026-05-12T06:58:17.469Z"
     },
     {
       "path": "channels/HTTP.md",
       "title": "HTTP Channel",
-      "purpose": "Channel Gateway adapter docs.",
+      "purpose": "Docs file.",
       "bytes": 536,
       "updatedAt": "2026-05-11T07:10:04.021Z"
     },
     {
       "path": "channels/ONEBOT.md",
       "title": "OneBot-Like Channel",
-      "purpose": "Channel Gateway adapter docs.",
+      "purpose": "Docs file.",
       "bytes": 732,
       "updatedAt": "2026-05-11T07:10:18.907Z"
     },
     {
       "path": "channels/QQBOT.md",
       "title": "QQ Bot Adapter Plan",
-      "purpose": "Channel Gateway adapter docs.",
+      "purpose": "Docs file.",
       "bytes": 840,
       "updatedAt": "2026-05-11T07:10:34.877Z"
     },
     {
       "path": "channels/README.md",
       "title": "Channels",
-      "purpose": "Channel Gateway adapter docs.",
+      "purpose": "Docs file.",
       "bytes": 963,
       "updatedAt": "2026-05-11T07:09:46.763Z"
     },
     {
       "path": "channels/SECURITY.md",
       "title": "Channel Security",
-      "purpose": "Channel Gateway adapter docs.",
+      "purpose": "Docs file.",
       "bytes": 909,
       "updatedAt": "2026-05-11T07:10:54.824Z"
     },
@@ -214,15 +228,15 @@
       "path": "knowledge/TEAM_RUNTIME.md",
       "title": "Team Runtime Protocol",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 2238,
-      "updatedAt": "2026-05-11T02:43:14.645Z"
+      "bytes": 3310,
+      "updatedAt": "2026-05-12T06:59:20.303Z"
     },
     {
       "path": "knowledge/TOOLS.md",
       "title": "Tools",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 433,
-      "updatedAt": "2026-05-10T05:45:23.076Z"
+      "bytes": 1120,
+      "updatedAt": "2026-05-12T06:58:33.482Z"
     },
     {
       "path": "knowledge/TROUBLESHOOTING.md",
@@ -270,8 +284,8 @@
       "path": "memory/USER.md",
       "title": "User Memory",
       "purpose": "Canonical long-term memory.",
-      "bytes": 475,
-      "updatedAt": "2026-05-11T07:33:15.873Z"
+      "bytes": 548,
+      "updatedAt": "2026-05-12T06:37:01.505Z"
     },
     {
       "path": "memory/WORKSPACE.md",

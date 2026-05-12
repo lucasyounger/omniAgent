@@ -15,6 +15,7 @@ work is delegated, executed, reported, and recovered across all agents.
 ## Source Files
 
 - `src/mastra/lib/team-runtime-store.ts`
+- `src/mastra/runtime/task-runtime.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
 - `src/mastra/tools/index.ts`
 - `src/mastra/agents/omni-router-agent.ts`
@@ -48,6 +49,7 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Contract
 
+- User-facing task lifecycle changes should go through TaskRuntime.
 - Any long-running or delegated work should have a Team Task.
 - Every execution attempt should have a Team Run.
 - Progress should be appended as Team Events.
@@ -57,6 +59,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - Completion should notify the source agent and normally `omni-router-agent`.
 - Runs left `running` across restart should be recovered as `interrupted`.
 - Overdue runs should be marked `timed_out`.
+- Runtime status transitions must follow the TaskRuntime state machine. Do not
+  write `metadata.runtimeStatus` directly from feature code.
 
 ## Current Behavior
 
@@ -67,6 +71,13 @@ work is delegated, executed, reported, and recovered across all agents.
 - Cron execution goes through CodeAgent and records `lastRunTeamTaskId` and
   `lastRunTeamRunId` on cron job records.
 - Cancel, retry, timeout, and interrupted states are part of the protocol.
+- TaskRuntime records runtime lifecycle status on backing Team Tasks through
+  `metadata.runtimeStatus`.
+- Supported runtime states include `pending`, `running`,
+  `waiting_user_confirm`, `succeeded`, `failed`, `cancelled`, `retrying`, and
+  `paused`.
+- Retry uses a two-step runtime lifecycle: the failed source task becomes
+  `retrying`, then a new retry task is created with `pending` status.
 
 ## Known Pitfalls
 
@@ -90,6 +101,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - Update `docs/schemas/team-*.schema.json` and `inbox-message.schema.json`
   when data shape changes.
 - Update tests under `tests/team-runtime-store.test.ts`.
+- Update tests under `tests/task-runtime.test.ts` when runtime lifecycle
+  behavior changes.
 - Run `npm test` and `npm run typecheck`.
 
 ## Related Docs
