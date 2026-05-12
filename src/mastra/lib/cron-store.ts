@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
-import { startClaudeCodeTask } from './code-task-store';
+import { taskRuntime } from '../runtime/task-runtime';
 
 export type CronJobStatus = 'active' | 'paused';
 
@@ -11,8 +11,11 @@ export type CronJob = {
   name: string;
   schedule: string;
   task: string;
+  taskType?: string;
   targetAgent?: string;
+  targetAgentId?: string;
   workspacePath?: string;
+  payload?: Record<string, unknown>;
   status: CronJobStatus;
   createdAt: string;
   updatedAt: string;
@@ -56,8 +59,11 @@ export async function createCronJob(input: {
   name: string;
   schedule: string;
   task: string;
+  taskType?: string;
   targetAgent?: string;
+  targetAgentId?: string;
   workspacePath?: string;
+  payload?: Record<string, unknown>;
 }) {
   const jobs = await readJobs();
   const now = new Date().toISOString();
@@ -66,8 +72,11 @@ export async function createCronJob(input: {
     name: input.name,
     schedule: input.schedule,
     task: input.task,
+    taskType: input.taskType || inferTaskType(input.targetAgentId || input.targetAgent),
     targetAgent: input.targetAgent,
+    targetAgentId: input.targetAgentId || normalizeAgentId(input.targetAgent) || 'code-agent',
     workspacePath: input.workspacePath,
+    payload: input.payload || buildLegacyPayload(input),
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -119,7 +128,11 @@ export async function runCronJobNow(id: string) {
     job.lastRunStatus = 'started';
     job.lastRunTaskId = result.taskId;
     job.lastRunTeamTaskId = result.teamTaskId;
-    job.lastRunTeamRunId = result.teamRunId;
+    if (result.teamRunId) {
+      job.lastRunTeamRunId = result.teamRunId;
+    } else {
+      delete job.lastRunTeamRunId;
+    }
     delete job.lastRunError;
   } catch (error) {
     job.lastRunStatus = 'failed';
@@ -164,7 +177,11 @@ export async function runDueCronJobs(now = new Date()) {
       job.lastRunStatus = 'started';
       job.lastRunTaskId = result.taskId;
       job.lastRunTeamTaskId = result.teamTaskId;
-      job.lastRunTeamRunId = result.teamRunId;
+      if (result.teamRunId) {
+        job.lastRunTeamRunId = result.teamRunId;
+      } else {
+        delete job.lastRunTeamRunId;
+      }
       delete job.lastRunError;
 
       if (isOneTimeSchedule(job.schedule)) {
@@ -279,23 +296,71 @@ function isOneTimeSchedule(schedule: string) {
   return Boolean(parseOneTimeSchedule(schedule));
 }
 
-async function executeCronJob(job: CronJob) {
-  const targetAgent = job.targetAgent || 'codeAgent';
-
-  if (!['codeAgent', 'code-agent'].includes(targetAgent)) {
-    throw new Error(`Cron execution currently supports codeAgent jobs only. Received: ${targetAgent}`);
-  }
-
-  return startClaudeCodeTask({
-    workspacePath: job.workspacePath || inferWorkspacePath(job.task) || projectRoot,
+async function executeCronJob(job: CronJob): Promise<{ taskId: string; teamTaskId: string; teamRunId?: string }> {
+  const taskType = job.taskType || inferTaskType(job.targetAgentId || job.targetAgent);
+  const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || 'code-agent';
+  const payload = job.payload || buildLegacyPayload(job);
+  const runtimeTask = await taskRuntime.createTask({
+    sourceAgentId: 'scheduler-runtime',
+    targetAgentId,
     objective: job.task,
-    contextBrief: `Scheduled by OmniAgent cron job ${job.id} (${job.name}). Schedule: ${job.schedule}`,
-    sourceAgentId: 'cron-agent',
     requestedBy: `cron:${job.id}`,
+    metadata: {
+      scheduleId: job.id,
+      scheduleName: job.name,
+      schedule: job.schedule,
+      taskType,
+      payload,
+    },
   });
+
+  return {
+    taskId: runtimeTask.id,
+    teamTaskId: runtimeTask.id,
+  };
 }
 
 function inferWorkspacePath(task: string) {
   const match = task.match(/[A-Za-z]:\\[^\s，,。；;]+/);
   return match?.[0];
+}
+
+function inferTaskType(targetAgent?: string) {
+  const agentId = normalizeAgentId(targetAgent);
+  if (agentId === 'knowledge-agent') {
+    return 'knowledge.task';
+  }
+  if (agentId === 'cron-agent') {
+    return 'schedule.task';
+  }
+  if (agentId === 'omni-router-agent') {
+    return 'router.task';
+  }
+  return 'code.claude_code_task';
+}
+
+function normalizeAgentId(agentId?: string) {
+  switch (agentId) {
+    case undefined:
+    case '':
+      return undefined;
+    case 'codeAgent':
+      return 'code-agent';
+    case 'cronAgent':
+      return 'cron-agent';
+    case 'knowledgeAgent':
+      return 'knowledge-agent';
+    case 'omniRouterAgent':
+      return 'omni-router-agent';
+    default:
+      return agentId;
+  }
+}
+
+function buildLegacyPayload(input: { task: string; workspacePath?: string; payload?: Record<string, unknown> }) {
+  return {
+    ...(input.payload || {}),
+    objective: input.task,
+    workspacePath: input.workspacePath || inferWorkspacePath(input.task) || projectRoot,
+  };
 }

@@ -8,9 +8,22 @@
     "name": { "type": "string" },
     "schedule": { "type": "string" },
     "task": { "type": "string" },
+    "taskType": { "type": "string" },
     "targetAgent": { "type": "string" },
+    "targetAgentId": { "type": "string" },
+    "workspacePath": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "status": { "type": "string", "enum": ["active", "paused"] },
     "createdAt": { "type": "string" },
-    "updatedAt": { "type": "string" }
+    "updatedAt": { "type": "string" },
+    "lastRunAt": { "type": "string" },
+    "lastRunTaskId": { "type": "string" },
+    "lastRunTeamTaskId": { "type": "string" },
+    "lastRunTeamRunId": { "type": "string" },
+    "lastRunStatus": { "type": "string", "enum": ["started", "failed", "skipped"] },
+    "lastRunError": { "type": "string" }
   }
 }

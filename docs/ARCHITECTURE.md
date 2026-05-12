@@ -33,7 +33,9 @@ source agent -> Team Task -> Team Run -> executor agent -> Team Events
              -> Team Result -> recipient inbox -> OmniRouterAgent response
 ```
 
-Cron is only a task source. It should not own a separate result protocol.
+Cron is only a task source. It creates Runtime Tasks when schedules fire and
+should not own a separate result protocol or directly call specialist agent
+implementation functions.
 Channel Gateway is also only a task source and delivery layer. It should not
 own execution logic.
 

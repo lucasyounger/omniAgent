@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T06:59:52.495Z",
+  "updatedAt": "2026-05-12T07:25:31.150Z",
   "scope": "knowledge-docs",
   "excludes": [
     "runs/**",
@@ -11,8 +11,8 @@
       "path": "ARCHITECTURE.md",
       "title": "Architecture",
       "purpose": "Docs file.",
-      "bytes": 3976,
-      "updatedAt": "2026-05-12T06:56:53.547Z"
+      "bytes": 4081,
+      "updatedAt": "2026-05-12T07:23:30.167Z"
     },
     {
       "path": "CODE_SEARCH.md",
@@ -60,8 +60,8 @@
       "path": "TESTING.md",
       "title": "Testing",
       "purpose": "Docs file.",
-      "bytes": 2028,
-      "updatedAt": "2026-05-12T06:57:57.780Z"
+      "bytes": 2097,
+      "updatedAt": "2026-05-12T07:23:44.902Z"
     },
     {
       "path": "agents/AGENT_INDEX.json",
@@ -81,8 +81,8 @@
       "path": "agents/CRON_AGENT.md",
       "title": "CronAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1485,
-      "updatedAt": "2026-05-11T02:41:19.740Z"
+      "bytes": 1972,
+      "updatedAt": "2026-05-12T07:22:23.497Z"
     },
     {
       "path": "agents/KNOWLEDGE_AGENT.md",
@@ -200,8 +200,8 @@
       "path": "knowledge/CRON.md",
       "title": "Cron Management",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 1776,
-      "updatedAt": "2026-05-11T02:40:49.320Z"
+      "bytes": 2536,
+      "updatedAt": "2026-05-12T07:23:16.246Z"
     },
     {
       "path": "knowledge/MASTRA.md",
@@ -298,8 +298,8 @@
       "path": "schemas/cron-job.schema.json",
       "title": "cron-job.schema.json",
       "purpose": "Data contract schema.",
-      "bytes": 537,
-      "updatedAt": "2026-05-10T05:45:23.095Z"
+      "bytes": 1046,
+      "updatedAt": "2026-05-12T07:21:53.225Z"
     },
     {
       "path": "schemas/doc-update.schema.json",

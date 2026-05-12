@@ -48,4 +48,37 @@ describe('Cron store', () => {
 
     expect(nextRunAt).toBe('2026-05-13T01:30:00.000Z');
   });
+
+  it('creates a runtime task instead of starting a code run', async () => {
+    const { createCronJob, runCronJobNow } = await loadCronStore();
+    const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+    const job = await createCronJob({
+      name: 'runtime dispatch',
+      schedule: 'daily 09:30',
+      task: 'summarize repository',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.summary',
+      payload: { scope: 'repo' },
+    });
+
+    const updated = await runCronJobNow(job.id);
+    const tasks = await listTeamTasks();
+
+    expect(updated.lastRunStatus).toBe('started');
+    expect(updated.lastRunTaskId).toBe(tasks[0].taskId);
+    expect(updated.lastRunTeamTaskId).toBe(tasks[0].taskId);
+    expect(updated.lastRunTeamRunId).toBeUndefined();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'knowledge-agent',
+      objective: 'summarize repository',
+      status: 'queued',
+      metadata: {
+        taskType: 'knowledge.summary',
+        runtimeStatus: 'pending',
+        payload: { scope: 'repo' },
+      },
+    });
+  });
 });

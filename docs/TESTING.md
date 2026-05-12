@@ -38,6 +38,7 @@ stable contract.
 - `tests/cron-store.test.ts`
   - standard cron expression next-run calculation
   - daily schedule next-run compatibility
+  - due jobs create Runtime Tasks instead of starting CodeAgent runs
 - `tests/docs-memory.test.ts`
   - explicit user profile fact upsert into USER.md
 - `tests/tool-gateway.test.ts`

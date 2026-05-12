@@ -1,7 +1,7 @@
 # Cron Management
 
-CronAgent manages scheduled job records and triggers due work through Team
-Runtime.
+CronAgent manages scheduled job records and dispatches due work through
+TaskRuntime.
 
 ## Store
 
@@ -15,11 +15,16 @@ exist, then continues the requested create/list/update/delete operation.
 - `name`: short human-readable name.
 - `schedule`: original human-readable or cron-like schedule string.
 - `task`: task description.
-- `targetAgent`: preferred team member.
-- `workspacePath`: optional workspace for `codeAgent` execution.
+- `taskType`: runtime task type to create when the schedule fires.
+- `targetAgent`: legacy preferred team member field.
+- `targetAgentId`: canonical target agent id for the Runtime Task.
+- `workspacePath`: legacy optional workspace for code tasks.
+- `payload`: structured payload copied into Runtime task metadata.
 - `status`: `active` or `paused`.
 - `lastRunAt`, `lastRunTaskId`, `lastRunStatus`, `lastRunError`: execution state.
 - `lastRunTeamTaskId`, `lastRunTeamRunId`: Team Runtime coordination ids.
+  `lastRunTeamRunId` is optional because Cron now creates a task but does not
+  synchronously execute a run.
 
 ## Execution
 
@@ -34,9 +39,18 @@ Supported due checks in the current version:
 One-time jobs are paused after a run is started to avoid repeat execution.
 Manual execution is available through the `run-cron-job-now` tool.
 
-Cron execution uses the Team Runtime protocol. Cron is the source agent, the
-configured target agent is the executor, and execution results are delivered
-through Team Runtime results and inbox notifications.
+Cron execution creates a Runtime Task. Cron is the source, the configured
+`targetAgentId` is the target, and the actual execution belongs to routing or
+specialist agent logic outside the cron store. The cron store must not import or
+call CodeAgent or `startClaudeCodeTask` directly.
+
+Legacy jobs without `taskType`, `targetAgentId`, or `payload` are upgraded at
+creation time. Old records still run by inferring:
+
+- `targetAgentId`: normalized from `targetAgent`, defaulting to `code-agent`.
+- `taskType`: inferred from the target agent, defaulting to
+  `code.claude_code_task`.
+- `payload`: includes `objective` and a best-effort `workspacePath`.
 
 ## Next Enhancement
 
