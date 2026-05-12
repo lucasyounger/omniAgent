@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { createAgentMemory } from '../runtime';
 import { cronTools } from '../tools/cron-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 
 export const cronAgent = new Agent({
   id: 'cron-agent',
   name: 'CronAgent',
+  description:
+    'Manages OmniAgent schedule records, schedule status, manual schedule runs, and schedule execution history explanation.',
   instructions: `You manage OmniAgent scheduled task records.
 
 Responsibilities:
@@ -20,5 +22,5 @@ Responsibilities:
     ...cronTools,
     ...teamRuntimeTools,
   },
-  memory: new Memory(),
+  memory: createAgentMemory(),
 });

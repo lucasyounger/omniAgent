@@ -7,9 +7,10 @@ to a specific artifact.
 
 ## Subdirectories
 
-- `code-runs/`: Claude Code stdout/stderr JSONL logs.
+- `code-runs/`: Claude Code stdout/stderr JSONL logs and durable task index.
 - `cron-runs/`: scheduled job records.
 - `team/`: Team Runtime tasks, runs, events, inbox messages, and results.
+- `gateway/`: Tool Gateway audit records (`tool-audit.jsonl`).
 
 ## Rules
 

@@ -49,3 +49,12 @@ Use these packs to assemble focused context with fewer tokens.
 - Then inspect only the specific file under `docs/runs/**` referenced by a
   task id, run id, resultRef, or inbox message.
 - Do not load all runtime logs.
+
+## Channel Gateway / QQ-Like Bot
+
+- `docs/channels/README.md`
+- `docs/channels/SECURITY.md`
+- `docs/channels/HTTP.md` or `docs/channels/ONEBOT.md`
+- `docs/agents/TASK_AGENT.md`
+- Source after docs: `src/gateway/main.ts`, `src/gateway/message-handler.ts`,
+  `src/gateway/delivery.ts`

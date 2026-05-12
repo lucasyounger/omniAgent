@@ -1,10 +1,12 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { createAgentMemory } from '../runtime';
 import { memoryTools } from '../tools/memory-tools';
 
 export const knowledgeAgent = new Agent({
   id: 'knowledge-agent',
   name: 'KnowledgeAgent',
+  description:
+    'Maintains docs-backed long-term memory, stable user facts, episodic logs, memory indexes, and reviewable documentation update proposals.',
   instructions: `You maintain OmniAgent docs-backed long-term memory.
 
 Responsibilities:
@@ -16,5 +18,5 @@ Responsibilities:
 - Never store secrets or raw credentials in docs.`,
   model: 'deepseek/deepseek-v4-flash',
   tools: memoryTools,
-  memory: new Memory(),
+  memory: createAgentMemory(),
 });

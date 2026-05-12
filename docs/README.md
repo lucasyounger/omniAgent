@@ -12,7 +12,9 @@ source files.
 
 - `memory/`: canonical memory files and machine-readable index.
 - `agents/`: compact agent cards for low-token AI handoff and future changes.
+- `channels/`: Omni Gateway adapters for phone messaging apps.
 - `ARCHITECTURE.md`: compact system overview and lifecycle rules.
+- `CODE_SEARCH.md`: GitNexus/code index workflow and refresh policy.
 - `TESTING.md`: test rules and required verification commands.
 - `knowledge/`: durable facts about projects, tools, and operating procedures.
 - `skills/`: reusable task playbooks for agents.

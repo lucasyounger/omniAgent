@@ -35,6 +35,7 @@ export const codeRunsRoot = path.join(runsRoot, 'code-runs');
 export const cronRunsRoot = path.join(runsRoot, 'cron-runs');
 export const memoryRunsRoot = path.join(runsRoot, 'memory-runs');
 export const teamRunsRoot = path.join(runsRoot, 'team');
+export const gatewayRunsRoot = path.join(runsRoot, 'gateway');
 
 export function normalizeInside(baseDir: string, targetPath: string): string {
   const resolvedBase = path.resolve(baseDir);

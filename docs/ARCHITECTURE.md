@@ -4,11 +4,18 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
 
 ## Components
 
-- OmniRouterAgent: user-facing router, delegation coordinator, inbox reader.
+- **Runtime facade** (`src/mastra/runtime/`): unified boundary for TaskRuntime,
+  SchedulerRuntime, MemoryRuntime, Tool Gateway, events, and bootstrap. Facades
+  delegate to existing library modules and provide the migration surface toward
+  native Mastra workflow/scheduler/storage capabilities.
+- OmniRouterAgent: supervisor-style router, delegation coordinator, inbox reader.
+  Registers sub-agents and workflows for routing decisions.
 - CodeAgent: executes Claude Code CLI tasks inside allowed workspaces.
-- CronAgent: records schedules and triggers due jobs.
+- CronAgent: manages schedule records and triggers due jobs.
 - KnowledgeAgent: maintains docs-backed long-term memory.
 - Team Runtime: task, run, event, inbox, and result protocol used by all agents.
+- Omni Gateway: channel adapter layer for phone messaging apps such as QQ-like
+  bots and OneBot-compatible bridges.
 
 ## Data Flow
 
@@ -20,6 +27,8 @@ source agent -> Team Task -> Team Run -> executor agent -> Team Events
 ```
 
 Cron is only a task source. It should not own a separate result protocol.
+Channel Gateway is also only a task source and delivery layer. It should not
+own execution logic.
 
 ## Storage Boundaries
 
@@ -28,6 +37,8 @@ Cron is only a task source. It should not own a separate result protocol.
 - `docs/memory/**`: canonical long-term memory and indexes.
 - `docs/runs/**`: runtime artifacts. Do not load by default.
 - `docs/runs/team/**`: durable Team Runtime records.
+- `docs/runs/code-runs/tasks.json`: durable code task index.
+- `docs/runs/gateway/tool-audit.jsonl`: Tool Gateway audit log.
 - Mastra LibSQL: runtime conversation storage.
 
 ## Task Lifecycle

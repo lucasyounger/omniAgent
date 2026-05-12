@@ -27,6 +27,22 @@ stable contract.
   - timeout marking
   - retry task creation
   - queued task cancellation
+- `tests/gateway-message-handler.test.ts`
+  - sender pairing and allowlist
+  - basic command routing
+  - task command validation
+- `tests/code-task-store.test.ts`
+  - dry-run task summary persistence
+  - status and list recovery after module reload
+  - teamTaskId and teamRunId in durable index
+- `tests/cron-store.test.ts`
+  - standard cron expression next-run calculation
+  - daily schedule next-run compatibility
+- `tests/docs-memory.test.ts`
+  - explicit user profile fact upsert into USER.md
+- `tests/tool-gateway.test.ts`
+  - successful call audit with sensitive-field redaction
+  - failed call audit before rethrow
 
 ## Add Tests When
 
@@ -34,3 +50,4 @@ stable contract.
 - Cron schedule parsing or execution changes.
 - CodeAgent task lifecycle changes.
 - Docs index inclusion/exclusion rules change.
+- Channel Gateway auth, routing, delivery, or command behavior changes.

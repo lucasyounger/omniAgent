@@ -6,3 +6,7 @@
 4. Propose medium and high-risk docs updates.
 5. Refresh memory index.
 6. Never store secrets.
+7. Persist explicit user-provided profile facts, such as name, through
+   `upsert-user-profile-fact`.
+8. Read `memory/USER.md` before answering questions about user identity or
+   durable preferences.

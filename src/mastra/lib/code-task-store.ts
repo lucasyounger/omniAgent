@@ -33,15 +33,63 @@ export type CodeTask = {
 };
 
 const tasks = new Map<string, CodeTask>();
+const tasksIndexFile = path.join(codeRunsRoot, 'tasks.json');
 
 function createTaskId() {
   return `code-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function appendTaskEvent(task: CodeTask, event: CodeTaskEvent) {
+async function ensureCodeTaskStore() {
   await fs.mkdir(codeRunsRoot, { recursive: true });
+  try {
+    await fs.access(tasksIndexFile);
+  } catch {
+    await fs.writeFile(tasksIndexFile, '[]\n', 'utf8');
+  }
+}
+
+async function readPersistedTasks(): Promise<Array<Omit<CodeTask, 'events'>>> {
+  await ensureCodeTaskStore();
+  try {
+    return JSON.parse(await fs.readFile(tasksIndexFile, 'utf8')) as Array<Omit<CodeTask, 'events'>>;
+  } catch {
+    return [];
+  }
+}
+
+async function writePersistedTasks(items: Array<Omit<CodeTask, 'events'>>) {
+  await ensureCodeTaskStore();
+  await fs.writeFile(tasksIndexFile, JSON.stringify(items, null, 2), 'utf8');
+}
+
+async function persistTaskSnapshot(task: CodeTask) {
+  const items = await readPersistedTasks();
+  const snapshot = {
+    taskId: task.taskId,
+    teamTaskId: task.teamTaskId,
+    teamRunId: task.teamRunId,
+    workspacePath: task.workspacePath,
+    objective: task.objective,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    exitCode: task.exitCode,
+    logFile: task.logFile,
+  };
+  const existingIndex = items.findIndex(item => item.taskId === task.taskId);
+  if (existingIndex === -1) {
+    items.push(snapshot);
+  } else {
+    items[existingIndex] = snapshot;
+  }
+  await writePersistedTasks(items);
+}
+
+async function appendTaskEvent(task: CodeTask, event: CodeTaskEvent) {
+  await ensureCodeTaskStore();
   task.events.push(event);
   await fs.appendFile(task.logFile, `${JSON.stringify(event)}\n`, 'utf8');
+  await persistTaskSnapshot(task);
 }
 
 export async function startClaudeCodeTask(input: {
@@ -92,6 +140,7 @@ export async function startClaudeCodeTask(input: {
   };
 
   tasks.set(taskId, task);
+  await persistTaskSnapshot(task);
   await appendTaskEvent(task, {
     type: 'task_started',
     message: input.dryRun ? 'Dry run recorded. Claude Code was not started.' : 'Claude Code task started.',
@@ -264,16 +313,51 @@ export async function startClaudeCodeTask(input: {
   return summarizeTask(task);
 }
 
-export function getCodeTask(taskId: string) {
+export async function getCodeTask(taskId: string) {
   const task = tasks.get(taskId);
-  if (!task) {
+  if (task) {
+    return summarizeTask(task);
+  }
+
+  const persistedTask = (await readPersistedTasks()).find(item => item.taskId === taskId);
+  if (!persistedTask) {
     throw new Error(`Code task not found: ${taskId}`);
   }
-  return summarizeTask(task);
+
+  return summarizeTask({
+    ...persistedTask,
+    events: await readTaskEvents(persistedTask.logFile),
+  });
 }
 
-export function listCodeTasks() {
-  return Array.from(tasks.values()).map(task => summarizeTask(task));
+export async function listCodeTasks() {
+  const persistedTasks = await readPersistedTasks();
+  const byTaskId = new Map<string, CodeTask>();
+
+  for (const persistedTask of persistedTasks) {
+    byTaskId.set(persistedTask.taskId, {
+      ...persistedTask,
+      events: await readTaskEvents(persistedTask.logFile),
+    });
+  }
+
+  for (const task of tasks.values()) {
+    byTaskId.set(task.taskId, task);
+  }
+
+  return Array.from(byTaskId.values()).map(task => summarizeTask(task));
+}
+
+async function readTaskEvents(logFile: string): Promise<CodeTaskEvent[]> {
+  try {
+    const raw = await fs.readFile(logFile, 'utf8');
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as CodeTaskEvent);
+  } catch {
+    return [];
+  }
 }
 
 function summarizeTask(task: CodeTask) {

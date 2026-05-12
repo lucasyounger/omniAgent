@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-11T02:47:52.658Z",
+  "updatedAt": "2026-05-11T07:36:58.302Z",
   "scope": "knowledge-docs",
   "excludes": [
     "runs/**",
@@ -11,29 +11,29 @@
       "path": "ARCHITECTURE.md",
       "title": "Architecture",
       "purpose": "Compact architecture and lifecycle overview.",
-      "bytes": 1675,
-      "updatedAt": "2026-05-11T02:41:32.221Z"
+      "bytes": 1890,
+      "updatedAt": "2026-05-11T07:11:15.705Z"
     },
     {
       "path": "CONTEXT_INDEX.json",
       "title": "CONTEXT_INDEX.json",
       "purpose": "Docs file.",
-      "bytes": 1033,
-      "updatedAt": "2026-05-11T01:12:39.965Z"
+      "bytes": 1292,
+      "updatedAt": "2026-05-11T07:13:15.224Z"
     },
     {
       "path": "CONTEXT_PACKS.md",
       "title": "Context Packs",
       "purpose": "Task-oriented doc bundles for focused context.",
-      "bytes": 1485,
-      "updatedAt": "2026-05-10T14:08:51.868Z"
+      "bytes": 1769,
+      "updatedAt": "2026-05-11T07:11:54.656Z"
     },
     {
       "path": "README.md",
       "title": "OmniAgent Docs Memory",
       "purpose": "Docs file.",
-      "bytes": 1701,
-      "updatedAt": "2026-05-11T02:46:07.643Z"
+      "bytes": 1764,
+      "updatedAt": "2026-05-11T07:11:33.296Z"
     },
     {
       "path": "START_HERE.md",
@@ -46,8 +46,8 @@
       "path": "TESTING.md",
       "title": "Testing",
       "purpose": "Testing contract and verification commands.",
-      "bytes": 821,
-      "updatedAt": "2026-05-11T02:45:56.621Z"
+      "bytes": 1022,
+      "updatedAt": "2026-05-11T07:12:40.588Z"
     },
     {
       "path": "agents/AGENT_INDEX.json",
@@ -74,8 +74,8 @@
       "path": "agents/KNOWLEDGE_AGENT.md",
       "title": "KnowledgeAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1137,
-      "updatedAt": "2026-05-10T14:03:36.998Z"
+      "bytes": 1360,
+      "updatedAt": "2026-05-11T07:33:51.120Z"
     },
     {
       "path": "agents/OMNI_ROUTER_AGENT.md",
@@ -97,6 +97,41 @@
       "purpose": "Agent card or machine-readable agent index.",
       "bytes": 3592,
       "updatedAt": "2026-05-11T02:43:45.169Z"
+    },
+    {
+      "path": "channels/HTTP.md",
+      "title": "HTTP Channel",
+      "purpose": "Channel Gateway adapter docs.",
+      "bytes": 536,
+      "updatedAt": "2026-05-11T07:10:04.021Z"
+    },
+    {
+      "path": "channels/ONEBOT.md",
+      "title": "OneBot-Like Channel",
+      "purpose": "Channel Gateway adapter docs.",
+      "bytes": 732,
+      "updatedAt": "2026-05-11T07:10:18.907Z"
+    },
+    {
+      "path": "channels/QQBOT.md",
+      "title": "QQ Bot Adapter Plan",
+      "purpose": "Channel Gateway adapter docs.",
+      "bytes": 840,
+      "updatedAt": "2026-05-11T07:10:34.877Z"
+    },
+    {
+      "path": "channels/README.md",
+      "title": "Channels",
+      "purpose": "Channel Gateway adapter docs.",
+      "bytes": 963,
+      "updatedAt": "2026-05-11T07:09:46.763Z"
+    },
+    {
+      "path": "channels/SECURITY.md",
+      "title": "Channel Security",
+      "purpose": "Channel Gateway adapter docs.",
+      "bytes": 909,
+      "updatedAt": "2026-05-11T07:10:54.824Z"
     },
     {
       "path": "context/code-agent-context.md",
@@ -235,8 +270,8 @@
       "path": "memory/USER.md",
       "title": "User Memory",
       "purpose": "Canonical long-term memory.",
-      "bytes": 365,
-      "updatedAt": "2026-05-10T05:45:23.061Z"
+      "bytes": 475,
+      "updatedAt": "2026-05-11T07:33:15.873Z"
     },
     {
       "path": "memory/WORKSPACE.md",
@@ -333,8 +368,8 @@
       "path": "skills/memory-maintenance.md",
       "title": "Memory Maintenance Skill",
       "purpose": "Reusable playbook.",
-      "bytes": 267,
-      "updatedAt": "2026-05-10T05:45:23.088Z"
+      "bytes": 468,
+      "updatedAt": "2026-05-11T07:35:48.504Z"
     },
     {
       "path": "skills/repo-analysis.md",

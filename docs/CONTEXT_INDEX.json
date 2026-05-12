@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-11T02:47:52.658Z",
+  "updatedAt": "2026-05-11T07:36:58.302Z",
   "startHere": "START_HERE.md",
   "architecture": "ARCHITECTURE.md",
   "testing": "TESTING.md",
@@ -42,6 +42,13 @@
       "agents/KNOWLEDGE_AGENT.md",
       "skills/doc-sync.md",
       "skills/memory-maintenance.md"
+    ],
+    "channelGateway": [
+      "channels/README.md",
+      "channels/SECURITY.md",
+      "channels/HTTP.md",
+      "channels/ONEBOT.md",
+      "agents/TASK_AGENT.md"
     ]
   }
 }

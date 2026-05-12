@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { createAgentMemory } from '../runtime';
 import { codeTools } from '../tools/code-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 
 export const codeAgent = new Agent({
   id: 'code-agent',
   name: 'CodeAgent',
+  description:
+    'Executes local coding work through Claude Code tasks, reports durable task/run status, and keeps code changes scoped to allowed workspaces.',
   instructions: `You execute local coding work through Claude Code CLI.
 
 Responsibilities:
@@ -22,5 +24,5 @@ Responsibilities:
     ...codeTools,
     ...teamRuntimeTools,
   },
-  memory: new Memory(),
+  memory: createAgentMemory(),
 });

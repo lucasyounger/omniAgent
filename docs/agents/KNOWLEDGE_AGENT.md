@@ -18,12 +18,15 @@ knowledge, decisions, and procedures synchronized with code behavior.
 - Appends low-risk summaries to `docs/memory/EPISODIC_LOG.md`.
 - Writes reviewable proposals to `docs/memory/doc-update-proposals.jsonl`.
 - Refreshes `docs/memory/MEMORY_INDEX.json`.
+- Persists explicit user-provided profile facts with `upsert-user-profile-fact`.
 
 ## Known Pitfalls
 
 - Do not store secrets, raw credentials, or private API keys.
 - Do not overwrite stable memory files casually; use proposals for risky
   updates.
+- Explicit user-provided identity facts such as name may be written directly to
+  `docs/memory/USER.md`; inferred facts should use proposals.
 - Runtime logs under `docs/runs` are not the same as durable knowledge.
 - When code behavior changes, update relevant `docs/agents/*` and
   `docs/knowledge/*` files, then refresh `MEMORY_INDEX.json`.

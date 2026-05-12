@@ -67,6 +67,44 @@ export async function appendEpisodicLog(entry: {
   return { file: 'memory/EPISODIC_LOG.md', appendedAt: now };
 }
 
+export async function upsertUserProfileFact(input: {
+  key: string;
+  value: string;
+  source?: string;
+}) {
+  const filePath = path.join(memoryRoot, 'USER.md');
+  const now = new Date().toISOString();
+  const content = await fs.readFile(filePath, 'utf8');
+  const sectionHeading = '## User Profile';
+  const factLine = `- ${input.key}: ${input.value}`;
+  const sourceLine = `  - Source: ${input.source || 'explicit user statement'}; updatedAt: ${now}`;
+
+  let nextContent = content;
+  if (!content.includes(sectionHeading)) {
+    nextContent = `${content.trimEnd()}\n\n${sectionHeading}\n\n${factLine}\n${sourceLine}\n`;
+  } else {
+    const sectionStart = content.indexOf(sectionHeading);
+    const nextSectionStart = content.indexOf('\n## ', sectionStart + sectionHeading.length);
+    const before = content.slice(0, sectionStart);
+    const section = content.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
+    const after = nextSectionStart === -1 ? '' : content.slice(nextSectionStart);
+    const escapedKey = input.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const factRegex = new RegExp(`- ${escapedKey}:.*(?:\\r?\\n  - Source:.*)?`);
+    const nextSection = factRegex.test(section)
+      ? section.replace(factRegex, `${factLine}\n${sourceLine}`)
+      : `${section.trimEnd()}\n${factLine}\n${sourceLine}\n`;
+    nextContent = `${before}${nextSection}${after}`;
+  }
+
+  await fs.writeFile(filePath, nextContent.endsWith('\n') ? nextContent : `${nextContent}\n`, 'utf8');
+  return {
+    file: 'memory/USER.md',
+    key: input.key,
+    value: input.value,
+    updatedAt: now,
+  };
+}
+
 export async function writeDocUpdateProposal(proposal: Omit<DocUpdateProposal, 'id' | 'proposedAt'>) {
   const id = `doc-update-${Date.now()}`;
   const fullProposal: DocUpdateProposal = {

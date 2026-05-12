@@ -16,6 +16,27 @@ import {
   retryTeamTask,
   sendAgentInboxMessage,
 } from '../lib/team-runtime-store';
+import { executeWithToolGateway } from '../runtime';
+
+const teamReadPolicy = {
+  risk: 'safe',
+  capability: 'team_runtime.read',
+  audit: true,
+} as const;
+
+const teamWritePolicy = {
+  risk: 'medium',
+  capability: 'team_runtime.write',
+  requireApproval: true,
+  audit: true,
+} as const;
+
+const teamControlPolicy = {
+  risk: 'dangerous',
+  capability: 'team_runtime.control',
+  requireApproval: true,
+  audit: true,
+} as const;
 
 const metadataSchema = z.record(z.string(), z.unknown()).optional();
 const taskStatusSchema = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
@@ -105,7 +126,7 @@ export const createTeamTaskTool = createTool({
     metadata: metadataSchema,
   }),
   outputSchema: teamTaskSchema,
-  execute: async input => createTeamTask(input),
+  execute: async input => executeWithToolGateway('create-team-task', teamWritePolicy, input, () => createTeamTask(input)),
 });
 
 export const listTeamTasksTool = createTool({
@@ -113,7 +134,7 @@ export const listTeamTasksTool = createTool({
   description: 'List durable OmniAgent Team tasks.',
   inputSchema: z.object({}),
   outputSchema: z.array(teamTaskSchema),
-  execute: async () => listTeamTasks(),
+  execute: async input => executeWithToolGateway('list-team-tasks', teamReadPolicy, input, () => listTeamTasks()),
 });
 
 export const getTeamTaskTool = createTool({
@@ -121,7 +142,7 @@ export const getTeamTaskTool = createTool({
   description: 'Get a durable OmniAgent Team task by id.',
   inputSchema: z.object({ taskId: z.string() }),
   outputSchema: teamTaskSchema,
-  execute: async input => getTeamTask(input.taskId),
+  execute: async input => executeWithToolGateway('get-team-task', teamReadPolicy, input, () => getTeamTask(input.taskId)),
 });
 
 export const listTeamRunsTool = createTool({
@@ -129,7 +150,7 @@ export const listTeamRunsTool = createTool({
   description: 'List durable OmniAgent Team runs.',
   inputSchema: z.object({}),
   outputSchema: z.array(teamRunSchema),
-  execute: async () => listTeamRuns(),
+  execute: async input => executeWithToolGateway('list-team-runs', teamReadPolicy, input, () => listTeamRuns()),
 });
 
 export const listTeamEventsTool = createTool({
@@ -141,7 +162,7 @@ export const listTeamEventsTool = createTool({
     limit: z.number().int().positive().max(500).default(50),
   }),
   outputSchema: z.array(teamEventSchema),
-  execute: async input => listTeamEvents(input),
+  execute: async input => executeWithToolGateway('list-team-events', teamReadPolicy, input, () => listTeamEvents(input)),
 });
 
 export const listAgentInboxTool = createTool({
@@ -153,7 +174,7 @@ export const listAgentInboxTool = createTool({
     limit: z.number().int().positive().max(500).default(50),
   }),
   outputSchema: z.array(inboxMessageSchema),
-  execute: async input => listAgentInbox(input),
+  execute: async input => executeWithToolGateway('list-agent-inbox', teamReadPolicy, input, () => listAgentInbox(input)),
 });
 
 export const markInboxMessageReadTool = createTool({
@@ -164,7 +185,7 @@ export const markInboxMessageReadTool = createTool({
     messageId: z.string(),
   }),
   outputSchema: inboxMessageSchema,
-  execute: async input => markInboxMessageRead(input),
+  execute: async input => executeWithToolGateway('mark-inbox-message-read', teamWritePolicy, input, () => markInboxMessageRead(input)),
 });
 
 export const getRunResultTool = createTool({
@@ -175,7 +196,7 @@ export const getRunResultTool = createTool({
     resultRef: z.string().optional(),
   }),
   outputSchema: runResultSchema,
-  execute: async input => getRunResult(input),
+  execute: async input => executeWithToolGateway('get-run-result', teamReadPolicy, input, () => getRunResult(input)),
 });
 
 export const sendAgentInboxMessageTool = createTool({
@@ -192,7 +213,7 @@ export const sendAgentInboxMessageTool = createTool({
     payload: metadataSchema,
   }),
   outputSchema: inboxMessageSchema,
-  execute: async input => sendAgentInboxMessage(input),
+  execute: async input => executeWithToolGateway('send-agent-inbox-message', teamWritePolicy, input, () => sendAgentInboxMessage(input)),
 });
 
 export const cancelTeamTaskTool = createTool({
@@ -204,7 +225,8 @@ export const cancelTeamTaskTool = createTool({
     sourceAgentId: z.string().optional(),
   }),
   outputSchema: z.union([teamTaskSchema, runResultSchema]),
-  execute: async input => cancelTeamTask(input),
+  requireApproval: true,
+  execute: async input => executeWithToolGateway('cancel-team-task', teamControlPolicy, input, () => cancelTeamTask(input)),
 });
 
 export const cancelTeamRunTool = createTool({
@@ -217,7 +239,8 @@ export const cancelTeamRunTool = createTool({
     sourceAgentId: z.string().optional(),
   }),
   outputSchema: runResultSchema,
-  execute: async input => cancelTeamRun(input),
+  requireApproval: true,
+  execute: async input => executeWithToolGateway('cancel-team-run', teamControlPolicy, input, () => cancelTeamRun(input)),
 });
 
 export const retryTeamTaskTool = createTool({
@@ -229,7 +252,7 @@ export const retryTeamTaskTool = createTool({
     reason: z.string().optional(),
   }),
   outputSchema: teamTaskSchema,
-  execute: async input => retryTeamTask(input),
+  execute: async input => executeWithToolGateway('retry-team-task', teamWritePolicy, input, () => retryTeamTask(input)),
 });
 
 export const recoverInterruptedTeamRunsTool = createTool({
@@ -239,7 +262,9 @@ export const recoverInterruptedTeamRunsTool = createTool({
     reason: z.string().optional(),
   }),
   outputSchema: z.array(teamRunSchema),
-  execute: async input => recoverInterruptedTeamRuns(input),
+  requireApproval: true,
+  execute: async input =>
+    executeWithToolGateway('recover-interrupted-team-runs', teamControlPolicy, input, () => recoverInterruptedTeamRuns(input)),
 });
 
 export const markTimedOutTeamRunsTool = createTool({
@@ -247,7 +272,8 @@ export const markTimedOutTeamRunsTool = createTool({
   description: 'Mark Team Runtime runs past timeoutAt as timed out.',
   inputSchema: z.object({}),
   outputSchema: z.array(teamRunSchema),
-  execute: async () => markTimedOutTeamRuns(),
+  requireApproval: true,
+  execute: async input => executeWithToolGateway('mark-timed-out-team-runs', teamControlPolicy, input, () => markTimedOutTeamRuns()),
 });
 
 export const teamRuntimeTools = {

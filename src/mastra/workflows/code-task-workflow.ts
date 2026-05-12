@@ -11,6 +11,8 @@ const codeTaskInputSchema = z.object({
 
 const codeTaskOutputSchema = z.object({
   taskId: z.string(),
+  teamTaskId: z.string(),
+  teamRunId: z.string(),
   workspacePath: z.string(),
   objective: z.string(),
   status: z.string(),

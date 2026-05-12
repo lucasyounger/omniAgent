@@ -1,10 +1,31 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getCodeTask, listCodeTasks, startClaudeCodeTask } from '../lib/code-task-store';
+import { executeWithToolGateway } from '../runtime';
+
+const startClaudeCodeTaskPolicy = {
+  risk: 'dangerous',
+  capability: 'code.execute_claude_code_task',
+  requireApproval: true,
+  audit: true,
+} as const;
+
+const readCodeTaskPolicy = {
+  risk: 'safe',
+  capability: 'code.read_task_status',
+  audit: true,
+} as const;
 
 export const startClaudeCodeTaskTool = createTool({
   id: 'start-claude-code-task',
   description: 'Start a Claude Code CLI task in an allowed local workspace and return a task id for progress polling.',
+  requireApproval: input => !input.dryRun,
+  background: {
+    enabled: true,
+    timeoutMs: Number(process.env.OMNI_CODE_TASK_BACKGROUND_TIMEOUT_MS || 30 * 60_000),
+    maxRetries: Number(process.env.OMNI_CODE_TASK_BACKGROUND_MAX_RETRIES || 0),
+    waitTimeoutMs: Number(process.env.OMNI_CODE_TASK_BACKGROUND_WAIT_TIMEOUT_MS || 1_000),
+  },
   inputSchema: z.object({
     workspacePath: z.string().describe('Local workspace path, under an allowed workspace root.'),
     objective: z.string().describe('Concrete coding objective to pass to Claude Code.'),
@@ -34,7 +55,7 @@ export const startClaudeCodeTaskTool = createTool({
       }),
     ),
   }),
-  execute: async input => startClaudeCodeTask(input),
+  execute: async input => executeWithToolGateway('start-claude-code-task', startClaudeCodeTaskPolicy, input, () => startClaudeCodeTask(input)),
 });
 
 export const getClaudeCodeTaskStatusTool = createTool({
@@ -62,12 +83,12 @@ export const getClaudeCodeTaskStatusTool = createTool({
       }),
     ),
   }),
-  execute: async input => getCodeTask(input.taskId),
+  execute: async input => executeWithToolGateway('get-claude-code-task-status', readCodeTaskPolicy, input, () => getCodeTask(input.taskId)),
 });
 
 export const listClaudeCodeTasksTool = createTool({
   id: 'list-claude-code-tasks',
-  description: 'List in-memory Claude Code tasks for the current OmniAgent process.',
+  description: 'List Claude Code tasks from the durable task index plus currently running in-process tasks.',
   inputSchema: z.object({}),
   outputSchema: z.array(
     z.object({
@@ -90,7 +111,7 @@ export const listClaudeCodeTasksTool = createTool({
       ),
     }),
   ),
-  execute: async () => listCodeTasks(),
+  execute: async input => executeWithToolGateway('list-claude-code-tasks', readCodeTaskPolicy, input, () => listCodeTasks()),
 });
 
 export const codeTools = {

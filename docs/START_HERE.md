@@ -7,9 +7,10 @@ Purpose: load the smallest useful context before changing OmniAgent.
 1. `docs/memory/OMNI.md`
 2. `docs/agents/README.md`
 3. `docs/ARCHITECTURE.md` when changing runtime behavior
-4. The one relevant `docs/agents/*.md` card
-5. One context pack from `docs/CONTEXT_PACKS.md`
-6. Only then read linked source files
+4. `docs/CODE_SEARCH.md` when changing source code
+5. The one relevant `docs/agents/*.md` card
+6. One context pack from `docs/CONTEXT_PACKS.md`
+7. Only then read linked source files
 
 ## Do Not Start With
 
@@ -29,3 +30,6 @@ Purpose: load the smallest useful context before changing OmniAgent.
 
 When behavior changes, update the relevant agent card and knowledge doc in the
 same task, update or add tests, then refresh `docs/memory/MEMORY_INDEX.json`.
+If GitNexus or another code index is used for this repo, refresh it after
+successful typecheck/tests when the code change should be discoverable by later
+agents.

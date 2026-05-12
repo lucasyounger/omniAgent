@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { startClaudeCodeTask } from './code-task-store';
 
@@ -183,6 +184,12 @@ export async function runDueCronJobs(now = new Date()) {
 }
 
 function isCronJobDue(job: CronJob, now: Date) {
+  const cronSchedule = parseCronSchedule(job.schedule);
+  if (cronSchedule) {
+    const lastReference = job.lastRunAt ? new Date(job.lastRunAt).getTime() : new Date(job.createdAt).getTime() - 1;
+    return cronSchedule.nextFireAt(lastReference) <= now.getTime();
+  }
+
   const scheduleTime = parseOneTimeSchedule(job.schedule);
   if (scheduleTime) {
     return now >= scheduleTime && !job.lastRunAt;
@@ -197,6 +204,53 @@ function isCronJobDue(job: CronJob, now: Date) {
   }
 
   return false;
+}
+
+export function getCronJobNextRunAt(job: CronJob, now = new Date()) {
+  const cronSchedule = parseCronSchedule(job.schedule);
+  if (cronSchedule) {
+    return new Date(cronSchedule.nextFireAt(now.getTime())).toISOString();
+  }
+
+  const scheduleTime = parseOneTimeSchedule(job.schedule);
+  if (scheduleTime && !job.lastRunAt) {
+    return scheduleTime.toISOString();
+  }
+
+  const dailyTime = parseDailySchedule(job.schedule);
+  if (dailyTime) {
+    const dueAt = new Date(now);
+    dueAt.setHours(dailyTime.hours, dailyTime.minutes, 0, 0);
+    if (dueAt <= now) {
+      dueAt.setDate(dueAt.getDate() + 1);
+    }
+    return dueAt.toISOString();
+  }
+
+  return undefined;
+}
+
+function parseCronSchedule(schedule: string) {
+  const expression = schedule.trim();
+  const partCount = expression.split(/\s+/).length;
+  if (![5, 6, 7].includes(partCount)) {
+    return undefined;
+  }
+
+  try {
+    const cron = new Cron(expression, { paused: true });
+    return {
+      nextFireAt: (after: number) => {
+        const nextRun = cron.nextRun(new Date(after));
+        if (!nextRun) {
+          throw new Error(`Cron expression has no future occurrence: ${expression}`);
+        }
+        return nextRun.getTime();
+      },
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function parseOneTimeSchedule(schedule: string) {

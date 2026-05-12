@@ -1,18 +1,11 @@
 import 'dotenv/config';
 
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
 import { codeAgent, cronAgent, knowledgeAgent, omniRouterAgent } from './agents';
-import { startCronScheduler } from './lib/cron-store';
-import { markTimedOutTeamRuns, recoverInterruptedTeamRuns } from './lib/team-runtime-store';
-import { memoryMaintenanceWorkflow, runCodeTaskWorkflow } from './workflows';
+import { bootstrapRuntimeCompatibility, omniStorage } from './runtime';
+import { memoryMaintenanceWorkflow, runCodeTaskWorkflow, taskOrchestrationWorkflow } from './workflows';
 
-void recoverInterruptedTeamRuns();
-void markTimedOutTeamRuns();
-startCronScheduler();
-setInterval(() => {
-  void markTimedOutTeamRuns();
-}, Number(process.env.OMNI_TEAM_TIMEOUT_POLL_INTERVAL_MS || 30_000)).unref();
+bootstrapRuntimeCompatibility();
 
 export const mastra = new Mastra({
   agents: {
@@ -22,11 +15,22 @@ export const mastra = new Mastra({
     knowledgeAgent,
   },
   workflows: {
+    taskOrchestrationWorkflow,
     runCodeTaskWorkflow,
     memoryMaintenanceWorkflow,
   },
-  storage: new LibSQLStore({
-    id: 'omni-storage',
-    url: 'file:./omni-agent.db',
-  }),
+  storage: omniStorage,
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: Number(process.env.OMNI_BACKGROUND_GLOBAL_CONCURRENCY || 5),
+    perAgentConcurrency: Number(process.env.OMNI_BACKGROUND_PER_AGENT_CONCURRENCY || 2),
+    defaultTimeoutMs: Number(process.env.OMNI_BACKGROUND_DEFAULT_TIMEOUT_MS || 30 * 60_000),
+    defaultRetries: {
+      maxRetries: Number(process.env.OMNI_BACKGROUND_MAX_RETRIES || 0),
+    },
+  },
+  scheduler: {
+    enabled: true,
+    tickIntervalMs: Number(process.env.OMNI_MASTRA_SCHEDULER_TICK_INTERVAL_MS || 10_000),
+  },
 });

@@ -1,6 +1,27 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createCronJob, deleteCronJob, listCronJobs, runCronJobNow, updateCronJobStatus } from '../lib/cron-store';
+import { createCronJob, deleteCronJob, getCronJobNextRunAt, listCronJobs, runCronJobNow, updateCronJobStatus } from '../lib/cron-store';
+import { executeWithToolGateway } from '../runtime';
+
+const scheduleReadPolicy = {
+  risk: 'safe',
+  capability: 'schedule.read',
+  audit: true,
+} as const;
+
+const scheduleWritePolicy = {
+  risk: 'medium',
+  capability: 'schedule.write',
+  requireApproval: true,
+  audit: true,
+} as const;
+
+const scheduleRunPolicy = {
+  risk: 'dangerous',
+  capability: 'schedule.run_now',
+  requireApproval: true,
+  audit: true,
+} as const;
 
 const cronJobSchema = z.object({
   id: z.string(),
@@ -31,7 +52,7 @@ export const createCronJobTool = createTool({
     workspacePath: z.string().optional().describe('Workspace path for codeAgent execution.'),
   }),
   outputSchema: cronJobSchema,
-  execute: async input => createCronJob(input),
+  execute: async input => executeWithToolGateway('create-cron-job', scheduleWritePolicy, input, () => createCronJob(input)),
 });
 
 export const listCronJobsTool = createTool({
@@ -39,7 +60,7 @@ export const listCronJobsTool = createTool({
   description: 'List OmniAgent scheduled job records.',
   inputSchema: z.object({}),
   outputSchema: z.array(cronJobSchema),
-  execute: async () => listCronJobs(),
+  execute: async input => executeWithToolGateway('list-cron-jobs', scheduleReadPolicy, input, () => listCronJobs()),
 });
 
 export const updateCronJobStatusTool = createTool({
@@ -50,7 +71,8 @@ export const updateCronJobStatusTool = createTool({
     status: z.enum(['active', 'paused']),
   }),
   outputSchema: cronJobSchema,
-  execute: async input => updateCronJobStatus(input.id, input.status),
+  execute: async input =>
+    executeWithToolGateway('update-cron-job-status', scheduleWritePolicy, input, () => updateCronJobStatus(input.id, input.status)),
 });
 
 export const deleteCronJobTool = createTool({
@@ -63,7 +85,8 @@ export const deleteCronJobTool = createTool({
     id: z.string(),
     deleted: z.boolean(),
   }),
-  execute: async input => deleteCronJob(input.id),
+  requireApproval: true,
+  execute: async input => executeWithToolGateway('delete-cron-job', scheduleWritePolicy, input, () => deleteCronJob(input.id)),
 });
 
 export const runCronJobNowTool = createTool({
@@ -73,7 +96,37 @@ export const runCronJobNowTool = createTool({
     id: z.string(),
   }),
   outputSchema: cronJobSchema,
-  execute: async input => runCronJobNow(input.id),
+  requireApproval: true,
+  execute: async input => executeWithToolGateway('run-cron-job-now', scheduleRunPolicy, input, () => runCronJobNow(input.id)),
+});
+
+export const explainCronJobNextRunTool = createTool({
+  id: 'explain-cron-job-next-run',
+  description: 'Explain the next run time for an OmniAgent scheduled job record.',
+  inputSchema: z.object({
+    id: z.string(),
+  }),
+  outputSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    schedule: z.string(),
+    status: z.string(),
+    nextRunAt: z.string().optional(),
+  }),
+  execute: async input =>
+    executeWithToolGateway('explain-cron-job-next-run', scheduleReadPolicy, input, async () => {
+      const job = (await listCronJobs()).find(item => item.id === input.id);
+      if (!job) {
+        throw new Error(`Cron job not found: ${input.id}`);
+      }
+      return {
+        id: job.id,
+        name: job.name,
+        schedule: job.schedule,
+        status: job.status,
+        nextRunAt: job.status === 'active' ? getCronJobNextRunAt(job) : undefined,
+      };
+    }),
 });
 
 export const cronTools = {
@@ -82,4 +135,5 @@ export const cronTools = {
   updateCronJobStatusTool,
   deleteCronJobTool,
   runCronJobNowTool,
+  explainCronJobNextRunTool,
 };

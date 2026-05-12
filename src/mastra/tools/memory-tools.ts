@@ -5,15 +5,30 @@ import {
   listDocsFiles,
   readDocsFile,
   updateMemoryIndex,
+  upsertUserProfileFact,
   writeDocUpdateProposal,
 } from '../lib/docs-memory';
+import { executeWithToolGateway } from '../runtime';
+
+const memoryReadPolicy = {
+  risk: 'safe',
+  capability: 'memory.read',
+  audit: true,
+} as const;
+
+const memoryWritePolicy = {
+  risk: 'medium',
+  capability: 'memory.write',
+  requireApproval: true,
+  audit: true,
+} as const;
 
 export const listMemoryDocsTool = createTool({
   id: 'list-memory-docs',
   description: 'List files in the OmniAgent docs-backed long-term memory.',
   inputSchema: z.object({}),
   outputSchema: z.array(z.string()),
-  execute: async () => listDocsFiles(),
+  execute: async input => executeWithToolGateway('list-memory-docs', memoryReadPolicy, input, () => listDocsFiles()),
 });
 
 export const readMemoryDocTool = createTool({
@@ -26,10 +41,11 @@ export const readMemoryDocTool = createTool({
     path: z.string(),
     content: z.string(),
   }),
-  execute: async input => ({
-    path: input.path,
-    content: await readDocsFile(input.path),
-  }),
+  execute: async input =>
+    executeWithToolGateway('read-memory-doc', memoryReadPolicy, input, async () => ({
+      path: input.path,
+      content: await readDocsFile(input.path),
+    })),
 });
 
 export const appendEpisodicLogTool = createTool({
@@ -45,7 +61,7 @@ export const appendEpisodicLogTool = createTool({
     file: z.string(),
     appendedAt: z.string(),
   }),
-  execute: async input => appendEpisodicLog(input),
+  execute: async input => executeWithToolGateway('append-episodic-log', memoryWritePolicy, input, () => appendEpisodicLog(input)),
 });
 
 export const proposeDocUpdateTool = createTool({
@@ -79,7 +95,7 @@ export const proposeDocUpdateTool = createTool({
       }),
     ),
   }),
-  execute: async input => writeDocUpdateProposal(input),
+  execute: async input => executeWithToolGateway('propose-doc-update', memoryWritePolicy, input, () => writeDocUpdateProposal(input)),
 });
 
 export const updateMemoryIndexTool = createTool({
@@ -100,7 +116,25 @@ export const updateMemoryIndexTool = createTool({
       }),
     ),
   }),
-  execute: async () => updateMemoryIndex(),
+  execute: async input => executeWithToolGateway('update-memory-index', memoryWritePolicy, input, () => updateMemoryIndex()),
+});
+
+export const upsertUserProfileFactTool = createTool({
+  id: 'upsert-user-profile-fact',
+  description:
+    'Persist an explicit user-provided stable profile fact, such as name, preferred language, or durable preference, into docs/memory/USER.md.',
+  inputSchema: z.object({
+    key: z.string().describe('Stable profile field, such as name.'),
+    value: z.string().describe('User-provided value.'),
+    source: z.string().optional().describe('Short source note.'),
+  }),
+  outputSchema: z.object({
+    file: z.string(),
+    key: z.string(),
+    value: z.string(),
+    updatedAt: z.string(),
+  }),
+  execute: async input => executeWithToolGateway('upsert-user-profile-fact', memoryWritePolicy, input, () => upsertUserProfileFact(input)),
 });
 
 export const memoryTools = {
@@ -109,4 +143,5 @@ export const memoryTools = {
   appendEpisodicLogTool,
   proposeDocUpdateTool,
   updateMemoryIndexTool,
+  upsertUserProfileFactTool,
 };

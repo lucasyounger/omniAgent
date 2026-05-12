@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
+    "gateway": "tsx src/gateway/main.ts",
     "build": "mastra build",
     "start": "mastra start",
     "test": "vitest run",
@@ -17,12 +18,14 @@
     "@mastra/core": "1.32.1",
     "@mastra/libsql": "1.10.0",
     "@mastra/memory": "1.17.5",
+    "croner": "^10.0.1",
     "dotenv": "^17.4.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
     "mastra": "1.7.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
   }
