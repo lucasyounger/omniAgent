@@ -20,7 +20,7 @@ debugging OmniAgent behavior.
 
 - `process.cwd()` can drift inside Mastra dev/tool execution.
 - Runtime paths should resolve from the OmniAgent project root, not cwd.
-- This matters for `docs/runs/**` and other durable files.
+- This matters for `~/.omni/runs/**` and other durable files.
 
 ## Claude Code On Windows
 
@@ -45,5 +45,5 @@ debugging OmniAgent behavior.
 
 ## Docs Indexing
 
-- Do not index `docs/runs/**` into long-term memory indexes.
+- Do not index `~/.omni/runs/**` into long-term memory indexes.
 - Runtime logs should be read only by specific task id, run id, or resultRef.

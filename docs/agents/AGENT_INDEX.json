@@ -39,5 +39,5 @@
       "keywords": ["task", "run", "event", "inbox", "result", "team runtime"]
     }
   ],
-  "globalDocs": ["START_HERE.md", "CONTEXT_PACKS.md", "knowledge/PITFALLS.md", "memory/OMNI.md"]
+  "globalDocs": ["START_HERE.md", "CONTEXT_PACKS.md", "knowledge/PITFALLS.md"]
 }

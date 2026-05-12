@@ -6,7 +6,7 @@ TaskRuntime.
 ## Store
 
 The cron store is self-initializing. On first use it creates
-`docs/runs/cron-runs/` and `docs/runs/cron-runs/jobs.json` when they do not
+`~/.omni/runs/cron-runs/` and `~/.omni/runs/cron-runs/jobs.json` when they do not
 exist, then continues the requested create/list/update/delete operation.
 
 ## Job Fields

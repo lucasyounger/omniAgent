@@ -1,11 +1,11 @@
 {
   "name": "omni-agent",
   "version": "0.1.0",
-  "description": "Local Mastra Agent Team with routing, Claude Code execution, cron management, and docs-backed memory.",
+  "description": "Local Mastra Agent Team with routing, Claude Code execution, cron management, and file-backed memory.",
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "gateway": "tsx src/gateway/main.ts",
+    "gateway": "node scripts/gateway-manager.mjs",
     "build": "mastra build",
     "start": "mastra start",
     "test": "vitest run",

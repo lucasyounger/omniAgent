@@ -5,7 +5,7 @@
 - Read `START_HERE.md` first.
 - Choose one pack from `CONTEXT_PACKS.md`.
 - Read one agent card before source files.
-- Do not read `docs/runs/**` unless a specific id points there.
+- Do not read `~/.omni/runs/**` unless a specific id points there.
 - Prefer `knowledge/PITFALLS.md` over rediscovering known issues.
 
 ## Router

@@ -1,7 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { startClaudeCodeTask } from '../lib/code-task-store';
-import { executeWithToolGateway } from '../runtime';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const startClaudeCodeTaskWorkflowPolicy = {
   risk: 'dangerous',

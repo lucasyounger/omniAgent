@@ -585,7 +585,7 @@ export async function markInboxMessageRead(input: { recipientAgentId: string; me
 
 async function writeRunResult(result: RunResult) {
   await ensureTeamRuntimeStore();
-  const resultRef = `docs/runs/team/results/${result.runId}.json`;
+  const resultRef = `omni://runs/team/results/${result.runId}.json`;
   await fs.writeFile(path.join(resultsRoot, `${result.runId}.json`), JSON.stringify(result, null, 2), 'utf8');
   return { ...result, resultRef };
 }

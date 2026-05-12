@@ -14,7 +14,7 @@ TaskRuntime.
 
 ## Key Behavior
 
-- Stores cron jobs in `docs/runs/cron-runs/jobs.json`.
+- Stores cron jobs in `~/.omni/runs/cron-runs/jobs.json`.
 - Starts an in-process scheduler on Mastra startup.
 - Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms.
 - Supports one-time schedules containing `YYYY-MM-DD HH:mm`.

@@ -25,7 +25,7 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   Registers sub-agents and workflows for routing decisions.
 - CodeAgent: executes Claude Code CLI tasks inside allowed workspaces.
 - CronAgent: manages schedule records and triggers due jobs.
-- KnowledgeAgent: maintains docs-backed long-term memory.
+- KnowledgeAgent: maintains file-backed long-term memory.
 - Team Runtime: task, run, event, inbox, and result protocol used by all agents.
 - Omni Gateway: channel adapter layer for phone messaging apps such as QQ-like
   bots and OneBot-compatible bridges.
@@ -49,11 +49,11 @@ own execution logic.
 
 - `docs/agents/**`: compact agent cards for low-token context loading.
 - `docs/knowledge/**`: durable implementation knowledge and known pitfalls.
-- `docs/memory/**`: canonical long-term memory and indexes.
-- `docs/runs/**`: runtime artifacts. Do not load by default.
-- `docs/runs/team/**`: durable Team Runtime records.
-- `docs/runs/code-runs/tasks.json`: durable code task index.
-- `docs/runs/gateway/tool-audit.jsonl`: Tool Gateway audit log.
+- `~/.omni/memory/**`: canonical long-term memory and indexes.
+- `~/.omni/runs/**`: runtime artifacts. Do not load by default.
+- `~/.omni/runs/team/**`: durable Team Runtime records.
+- `~/.omni/runs/code-runs/tasks.json`: durable code task index.
+- `~/.omni/runs/gateway/tool-audit.jsonl`: Tool Gateway audit log.
 - Mastra LibSQL: runtime conversation storage.
 
 ## Task Lifecycle

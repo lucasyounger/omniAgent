@@ -9,7 +9,7 @@ without scanning the full codebase first.
 - `OMNI_ROUTER_AGENT.md`: main user-facing router and Team inbox reader.
 - `CODE_AGENT.md`: Claude Code CLI execution and code task lifecycle.
 - `CRON_AGENT.md`: scheduled job records and due-job execution.
-- `KNOWLEDGE_AGENT.md`: docs-backed memory maintenance.
+- `KNOWLEDGE_AGENT.md`: file-backed memory maintenance.
 - `TASK_AGENT.md`: Team Runtime task coordination role. This is currently a
   protocol/tooling role, not a separate Mastra Agent class.
 

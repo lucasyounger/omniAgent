@@ -19,23 +19,39 @@ export type DocUpdateProposal = {
 };
 
 export async function readDocsFile(relativePath: string): Promise<string> {
-  const filePath = normalizeInside(docsRoot, relativePath);
+  await ensureMemoryStore();
+  const filePath = resolveLogicalDocPath(relativePath);
   return fs.readFile(filePath, 'utf8');
 }
 
 export async function listDocsFiles(): Promise<string[]> {
+  await ensureMemoryStore();
   const results: string[] = [];
 
-  async function walk(dir: string) {
+  async function walkDocs(dir: string) {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       const relativePath = path.relative(docsRoot, fullPath).replaceAll(path.sep, '/');
       if (entry.isDirectory()) {
-        if (relativePath === 'runs') {
+        if (relativePath === 'runs' || relativePath === 'memory') {
           continue;
         }
-        await walk(fullPath);
+        await walkDocs(fullPath);
+        continue;
+      }
+
+      results.push(relativePath);
+    }
+  }
+
+  async function walkMemory(dir: string) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relativePath = `memory/${path.relative(memoryRoot, fullPath).replaceAll(path.sep, '/')}`;
+      if (entry.isDirectory()) {
+        await walkMemory(fullPath);
         continue;
       }
 
@@ -47,7 +63,8 @@ export async function listDocsFiles(): Promise<string[]> {
     }
   }
 
-  await walk(docsRoot);
+  await walkDocs(docsRoot);
+  await walkMemory(memoryRoot);
   return results.sort();
 }
 
@@ -57,6 +74,7 @@ export async function appendEpisodicLog(entry: {
   tags?: string[];
   sourceRunId?: string;
 }) {
+  await ensureMemoryStore();
   const filePath = path.join(memoryRoot, 'EPISODIC_LOG.md');
   const now = new Date().toISOString();
   const tags = entry.tags?.length ? entry.tags.join(', ') : 'none';
@@ -72,6 +90,7 @@ export async function upsertUserProfileFact(input: {
   value: string;
   source?: string;
 }) {
+  await ensureMemoryStore();
   const filePath = path.join(memoryRoot, 'USER.md');
   const now = new Date().toISOString();
   const content = await fs.readFile(filePath, 'utf8');
@@ -106,6 +125,7 @@ export async function upsertUserProfileFact(input: {
 }
 
 export async function writeDocUpdateProposal(proposal: Omit<DocUpdateProposal, 'id' | 'proposedAt'>) {
+  await ensureMemoryStore();
   const id = `doc-update-${Date.now()}`;
   const fullProposal: DocUpdateProposal = {
     ...proposal,
@@ -118,10 +138,11 @@ export async function writeDocUpdateProposal(proposal: Omit<DocUpdateProposal, '
 }
 
 export async function updateMemoryIndex() {
+  await ensureMemoryStore();
   const files = await listDocsFiles();
   const indexedFiles = await Promise.all(
     files.map(async file => {
-      const filePath = path.join(docsRoot, file);
+      const filePath = resolveLogicalDocPath(file);
       const stat = await fs.stat(filePath);
       return {
         path: file,
@@ -140,6 +161,39 @@ export async function updateMemoryIndex() {
   };
   await fs.writeFile(path.join(memoryRoot, 'MEMORY_INDEX.json'), JSON.stringify(index, null, 2), 'utf8');
   return index;
+}
+
+function resolveLogicalDocPath(relativePath: string): string {
+  if (relativePath.startsWith('memory/')) {
+    return normalizeInside(memoryRoot, relativePath.slice('memory/'.length));
+  }
+  return normalizeInside(docsRoot, relativePath);
+}
+
+async function ensureMemoryStore() {
+  await fs.mkdir(memoryRoot, { recursive: true });
+  const userFile = path.join(memoryRoot, 'USER.md');
+  try {
+    await fs.access(userFile);
+    return;
+  } catch {
+    // Seed first-run memory from the historical repo location, when present.
+  }
+
+  const legacyMemoryRoot = path.join(docsRoot, 'memory');
+  try {
+    await fs.cp(legacyMemoryRoot, memoryRoot, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+    return;
+  } catch {
+    // Fall through to minimal bootstrap files.
+  }
+
+  await fs.writeFile(userFile, '# User Memory\n\n', 'utf8');
+  await fs.writeFile(path.join(memoryRoot, 'EPISODIC_LOG.md'), '# Episodic Log\n\n', 'utf8');
 }
 
 async function readDocTitle(filePath: string) {

@@ -8,6 +8,7 @@ let tempRoot: string;
 async function loadStore() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/mastra/lib/team-runtime-store');
 }
 
@@ -18,6 +19,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
   await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -42,7 +44,7 @@ describe('Team Runtime store', () => {
       output: 'ok',
     });
 
-    expect(result.resultRef).toBe(`docs/runs/team/results/${run.runId}.json`);
+    expect(result.resultRef).toBe(`omni://runs/team/results/${run.runId}.json`);
     await expect(store.getRunResult({ runId: run.runId })).resolves.toMatchObject({
       runId: run.runId,
       taskId: task.taskId,

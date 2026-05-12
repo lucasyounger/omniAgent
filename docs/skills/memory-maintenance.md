@@ -8,5 +8,5 @@
 6. Never store secrets.
 7. Persist explicit user-provided profile facts, such as name, through
    `upsert-user-profile-fact`.
-8. Read `memory/USER.md` before answering questions about user identity or
+8. Read `~/.omni/memory/USER.md` before answering questions about user identity or
    durable preferences.

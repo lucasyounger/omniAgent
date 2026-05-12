@@ -17,7 +17,7 @@ messages to report completed delegated tasks.
 
 - `codeAgent`: coding tasks via Claude Code CLI
 - `cronAgent`: schedule management
-- `knowledgeAgent`: docs-backed long-term memory
+- `knowledgeAgent`: file-backed long-term memory
 
 ## Workflows
 

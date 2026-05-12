@@ -79,6 +79,6 @@ When code changes affect behavior:
 - Update source.
 - Update relevant docs and agent cards.
 - Update or add tests.
-- Refresh `docs/memory/MEMORY_INDEX.json`.
+- Refresh `~/.omni/memory/MEMORY_INDEX.json`.
 - Refresh GitNexus/code index when the change should be discoverable by future
   code search.

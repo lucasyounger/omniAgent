@@ -23,9 +23,9 @@ execution through Team Runtime.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn Claude Code or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
-- Captures stdout/stderr in `docs/runs/code-runs/{taskId}.jsonl`.
+- Captures stdout/stderr in `~/.omni/runs/code-runs/{taskId}.jsonl`.
 - Writes Team Runtime events for progress.
-- Writes final Team Runtime result to `docs/runs/team/results/{runId}.json`.
+- Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
 - Sends completion or failure inbox messages.
 
 ## Known Pitfalls
@@ -33,7 +33,7 @@ execution through Team Runtime.
 - On Windows, direct `spawn('claude')` fails with `spawn claude ENOENT`.
 - Using `cmd.exe` shell can truncate prompts containing spaces.
 - Current implementation uses PowerShell plus a temporary prompt file under
-  `docs/runs/code-runs` to preserve full prompts.
+  `~/.omni/runs/code-runs` to preserve full prompts.
 - Workspace paths must stay under `OMNI_ALLOWED_WORKSPACES`.
 - Approval-required execution without an `approvalToken` is blocked before
   Claude Code is spawned.

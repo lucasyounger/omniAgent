@@ -16,7 +16,7 @@ import {
   retryTeamTask,
   sendAgentInboxMessage,
 } from '../lib/team-runtime-store';
-import { executeWithToolGateway } from '../runtime';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const teamReadPolicy = {
   risk: 'safe',
@@ -27,7 +27,6 @@ const teamReadPolicy = {
 const teamWritePolicy = {
   risk: 'medium',
   capability: 'team_runtime.write',
-  requireApproval: true,
   audit: true,
 } as const;
 

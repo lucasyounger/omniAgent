@@ -46,7 +46,7 @@ Use these packs to assemble focused context with fewer tokens.
 ## Runtime Debugging
 
 - First read the relevant agent card.
-- Then inspect only the specific file under `docs/runs/**` referenced by a
+- Then inspect only the specific file under `~/.omni/runs/**` referenced by a
   task id, run id, resultRef, or inbox message.
 - Do not load all runtime logs.
 

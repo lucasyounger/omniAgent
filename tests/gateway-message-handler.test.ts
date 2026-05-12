@@ -10,6 +10,7 @@ let tempRoot: string;
 async function loadHandler() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/gateway/message-handler');
 }
 
@@ -43,6 +44,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });

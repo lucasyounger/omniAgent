@@ -8,6 +8,7 @@ let tempRoot: string;
 async function loadDocsMemory() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/mastra/lib/docs-memory');
 }
 
@@ -24,6 +25,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -43,7 +45,7 @@ describe('docs memory', () => {
       source: 'test update',
     });
 
-    const content = await fs.readFile(path.join(tempRoot, 'docs', 'memory', 'USER.md'), 'utf8');
+    const content = await fs.readFile(path.join(tempRoot, '.omni', 'memory', 'USER.md'), 'utf8');
     expect(content).toContain('## User Profile');
     expect(content).toContain('- name: Lucas Younger');
     expect(content).not.toContain('- name: Lucas\n');

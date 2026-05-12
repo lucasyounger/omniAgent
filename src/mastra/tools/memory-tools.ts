@@ -8,7 +8,7 @@ import {
   upsertUserProfileFact,
   writeDocUpdateProposal,
 } from '../lib/docs-memory';
-import { executeWithToolGateway } from '../runtime';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const memoryReadPolicy = {
   risk: 'safe',
@@ -17,9 +17,8 @@ const memoryReadPolicy = {
 } as const;
 
 const memoryWritePolicy = {
-  risk: 'medium',
+  risk: 'safe',
   capability: 'memory.write',
-  requireApproval: true,
   audit: true,
 } as const;
 
@@ -27,7 +26,7 @@ const approvalTokenSchema = z.string().optional().describe('Approval token issue
 
 export const listMemoryDocsTool = createTool({
   id: 'list-memory-docs',
-  description: 'List files in the OmniAgent docs-backed long-term memory.',
+  description: 'List files in the OmniAgent file-backed long-term memory.',
   inputSchema: z.object({}),
   outputSchema: z.array(z.string()),
   execute: async input => executeWithToolGateway('list-memory-docs', memoryReadPolicy, input, () => listDocsFiles()),
@@ -35,9 +34,9 @@ export const listMemoryDocsTool = createTool({
 
 export const readMemoryDocTool = createTool({
   id: 'read-memory-doc',
-  description: 'Read a docs memory file by path relative to docs/.',
+  description: 'Read a project documentation or long-term memory file by logical path.',
   inputSchema: z.object({
-    path: z.string().describe('Path relative to docs/, such as memory/USER.md.'),
+    path: z.string().describe('Logical path such as memory/USER.md or knowledge/TOOLS.md.'),
   }),
   outputSchema: z.object({
     path: z.string(),
@@ -52,7 +51,7 @@ export const readMemoryDocTool = createTool({
 
 export const appendEpisodicLogTool = createTool({
   id: 'append-episodic-log',
-  description: 'Append a low-risk task summary to docs/memory/EPISODIC_LOG.md.',
+  description: 'Append a low-risk task summary to ~/.omni/memory/EPISODIC_LOG.md.',
   inputSchema: z.object({
     title: z.string(),
     summary: z.string(),
@@ -69,7 +68,7 @@ export const appendEpisodicLogTool = createTool({
 
 export const proposeDocUpdateTool = createTool({
   id: 'propose-doc-update',
-  description: 'Record a docs memory update proposal for review or later automatic application.',
+  description: 'Record a memory update proposal for review or later automatic application.',
   inputSchema: z.object({
     reason: z.string(),
     targetFiles: z.array(z.string()),
@@ -104,7 +103,7 @@ export const proposeDocUpdateTool = createTool({
 
 export const updateMemoryIndexTool = createTool({
   id: 'update-memory-index',
-  description: 'Refresh docs/memory/MEMORY_INDEX.json from the current docs tree.',
+  description: 'Refresh ~/.omni/memory/MEMORY_INDEX.json from the current docs tree.',
   inputSchema: z.object({
     approvalToken: approvalTokenSchema,
   }),
@@ -128,7 +127,7 @@ export const updateMemoryIndexTool = createTool({
 export const upsertUserProfileFactTool = createTool({
   id: 'upsert-user-profile-fact',
   description:
-    'Persist an explicit user-provided stable profile fact, such as name, preferred language, or durable preference, into docs/memory/USER.md.',
+    'Persist an explicit user-provided stable profile fact, such as name, preferred language, or durable preference, into ~/.omni/memory/USER.md.',
   inputSchema: z.object({
     key: z.string().describe('Stable profile field, such as name.'),
     value: z.string().describe('User-provided value.'),

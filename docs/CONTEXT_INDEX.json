@@ -7,15 +7,14 @@
   "pitfalls": "knowledge/PITFALLS.md",
   "agentIndex": "agents/AGENT_INDEX.json",
   "defaultReadOrder": [
-    "memory/OMNI.md",
     "agents/README.md",
     "ARCHITECTURE.md",
     "CONTEXT_PACKS.md"
   ],
   "avoidByDefault": [
-    "runs/**",
-    "memory/MEMORY_INDEX.json",
-    "memory/doc-update-proposals.jsonl"
+    "~/.omni/runs/**",
+    "~/.omni/memory/MEMORY_INDEX.json",
+    "~/.omni/memory/doc-update-proposals.jsonl"
   ],
   "packs": {
     "routing": [

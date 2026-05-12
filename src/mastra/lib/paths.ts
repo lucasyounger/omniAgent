@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 function findProjectRoot(startDir: string): string {
   let current = path.resolve(startDir);
@@ -28,14 +29,17 @@ function findProjectRoot(startDir: string): string {
 
 export const projectRoot = findProjectRoot(process.env.OMNI_PROJECT_ROOT || process.cwd());
 export const docsRoot = path.join(projectRoot, 'docs');
-export const memoryRoot = path.join(docsRoot, 'memory');
 export const knowledgeRoot = path.join(docsRoot, 'knowledge');
-export const runsRoot = path.join(docsRoot, 'runs');
+export const omniRoot = path.resolve(process.env.OMNI_HOME || path.join(os.homedir(), '.omni'));
+export const memoryRoot = path.join(omniRoot, 'memory');
+export const runsRoot = path.join(omniRoot, 'runs');
 export const codeRunsRoot = path.join(runsRoot, 'code-runs');
 export const cronRunsRoot = path.join(runsRoot, 'cron-runs');
 export const memoryRunsRoot = path.join(runsRoot, 'memory-runs');
 export const teamRunsRoot = path.join(runsRoot, 'team');
 export const gatewayRunsRoot = path.join(runsRoot, 'gateway');
+export const gatewayRoot = path.join(omniRoot, 'gateway');
+export const storageRoot = path.join(omniRoot, 'storage');
 
 export function normalizeInside(baseDir: string, targetPath: string): string {
   const resolvedBase = path.resolve(baseDir);

@@ -29,7 +29,7 @@ Routing rules:
 - High-risk capabilities are executed by specialist handlers through Tool Gateway.
 
 Memory rules:
-- Treat docs/ as canonical long-term memory.
+- Treat ~/.omni/memory as canonical long-term memory; keep docs/ for project documentation.
 - Treat runtime Memory as conversation continuity.
 - When the user explicitly states a stable personal fact, such as their name, call upsertUserProfileFactTool.
 - When the user asks about their identity, name, preferences, or prior stable facts, read memory/USER.md before answering.

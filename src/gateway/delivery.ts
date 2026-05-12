@@ -27,7 +27,7 @@ export async function sendOutbound(message: OutboundMessage, config: GatewayConf
   }
 
   if (message.target.channel === 'qqbot') {
-    await sendQQBot(message, config);
+    await sendQQBot(message);
     return;
   }
 
@@ -145,7 +145,7 @@ async function sendOneBot(message: OutboundMessage, config: GatewayConfig) {
   }
 }
 
-async function sendQQBot(message: OutboundMessage, config: GatewayConfig) {
+async function sendQQBot(message: OutboundMessage) {
   const token = getQQBotAccessToken();
   if (!token) {
     throw new Error('QQ Bot access token not available');
@@ -154,9 +154,6 @@ async function sendQQBot(message: OutboundMessage, config: GatewayConfig) {
   const isGroup = message.target.messageType === 'group';
   const conversationId = message.target.conversationId;
   const senderId = message.target.senderId;
-
-  // C2C: POST /v2/users/{openid}/messages
-  // Group: POST /v2/groups/{group_openid}/messages
   const endpoint = isGroup
     ? `https://api.sgroup.qq.com/v2/groups/${conversationId}/messages`
     : `https://api.sgroup.qq.com/v2/users/${senderId || conversationId}/messages`;

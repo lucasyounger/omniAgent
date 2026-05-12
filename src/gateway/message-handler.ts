@@ -4,6 +4,8 @@ import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage } from './types';
 
+const ROUTER_TIMEOUT_MS = Number(process.env.OMNI_GATEWAY_ROUTER_TIMEOUT_MS || 60_000);
+
 export async function handleChannelMessage(message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
   const text = message.text.trim();
   const auth = await authorizeMessage(message, config);
@@ -121,17 +123,24 @@ async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {
     ],
   };
 
-  const response = await fetch(`${config.omniApiBaseUrl}/agents/omni-router-agent/generate`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    return `OmniRouterAgent 调用失败：HTTP ${response.status}`;
-  }
+  try {
+    const response = await fetch(`${config.omniApiBaseUrl}/agents/omni-router-agent/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return `OmniRouterAgent 调用失败：HTTP ${response.status}`;
+    }
 
-  const data = (await response.json()) as { text?: string };
-  return data.text || 'OmniRouterAgent 没有返回文本。';
+    const data = (await response.json()) as { text?: string };
+    return data.text || 'OmniRouterAgent 没有返回文本。';
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[gateway] OmniRouterAgent call failed: ${msg}`);
+    return `OmniRouterAgent 暂时不可用：${msg}`;
+  }
 }
 
 function helpText() {

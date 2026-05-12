@@ -1,2 +1,0 @@
-{"type":"task_started","message":"Claude Code task started.","ts":"2026-05-10T12:46:56.401Z"}
-{"type":"stderr","message":"Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n","ts":"2026-05-10T12:47:03.053Z"}

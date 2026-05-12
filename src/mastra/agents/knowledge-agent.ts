@@ -6,8 +6,8 @@ export const knowledgeAgent = new Agent({
   id: 'knowledge-agent',
   name: 'KnowledgeAgent',
   description:
-    'Maintains docs-backed long-term memory, stable user facts, episodic logs, memory indexes, and reviewable documentation update proposals.',
-  instructions: `You maintain OmniAgent docs-backed long-term memory.
+    'Maintains file-backed long-term memory, stable user facts, episodic logs, memory indexes, and reviewable documentation update proposals.',
+  instructions: `You maintain OmniAgent file-backed long-term memory.
 
 Responsibilities:
 - Read docs memory before changing it.

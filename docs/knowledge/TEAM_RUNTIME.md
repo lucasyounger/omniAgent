@@ -26,7 +26,7 @@ copied into linked Runtime Task payload metadata.
 
 ## Storage
 
-Runtime files live under `docs/runs/team`:
+Runtime files live under `~/.omni/runs/team`:
 
 - `tasks.json`
 - `runs.json`

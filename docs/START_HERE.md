@@ -4,7 +4,7 @@ Purpose: load the smallest useful context before changing OmniAgent.
 
 ## Default Reading Order
 
-1. `docs/memory/OMNI.md`
+1. `~/.omni/memory/OMNI.md`
 2. `docs/agents/README.md`
 3. `docs/ARCHITECTURE.md` when changing runtime behavior
 4. `docs/CODE_SEARCH.md` when changing source code
@@ -14,8 +14,8 @@ Purpose: load the smallest useful context before changing OmniAgent.
 
 ## Do Not Start With
 
-- `docs/runs/**`: runtime logs and task artifacts.
-- `docs/memory/MEMORY_INDEX.json`: machine index, not narrative context.
+- `~/.omni/runs/**`: runtime logs and task artifacts.
+- `~/.omni/memory/MEMORY_INDEX.json`: machine index, not narrative context.
 - Full source tree scans unless the agent card does not answer the question.
 
 ## Fast Paths
@@ -29,7 +29,7 @@ Purpose: load the smallest useful context before changing OmniAgent.
 ## Update Rule
 
 When behavior changes, update the relevant agent card and knowledge doc in the
-same task, update or add tests, then refresh `docs/memory/MEMORY_INDEX.json`.
+same task, update or add tests, then refresh `~/.omni/memory/MEMORY_INDEX.json`.
 If GitNexus or another code index is used for this repo, refresh it after
 successful typecheck/tests when the code change should be discoverable by later
 agents.

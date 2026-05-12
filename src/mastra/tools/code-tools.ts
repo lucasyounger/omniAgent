@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getCodeTask, listCodeTasks, startClaudeCodeTask } from '../lib/code-task-store';
-import { executeWithToolGateway } from '../runtime';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const startClaudeCodeTaskPolicy = {
   risk: 'dangerous',

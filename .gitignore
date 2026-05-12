@@ -2,9 +2,14 @@ node_modules
 dist
 .mastra
 .omc
+.local-backups/
 .env
 .env.development
+.omni/
 *.db
 *.db-*
 .mastra-dev*.log
+.gateway.log
+.gateway.err.log
+.gateway.pid
 output.txt

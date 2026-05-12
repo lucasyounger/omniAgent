@@ -31,7 +31,7 @@ export const omniTeam: TeamMember[] = [
   {
     id: 'knowledge',
     name: 'KnowledgeAgent',
-    role: 'Docs-backed memory maintenance and knowledge extraction.',
+    role: 'file-backed memory maintenance and knowledge extraction.',
     owns: ['memory-docs', 'doc-update-proposals', 'knowledge-index'],
     entryAgent: 'knowledgeAgent',
   },

@@ -25,11 +25,11 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Runtime Files
 
-- `docs/runs/team/tasks.json`
-- `docs/runs/team/runs.json`
-- `docs/runs/team/events.jsonl`
-- `docs/runs/team/inbox/{agentId}.jsonl`
-- `docs/runs/team/results/{runId}.json`
+- `~/.omni/runs/team/tasks.json`
+- `~/.omni/runs/team/runs.json`
+- `~/.omni/runs/team/events.jsonl`
+- `~/.omni/runs/team/inbox/{agentId}.jsonl`
+- `~/.omni/runs/team/results/{runId}.json`
 
 ## Tools
 

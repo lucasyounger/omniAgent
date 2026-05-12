@@ -1,9 +1,9 @@
 import type { GatewayConfig } from './config';
 import { sendOutbound } from './delivery';
 import { handleChannelMessage } from './message-handler';
-import type { ChannelMessage, OutboundMessage } from './types';
+import type { ChannelMessage } from './types';
 
-// ── Module-level state ────────────────────────────────────────────
+const CONNECT_READY_TIMEOUT_MS = 20_000;
 
 type QQBotState =
   | 'CLOSED'
@@ -22,10 +22,9 @@ let heartbeatIntervalMs = 30_000;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let connectReadyTimer: ReturnType<typeof setTimeout> | null = null;
 let cfg: GatewayConfig | null = null;
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
-
-// ── Public API ────────────────────────────────────────────────────
 
 export function getQQBotAccessToken(): string | null {
   return accessToken;
@@ -44,8 +43,6 @@ export async function startQQBotAdapter(config: GatewayConfig): Promise<void> {
 
   await connect();
 }
-
-// ── Authentication ────────────────────────────────────────────────
 
 async function refreshAccessToken(): Promise<void> {
   if (!cfg?.qqbotAppId || !cfg?.qqbotClientSecret) return;
@@ -83,13 +80,11 @@ function startTokenRefreshLoop(): void {
     refreshAccessToken().catch(e => {
       console.error('[qqbot] token refresh loop error:', e);
     });
-  }, 3_600_000).unref(); // refresh every 1h (token TTL is 2h)
+  }, 3_600_000).unref();
 }
 
-// ── WebSocket lifecycle ──────────────────────────────────────────
-
 async function connect(): Promise<void> {
-  if (!accessToken) {
+  if (!accessToken || Date.now() >= accessTokenExpiresAt - 60_000) {
     await refreshAccessToken();
     if (!accessToken) {
       scheduleReconnect();
@@ -98,6 +93,8 @@ async function connect(): Promise<void> {
   }
 
   state = 'CONNECTING';
+  clearConnectReadyTimer();
+  startConnectReadyTimer();
   console.log('[qqbot] connecting...');
 
   try {
@@ -138,12 +135,12 @@ async function connect(): Promise<void> {
     };
 
     ws.onerror = () => {
-      // onclose always fires after onerror, so just log
-      console.error('[qqbot] websocket error');
+      console.error(`[qqbot] websocket error (state=${state}, readyState=${ws?.readyState ?? 'none'})`);
     };
   } catch (error) {
     console.error('[qqbot] connection failed:', error);
     cleanupWs();
+    state = 'CLOSED';
     scheduleReconnect();
   }
 }
@@ -162,6 +159,7 @@ function disconnect(): void {
 }
 
 function cleanupWs(): void {
+  clearConnectReadyTimer();
   stopHeartbeat();
   if (ws) {
     try {
@@ -170,12 +168,10 @@ function cleanupWs(): void {
       ws.onclose = null;
       ws.onerror = null;
     } catch {
-      // ignore
+      // ignore cleanup errors
     }
   }
 }
-
-// ── WebSocket protocol handling ──────────────────────────────────
 
 function handleWsMessage(payload: {
   op: number;
@@ -188,24 +184,23 @@ function handleWsMessage(payload: {
   }
 
   switch (payload.op) {
-    case 0: // Dispatch
+    case 0:
       handleDispatchEvent(payload.t, payload.d as Record<string, unknown> | undefined);
       break;
-    case 7: // Reconnect
+    case 7:
       console.log('[qqbot] server requested reconnect');
       disconnect();
       connect().catch(e => console.error('[qqbot] reconnect error:', e));
       break;
-    case 9: // Invalid Session
+    case 9:
       console.log('[qqbot] invalid session, re-identifying');
       sessionId = null;
       sendIdentify().catch(e => console.error('[qqbot] identify error:', e));
       break;
-    case 10: // Hello
+    case 10:
       handleHello(payload.d as { heartbeat_interval?: number } | undefined);
       break;
-    case 11: // Heartbeat ACK
-      // nothing to do
+    case 11:
       break;
     default:
       console.log(`[qqbot] unknown op: ${payload.op}`);
@@ -232,12 +227,11 @@ async function sendIdentify(): Promise<void> {
     op: 2,
     d: {
       token: `QQBot ${accessToken}`,
-      intents: 1 << 25, // C2C + Group @messages
+      intents: 1 << 25,
       shard: [0, 1],
     },
   };
 
-  // If we have a session_id, try resume (op 6) instead
   if (sessionId) {
     identifyPayload.op = 6;
     identifyPayload.d = {
@@ -262,9 +256,9 @@ function handleDispatchEvent(
   switch (t) {
     case 'READY': {
       sessionId = d.session_id as string;
-      lastSequence = 1; // first dispatch
       reconnectAttempts = 0;
       state = 'READY';
+      clearConnectReadyTimer();
       const user = d.user as { id?: string; username?: string } | undefined;
       console.log(`[qqbot] ready: bot=${user?.username ?? 'unknown'} session=${sessionId}`);
       break;
@@ -272,6 +266,7 @@ function handleDispatchEvent(
     case 'RESUMED': {
       reconnectAttempts = 0;
       state = 'READY';
+      clearConnectReadyTimer();
       console.log('[qqbot] resumed');
       break;
     }
@@ -284,13 +279,10 @@ function handleDispatchEvent(
       break;
     }
     default: {
-      // other dispatch events (GUILD_CREATE, etc.) are ignored
       break;
     }
   }
 }
-
-// ── Message normalization ────────────────────────────────────────
 
 function handleC2CMessage(d: Record<string, unknown>): void {
   const author = d.author as { id?: string; username?: string } | undefined;
@@ -324,7 +316,6 @@ function handleGroupAtMessage(d: Record<string, unknown>): void {
 
   if (!groupOpenid || !author?.id) return;
 
-  // Strip @mention patterns from content
   const content = rawContent.replace(/<@!?\d+>/g, ' ').trim();
   if (!content) return;
 
@@ -344,7 +335,6 @@ function handleGroupAtMessage(d: Record<string, unknown>): void {
   processIncomingMessage(message);
 }
 
-// Fire-and-forget — a single message error must not crash the WS loop
 function processIncomingMessage(message: ChannelMessage): void {
   if (!cfg) return;
   handleChannelMessage(message, cfg)
@@ -364,8 +354,6 @@ function processIncomingMessage(message: ChannelMessage): void {
     });
 }
 
-// ── Heartbeat ────────────────────────────────────────────────────
-
 function startHeartbeat(): void {
   stopHeartbeat();
   heartbeatTimer = setInterval(() => {
@@ -382,7 +370,32 @@ function stopHeartbeat(): void {
   }
 }
 
-// ── Reconnection ─────────────────────────────────────────────────
+function startConnectReadyTimer(): void {
+  connectReadyTimer = setTimeout(() => {
+    connectReadyTimer = null;
+    if (state === 'READY') return;
+
+    console.error(`[qqbot] connection did not become ready within ${CONNECT_READY_TIMEOUT_MS}ms (state=${state}), reconnecting`);
+    cleanupWs();
+    if (ws) {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors
+      }
+      ws = null;
+    }
+    state = 'CLOSED';
+    scheduleReconnect();
+  }, CONNECT_READY_TIMEOUT_MS).unref();
+}
+
+function clearConnectReadyTimer(): void {
+  if (connectReadyTimer) {
+    clearTimeout(connectReadyTimer);
+    connectReadyTimer = null;
+  }
+}
 
 function scheduleReconnect(): void {
   cancelReconnect();

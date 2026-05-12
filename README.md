@@ -2,7 +2,7 @@
 
 OmniAgent is a local Mastra-based agent runtime. The current architecture is no
 longer just a router plus several tools; it is a Runtime/Gateway system with
-durable task coordination, approval gates, scheduled task dispatch, docs-backed
+durable task coordination, approval gates, scheduled task dispatch, file-backed
 memory, and optional chat-channel adapters.
 
 ## Architecture
@@ -35,13 +35,14 @@ Key components:
   directly start CodeAgent.
 - `CodeAgent`: handles code work. `patch_proposal` mode writes a review
   artifact without changing the workspace.
-- `KnowledgeAgent`: maintains docs-backed memory and indexes.
+- `KnowledgeAgent`: maintains file-backed memory and indexes.
 - `Omni Gateway`: optional HTTP/OneBot/QQ Bot channel layer with delivery retry,
   idempotency, and dead-letter records.
 
-Runtime artifacts live under `docs/runs/**`. Long-term project memory and
-knowledge live under `docs/memory/**`, `docs/knowledge/**`, `docs/agents/**`,
-and `docs/context/**`.
+Runtime assets live outside the repository under `~/.omni`: long-term memory in
+`~/.omni/memory`, run artifacts in `~/.omni/runs`, gateway logs in
+`~/.omni/gateway`, and LibSQL storage in `~/.omni/storage`. The `docs/`
+directory is for project documentation only.
 
 ## Prerequisites
 
@@ -129,6 +130,7 @@ npm run build
 
 - `OMNI_PROJECT_ROOT`: optional explicit OmniAgent project root. Usually leave
   empty because the app discovers the root from `package.json`.
+- `OMNI_HOME`: optional runtime asset root. Defaults to `~/.omni`.
 - `OMNI_ALLOWED_WORKSPACES`: semicolon-separated local roots where CodeAgent is
   allowed to work. Example: `L:\Code;D:\Projects`. Code execution outside
   these roots is rejected.
@@ -215,12 +217,11 @@ Create code work as a Runtime Task targeting `code-agent`. Prefer payload:
 ```
 
 When a high-risk action needs approval, Tool Gateway records an approval request
-under `docs/runs/gateway/tool-approvals.json`. Approving the request issues an
+under `~/.omni/runs/gateway/tool-approvals.json`. Approving the request issues an
 `approvalToken` and can move the linked Runtime Task back to `pending`.
 
 ## Repository Hygiene
 
 - Commit code, docs, and tests together when behavior changes.
 - Do not commit `.env`, credentials, logs, or local `.omc` runtime state.
-- `docs/runs/**` contains runtime artifacts; do not load or commit new runtime
-  logs unless you intentionally need fixtures.
+- Runtime assets belong under `~/.omni`, not in this repository.

@@ -8,6 +8,7 @@ let tempRoot: string;
 async function loadCodeTaskStore() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
   return import('../src/mastra/lib/code-task-store');
 }
@@ -19,6 +20,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
@@ -51,7 +53,7 @@ describe('Code task store', () => {
       ]),
     );
 
-    const index = JSON.parse(await fs.readFile(path.join(tempRoot, 'docs', 'runs', 'code-runs', 'tasks.json'), 'utf8'));
+    const index = JSON.parse(await fs.readFile(path.join(tempRoot, '.omni', 'runs', 'code-runs', 'tasks.json'), 'utf8'));
     expect(index).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

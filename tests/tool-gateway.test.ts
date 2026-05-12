@@ -8,11 +8,12 @@ let tempRoot: string;
 async function loadToolGateway() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/mastra/runtime/tool-gateway');
 }
 
 async function readAuditRecords() {
-  const auditFile = path.join(tempRoot, 'docs', 'runs', 'gateway', 'tool-audit.jsonl');
+  const auditFile = path.join(tempRoot, '.omni', 'runs', 'gateway', 'tool-audit.jsonl');
   const raw = await fs.readFile(auditFile, 'utf8');
   return raw
     .split(/\r?\n/)
@@ -27,6 +28,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
