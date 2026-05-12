@@ -24,6 +24,11 @@
     "lastRunTeamTaskId": { "type": "string" },
     "lastRunTeamRunId": { "type": "string" },
     "lastRunStatus": { "type": "string", "enum": ["started", "failed", "skipped"] },
-    "lastRunError": { "type": "string" }
+    "lastRunError": { "type": "string" },
+    "lastDispatchStatus": {
+      "type": "string",
+      "enum": ["dispatched", "waiting_user_confirm", "skipped", "failed"]
+    },
+    "lastDispatchError": { "type": "string" }
   }
 }

@@ -52,11 +52,15 @@ stable contract.
   - valid runtime transitions are accepted
   - invalid runtime transitions are rejected
   - failed tasks transition through `retrying` before retry task creation
+- `tests/task-dispatcher.test.ts`
+  - code tasks without approval move to `waiting_user_confirm`
+  - approved dry-run code tasks dispatch and become `succeeded`
 
 ## Add Tests When
 
 - Team Runtime schema or status changes.
 - TaskRuntime lifecycle transitions change.
+- Task Dispatcher routing or handler behavior changes.
 - Tool Gateway policy or audit behavior changes.
 - Cron schedule parsing or execution changes.
 - CodeAgent task lifecycle changes.

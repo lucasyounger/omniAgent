@@ -68,6 +68,7 @@ describe('Cron store', () => {
     expect(updated.lastRunTaskId).toBe(tasks[0].taskId);
     expect(updated.lastRunTeamTaskId).toBe(tasks[0].taskId);
     expect(updated.lastRunTeamRunId).toBeUndefined();
+    expect(updated.lastDispatchStatus).toBe('skipped');
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
       sourceAgentId: 'scheduler-runtime',

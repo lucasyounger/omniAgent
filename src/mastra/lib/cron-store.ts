@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
+import { dispatchRuntimeTask, type DispatchResult } from '../runtime/task-dispatcher';
 
 export type CronJobStatus = 'active' | 'paused';
 
@@ -25,6 +26,8 @@ export type CronJob = {
   lastRunTeamRunId?: string;
   lastRunStatus?: 'started' | 'failed' | 'skipped';
   lastRunError?: string;
+  lastDispatchStatus?: DispatchResult['status'];
+  lastDispatchError?: string;
 };
 
 const jobsFile = path.join(cronRunsRoot, 'jobs.json');
@@ -133,6 +136,12 @@ export async function runCronJobNow(id: string) {
     } else {
       delete job.lastRunTeamRunId;
     }
+    job.lastDispatchStatus = result.dispatch.status;
+    if ('reason' in result.dispatch && result.dispatch.status === 'failed') {
+      job.lastDispatchError = result.dispatch.reason;
+    } else {
+      delete job.lastDispatchError;
+    }
     delete job.lastRunError;
   } catch (error) {
     job.lastRunStatus = 'failed';
@@ -181,6 +190,12 @@ export async function runDueCronJobs(now = new Date()) {
         job.lastRunTeamRunId = result.teamRunId;
       } else {
         delete job.lastRunTeamRunId;
+      }
+      job.lastDispatchStatus = result.dispatch.status;
+      if ('reason' in result.dispatch && result.dispatch.status === 'failed') {
+        job.lastDispatchError = result.dispatch.reason;
+      } else {
+        delete job.lastDispatchError;
       }
       delete job.lastRunError;
 
@@ -296,7 +311,12 @@ function isOneTimeSchedule(schedule: string) {
   return Boolean(parseOneTimeSchedule(schedule));
 }
 
-async function executeCronJob(job: CronJob): Promise<{ taskId: string; teamTaskId: string; teamRunId?: string }> {
+async function executeCronJob(job: CronJob): Promise<{
+  taskId: string;
+  teamTaskId: string;
+  teamRunId?: string;
+  dispatch: DispatchResult;
+}> {
   const taskType = job.taskType || inferTaskType(job.targetAgentId || job.targetAgent);
   const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || 'code-agent';
   const payload = job.payload || buildLegacyPayload(job);
@@ -314,9 +334,12 @@ async function executeCronJob(job: CronJob): Promise<{ taskId: string; teamTaskI
     },
   });
 
+  const dispatch = await dispatchRuntimeTask(runtimeTask.id);
+
   return {
     taskId: runtimeTask.id,
     teamTaskId: runtimeTask.id,
+    dispatch,
   };
 }
 

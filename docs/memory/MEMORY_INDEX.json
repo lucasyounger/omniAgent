@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T07:25:31.150Z",
+  "updatedAt": "2026-05-12T07:45:35.637Z",
   "scope": "knowledge-docs",
   "excludes": [
     "runs/**",
@@ -11,8 +11,8 @@
       "path": "ARCHITECTURE.md",
       "title": "Architecture",
       "purpose": "Docs file.",
-      "bytes": 4081,
-      "updatedAt": "2026-05-12T07:23:30.167Z"
+      "bytes": 4539,
+      "updatedAt": "2026-05-12T07:42:50.810Z"
     },
     {
       "path": "CODE_SEARCH.md",
@@ -60,8 +60,8 @@
       "path": "TESTING.md",
       "title": "Testing",
       "purpose": "Docs file.",
-      "bytes": 2097,
-      "updatedAt": "2026-05-12T07:23:44.902Z"
+      "bytes": 2313,
+      "updatedAt": "2026-05-12T07:44:44.508Z"
     },
     {
       "path": "agents/AGENT_INDEX.json",
@@ -74,15 +74,15 @@
       "path": "agents/CODE_AGENT.md",
       "title": "CodeAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1539,
-      "updatedAt": "2026-05-12T06:58:48.730Z"
+      "bytes": 1636,
+      "updatedAt": "2026-05-12T07:45:16.807Z"
     },
     {
       "path": "agents/CRON_AGENT.md",
       "title": "CronAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1972,
-      "updatedAt": "2026-05-12T07:22:23.497Z"
+      "bytes": 2133,
+      "updatedAt": "2026-05-12T07:43:40.927Z"
     },
     {
       "path": "agents/KNOWLEDGE_AGENT.md",
@@ -109,8 +109,8 @@
       "path": "agents/TASK_AGENT.md",
       "title": "TaskAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 4328,
-      "updatedAt": "2026-05-12T06:58:17.469Z"
+      "bytes": 4806,
+      "updatedAt": "2026-05-12T07:43:23.924Z"
     },
     {
       "path": "channels/HTTP.md",
@@ -200,8 +200,8 @@
       "path": "knowledge/CRON.md",
       "title": "Cron Management",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 2536,
-      "updatedAt": "2026-05-12T07:23:16.246Z"
+      "bytes": 2890,
+      "updatedAt": "2026-05-12T07:44:04.658Z"
     },
     {
       "path": "knowledge/MASTRA.md",
@@ -228,8 +228,8 @@
       "path": "knowledge/TEAM_RUNTIME.md",
       "title": "Team Runtime Protocol",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 3310,
-      "updatedAt": "2026-05-12T06:59:20.303Z"
+      "bytes": 3778,
+      "updatedAt": "2026-05-12T07:44:24.039Z"
     },
     {
       "path": "knowledge/TOOLS.md",
@@ -298,8 +298,8 @@
       "path": "schemas/cron-job.schema.json",
       "title": "cron-job.schema.json",
       "purpose": "Data contract schema.",
-      "bytes": 1046,
-      "updatedAt": "2026-05-12T07:21:53.225Z"
+      "bytes": 1226,
+      "updatedAt": "2026-05-12T07:45:02.137Z"
     },
     {
       "path": "schemas/doc-update.schema.json",

@@ -11,6 +11,10 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
 - **TaskRuntime** (`src/mastra/runtime/task-runtime.ts`): runtime task lifecycle
   boundary. It maps Team Runtime tasks into runtime tasks and owns runtime
   status transitions such as `waiting_user_confirm`, `retrying`, and `paused`.
+- **Task Dispatcher** (`src/mastra/runtime/task-dispatcher.ts`): polls or
+  explicitly dispatches pending Runtime Tasks to handler implementations by
+  `targetAgentId`. The first handler supports `code-agent` through the same
+  Tool Gateway approval boundary used by tools and workflows.
 - **Tool Gateway** (`src/mastra/runtime/tool-gateway.ts`): policy boundary for
   tool execution. It audits calls, redacts sensitive fields, blocks missing
   capabilities or denied commands, and stops approval-required tools until an
@@ -33,9 +37,9 @@ source agent -> Team Task -> Team Run -> executor agent -> Team Events
              -> Team Result -> recipient inbox -> OmniRouterAgent response
 ```
 
-Cron is only a task source. It creates Runtime Tasks when schedules fire and
-should not own a separate result protocol or directly call specialist agent
-implementation functions.
+Cron is only a task source. It creates Runtime Tasks when schedules fire, then
+asks the Task Dispatcher to route them. Cron should not own a separate result
+protocol or directly call specialist agent implementation functions.
 Channel Gateway is also only a task source and delivery layer. It should not
 own execution logic.
 
@@ -64,6 +68,8 @@ durable file-backed protocol underneath it.
    task.
 7. Team Runtime writes runs, progress events, result files, and inbox
    notifications.
+8. Task Dispatcher scans pending tasks on startup and on
+   `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
 
 Valid runtime transitions are enforced by TaskRuntime. Callers should not write
 runtime status metadata directly.

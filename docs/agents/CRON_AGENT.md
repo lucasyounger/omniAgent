@@ -21,12 +21,15 @@ TaskRuntime.
 - Supports daily schedules containing `daily HH:mm`, `every day HH:mm`,
   `每天 HH:mm`, or `每日 HH:mm`.
 - Creates a Runtime Task when a schedule fires.
+- Invokes Task Dispatcher after creating the Runtime Task.
 - Does not directly start Claude Code or any specialist agent implementation.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
   preserving legacy `task`, `targetAgent`, and `workspacePath` records.
 - Records `lastRunTaskId` and `lastRunTeamTaskId` as the created runtime/team
   task id. `lastRunTeamRunId` is only present if a later executor creates a run
   synchronously.
+- Records `lastDispatchStatus` and optional `lastDispatchError` for the
+  immediate dispatch attempt.
 
 ## Known Pitfalls
 

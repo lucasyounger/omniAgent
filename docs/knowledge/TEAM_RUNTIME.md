@@ -9,6 +9,9 @@ boundary. Team Runtime keeps durable tasks and runs; TaskRuntime controls
 runtime status transitions such as `waiting_user_confirm`, `retrying`, and
 `paused`.
 
+Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
+handler execution by `targetAgentId`.
+
 ## Core Records
 
 - Task: durable request for work from a source agent to a target agent.
@@ -45,6 +48,9 @@ today and should become the migration point for a future LibSQL implementation.
 - Completion normally notifies the source agent and `omni-router-agent`.
 - Feature code should not directly write `metadata.runtimeStatus`; use
   TaskRuntime transition helpers.
+- Feature code should dispatch pending Runtime Tasks through
+  `src/mastra/runtime/task-dispatcher.ts` rather than invoking specialist
+  implementations from schedulers or stores.
 
 ## Runtime Status
 
@@ -91,6 +97,9 @@ intermediate migration step toward a dedicated runtime task store.
 - Team Runtime supports cancellation and retry task creation.
 - TaskRuntime-created tasks start as runtime `pending`.
 - Invalid runtime transitions throw before task metadata is changed.
+- Task Dispatcher currently supports `code-agent` tasks and uses Tool Gateway
+  before starting Claude Code. Code tasks without approval move to
+  `waiting_user_confirm`.
 
 ## Low-Token Entry Point
 

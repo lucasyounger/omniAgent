@@ -25,6 +25,7 @@ exist, then continues the requested create/list/update/delete operation.
 - `lastRunTeamTaskId`, `lastRunTeamRunId`: Team Runtime coordination ids.
   `lastRunTeamRunId` is optional because Cron now creates a task but does not
   synchronously execute a run.
+- `lastDispatchStatus`, `lastDispatchError`: immediate Task Dispatcher outcome.
 
 ## Execution
 
@@ -39,10 +40,15 @@ Supported due checks in the current version:
 One-time jobs are paused after a run is started to avoid repeat execution.
 Manual execution is available through the `run-cron-job-now` tool.
 
-Cron execution creates a Runtime Task. Cron is the source, the configured
-`targetAgentId` is the target, and the actual execution belongs to routing or
-specialist agent logic outside the cron store. The cron store must not import or
-call CodeAgent or `startClaudeCodeTask` directly.
+Cron execution creates a Runtime Task, then invokes Task Dispatcher once for
+that task. Cron is the source, the configured `targetAgentId` is the target,
+and the actual execution belongs to dispatcher handlers or specialist agent
+logic outside the cron store. The cron store must not import or call CodeAgent
+or `startClaudeCodeTask` directly.
+
+The first dispatcher handler supports `code-agent`. If a code task does not
+carry an approval token, dispatch records `pending_approval` through Tool
+Gateway and moves the Runtime Task to `waiting_user_confirm`.
 
 Legacy jobs without `taskType`, `targetAgentId`, or `payload` are upgraded at
 creation time. Old records still run by inferring:

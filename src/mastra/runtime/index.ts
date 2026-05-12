@@ -4,6 +4,8 @@ export { memoryRuntime } from './memory-runtime';
 export { omniStorage } from './store';
 export { schedulerRuntime } from './scheduler-runtime';
 export { assertTransitionAllowed, taskRuntime, toRuntimeTask } from './task-runtime';
+export { dispatchPendingRuntimeTasks, dispatchRuntimeTask } from './task-dispatcher';
+export type { DispatchResult } from './task-dispatcher';
 export {
   defineGatewayTool,
   executeWithToolGateway,

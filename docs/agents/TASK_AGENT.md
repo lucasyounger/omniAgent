@@ -16,6 +16,7 @@ work is delegated, executed, reported, and recovered across all agents.
 
 - `src/mastra/lib/team-runtime-store.ts`
 - `src/mastra/runtime/task-runtime.ts`
+- `src/mastra/runtime/task-dispatcher.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
 - `src/mastra/tools/index.ts`
 - `src/mastra/agents/omni-router-agent.ts`
@@ -61,6 +62,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - Overdue runs should be marked `timed_out`.
 - Runtime status transitions must follow the TaskRuntime state machine. Do not
   write `metadata.runtimeStatus` directly from feature code.
+- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher handlers
+  must use the same Tool Gateway policies as user-facing tools.
 
 ## Current Behavior
 
@@ -78,6 +81,9 @@ work is delegated, executed, reported, and recovered across all agents.
   `paused`.
 - Retry uses a two-step runtime lifecycle: the failed source task becomes
   `retrying`, then a new retry task is created with `pending` status.
+- Task Dispatcher currently handles `code-agent` tasks. Code tasks without an
+  approval token transition to `waiting_user_confirm`; approved dry-run code
+  tasks can complete synchronously as `succeeded`.
 
 ## Known Pitfalls
 
@@ -103,6 +109,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - Update tests under `tests/team-runtime-store.test.ts`.
 - Update tests under `tests/task-runtime.test.ts` when runtime lifecycle
   behavior changes.
+- Update tests under `tests/task-dispatcher.test.ts` when dispatch behavior
+  changes.
 - Run `npm test` and `npm run typecheck`.
 
 ## Related Docs
