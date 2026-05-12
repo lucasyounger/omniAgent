@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalRequest",
+  "type": "object",
+  "required": ["requestId", "toolId", "capability", "risk", "status", "createdAt", "updatedAt"],
+  "properties": {
+    "requestId": { "type": "string" },
+    "toolId": { "type": "string" },
+    "capability": { "type": "string" },
+    "risk": { "type": "string", "enum": ["safe", "medium", "dangerous"] },
+    "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+    "actorId": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "channel": { "type": "string" },
+    "taskId": { "type": "string" },
+    "reason": { "type": "string" },
+    "approvalToken": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "decidedAt": { "type": "string" },
+    "decidedBy": { "type": "string" },
+    "inputPreview": true
+  }
+}

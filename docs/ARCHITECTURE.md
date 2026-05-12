@@ -13,12 +13,14 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   status transitions such as `waiting_user_confirm`, `retrying`, and `paused`.
 - **Task Dispatcher** (`src/mastra/runtime/task-dispatcher.ts`): polls or
   explicitly dispatches pending Runtime Tasks to handler implementations by
-  `targetAgentId`. The first handler supports `code-agent` through the same
+  `targetAgentId`. It uses a short lease, a max-concurrency guard, and the same
   Tool Gateway approval boundary used by tools and workflows.
 - **Tool Gateway** (`src/mastra/runtime/tool-gateway.ts`): policy boundary for
   tool execution. It audits calls, redacts sensitive fields, blocks missing
   capabilities or denied commands, and stops approval-required tools until an
   `approvalToken` is provided.
+- **Approval Store** (`src/mastra/runtime/approval-store.ts`): durable approval
+  request store. Approval creates a token and can resume a linked Runtime Task.
 - OmniRouterAgent: supervisor-style router, delegation coordinator, inbox reader.
   Registers sub-agents and workflows for routing decisions.
 - CodeAgent: executes Claude Code CLI tasks inside allowed workspaces.
@@ -70,6 +72,8 @@ durable file-backed protocol underneath it.
    notifications.
 8. Task Dispatcher scans pending tasks on startup and on
    `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
+9. Dispatcher handlers currently cover `code-agent` and `knowledge-agent`.
+   `research-agent` and `notify-agent` are registered as pending handlers.
 
 Valid runtime transitions are enforced by TaskRuntime. Callers should not write
 runtime status metadata directly.

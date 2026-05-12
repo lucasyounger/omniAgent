@@ -3,12 +3,9 @@ import { codeAgent } from './code-agent';
 import { cronAgent } from './cron-agent';
 import { knowledgeAgent } from './knowledge-agent';
 import { createAgentMemory } from '../runtime';
-import { codeTools } from '../tools/code-tools';
-import { cronTools } from '../tools/cron-tools';
-import { memoryTools } from '../tools/memory-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 import { teamTools } from '../tools/team-tools';
-import { memoryMaintenanceWorkflow, runCodeTaskWorkflow, taskOrchestrationWorkflow } from '../workflows';
+import { taskOrchestrationWorkflow } from '../workflows';
 
 export const omniRouterAgent = new Agent({
   id: 'omni-router-agent',
@@ -18,20 +15,18 @@ export const omniRouterAgent = new Agent({
   instructions: `You are OmniAgent's main router and final-response agent.
 
 You coordinate an extensible local Agent Team:
-- Route coding work to CodeAgent capabilities through Claude Code task tools.
-- Route schedule management to CronAgent capabilities through cron tools.
-- Route long-term memory and docs maintenance to KnowledgeAgent capabilities through memory tools.
+- Route coding, scheduling, and knowledge work by creating Runtime/Team tasks.
 - Track delegated work through Team Runtime tasks, runs, events, inbox messages, and results.
 - Use listTeamMembersTool when you need to inspect team boundaries.
 
 Routing rules:
 - For normal questions, answer directly and use memory docs only when they are relevant.
-- For coding tasks, prefer delegating to CodeAgent or runCodeTaskWorkflow. Clarify workspace path and objective before starting Claude Code.
-- For long-running code tasks, start the task, return the task id, then use status polling for progress.
+- For coding tasks, create a task targeting code-agent with taskType metadata and payload. Do not start Claude Code directly.
+- For long-running work, create the task, return the task id, then use status polling for progress.
 - Check listAgentInboxTool for completed delegated work and use getRunResultTool to read durable results.
-- For scheduled tasks, prefer delegating to CronAgent. Create or update schedule records and explain the execution-loop status.
-- For durable knowledge, prefer delegating to KnowledgeAgent or memoryMaintenanceWorkflow. Append low-risk episode summaries and create doc update proposals for higher-risk memory changes.
-- Treat direct tool use as a compatibility path while Runtime and Tool Gateway migration is in progress.
+- For scheduled tasks, create a task targeting cron-agent instead of calling schedule tools directly.
+- For durable knowledge, create a task targeting knowledge-agent instead of calling memory write tools directly.
+- High-risk capabilities are executed by specialist handlers through Tool Gateway.
 
 Memory rules:
 - Treat docs/ as canonical long-term memory.
@@ -44,9 +39,6 @@ Memory rules:
   tools: {
     ...teamTools,
     ...teamRuntimeTools,
-    ...codeTools,
-    ...cronTools,
-    ...memoryTools,
   },
   agents: {
     codeAgent,
@@ -55,8 +47,6 @@ Memory rules:
   },
   workflows: {
     taskOrchestrationWorkflow,
-    runCodeTaskWorkflow,
-    memoryMaintenanceWorkflow,
   },
   memory: createAgentMemory(),
 });

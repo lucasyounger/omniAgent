@@ -20,6 +20,8 @@ execution through Team Runtime.
   approval path as the tool call.
 - Task Dispatcher can dispatch approved `code-agent` Runtime Tasks into
   Claude Code execution.
+- Supports `executionMode: patch_proposal`, which writes a review artifact and
+  does not spawn Claude Code or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
 - Captures stdout/stderr in `docs/runs/code-runs/{taskId}.jsonl`.
 - Writes Team Runtime events for progress.
@@ -35,6 +37,8 @@ execution through Team Runtime.
 - Workspace paths must stay under `OMNI_ALLOWED_WORKSPACES`.
 - Approval-required execution without an `approvalToken` is blocked before
   Claude Code is spawned.
+- Prefer `patch_proposal` for untrusted or remote code requests until a real
+  sandbox/worktree apply flow is in place.
 - In-memory code task status is lost after service restart; Team Runtime files
   are the durable source.
 

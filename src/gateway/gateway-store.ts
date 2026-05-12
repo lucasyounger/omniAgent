@@ -79,12 +79,23 @@ export async function pairSession(input: Omit<ChannelSession, 'id' | 'createdAt'
   return session;
 }
 
-export async function createDelivery(input: Omit<DeliveryRecord, 'deliveryId' | 'status' | 'createdAt' | 'updatedAt'>) {
+export async function createDelivery(input: Omit<DeliveryRecord, 'deliveryId' | 'idempotencyKey' | 'status' | 'attempt' | 'maxAttempts' | 'createdAt' | 'updatedAt'> & {
+  idempotencyKey?: string;
+  maxAttempts?: number;
+}) {
   const deliveries = await readArray<DeliveryRecord>(deliveriesFile);
   const now = new Date().toISOString();
+  const idempotencyKey = input.idempotencyKey || createDeliveryKey(input);
+  const existing = deliveries.find(item => item.idempotencyKey === idempotencyKey);
+  if (existing) {
+    return existing;
+  }
   const delivery: DeliveryRecord = {
     deliveryId: createId('delivery'),
+    idempotencyKey,
     status: 'pending',
+    attempt: 0,
+    maxAttempts: input.maxAttempts || Number(process.env.OMNI_GATEWAY_DELIVERY_MAX_ATTEMPTS || 3),
     createdAt: now,
     updatedAt: now,
     ...input,
@@ -109,4 +120,34 @@ export async function updateDeliveryStatus(deliveryId: string, status: DeliveryR
   delivery.updatedAt = new Date().toISOString();
   await writeArray(deliveriesFile, deliveries);
   return delivery;
+}
+
+export async function markDeliveryAttempt(input: { deliveryId: string; error: string; retryDelayMs?: number }) {
+  const deliveries = await listDeliveries();
+  const delivery = deliveries.find(item => item.deliveryId === input.deliveryId);
+  if (!delivery) {
+    throw new Error(`Delivery not found: ${input.deliveryId}`);
+  }
+
+  delivery.attempt = (delivery.attempt || 0) + 1;
+  delivery.error = input.error;
+  delivery.status = delivery.attempt >= delivery.maxAttempts ? 'dead_letter' : 'failed';
+  delivery.nextRetryAt =
+    delivery.status === 'failed'
+      ? new Date(Date.now() + (input.retryDelayMs || Number(process.env.OMNI_GATEWAY_DELIVERY_RETRY_DELAY_MS || 30_000))).toISOString()
+      : undefined;
+  delivery.updatedAt = new Date().toISOString();
+  await writeArray(deliveriesFile, deliveries);
+  return delivery;
+}
+
+function createDeliveryKey(input: { sourceInboxMessageId?: string; taskId?: string; runId?: string; target: { channel: string; accountId: string; conversationId: string } }) {
+  return [
+    input.sourceInboxMessageId || 'manual',
+    input.taskId || 'no-task',
+    input.runId || 'no-run',
+    input.target.channel,
+    input.target.accountId,
+    input.target.conversationId,
+  ].join(':');
 }

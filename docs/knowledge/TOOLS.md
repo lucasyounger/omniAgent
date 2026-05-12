@@ -17,12 +17,17 @@ Tool Gateway is the policy boundary for tool execution. It supports:
 
 - audit records with sensitive-field redaction
 - approval-required blocking
+- durable approval requests in `docs/runs/gateway/tool-approvals.json`
 - optional capability checks
 - optional denied-command checks
 - optional allowed-path checks
 
 Audit records are written to `docs/runs/gateway/tool-audit.jsonl` with one of
 these statuses: `succeeded`, `failed`, `pending_approval`, or `blocked`.
+
+Approval requests can be approved or rejected through the Approval Store API.
+Approval issues an `approvalToken`; rejection can cancel the linked Runtime
+Task.
 
 ## Cron Records
 

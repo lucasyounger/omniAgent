@@ -5,7 +5,7 @@ import {
   markInboxMessageRead,
 } from '../mastra/lib/team-runtime-store';
 import type { GatewayConfig } from './config';
-import { createDelivery, updateDeliveryStatus } from './gateway-store';
+import { createDelivery, listDeliveries, markDeliveryAttempt, updateDeliveryStatus } from './gateway-store';
 import { getQQBotAccessToken } from './qqbot-adapter';
 import type { ChannelTarget, OutboundMessage } from './types';
 
@@ -42,6 +42,7 @@ export function startDeliveryWorker(config: GatewayConfig) {
 }
 
 export async function deliverPendingInbox(config: GatewayConfig) {
+  await retryDueDeliveries(config);
   const messages = await listAgentInbox({
     recipientAgentId: 'channel-gateway',
     status: 'unread',
@@ -79,12 +80,36 @@ export async function deliverPendingInbox(config: GatewayConfig) {
         runId: inboxMessage.runId,
         resultRef: inboxMessage.resultRef,
       });
-      await sendOutbound({ target, text }, config);
-      await updateDeliveryStatus(delivery.deliveryId, 'sent');
+      if (delivery.status !== 'sent') {
+        await attemptDelivery(delivery.deliveryId, { target, text }, config);
+      }
       await markInboxMessageRead({ recipientAgentId: 'channel-gateway', messageId: inboxMessage.messageId });
     } catch (error) {
       console.error('[gateway] delivery failed', error);
     }
+  }
+}
+
+async function retryDueDeliveries(config: GatewayConfig) {
+  const now = Date.now();
+  const deliveries = (await listDeliveries()).filter(
+    delivery => delivery.status === 'failed' && delivery.nextRetryAt && new Date(delivery.nextRetryAt).getTime() <= now,
+  );
+
+  for (const delivery of deliveries) {
+    await attemptDelivery(delivery.deliveryId, { target: delivery.target, text: delivery.text }, config);
+  }
+}
+
+async function attemptDelivery(deliveryId: string, message: OutboundMessage, config: GatewayConfig) {
+  try {
+    await sendOutbound(message, config);
+    await updateDeliveryStatus(deliveryId, 'sent');
+  } catch (error) {
+    await markDeliveryAttempt({
+      deliveryId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

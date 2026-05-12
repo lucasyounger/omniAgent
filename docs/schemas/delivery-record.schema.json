@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeliveryRecord",
+  "type": "object",
+  "required": ["deliveryId", "idempotencyKey", "target", "text", "status", "attempt", "maxAttempts", "createdAt", "updatedAt"],
+  "properties": {
+    "deliveryId": { "type": "string" },
+    "idempotencyKey": { "type": "string" },
+    "target": {
+      "type": "object",
+      "required": ["channel", "accountId", "conversationId", "messageType"],
+      "properties": {
+        "channel": { "type": "string" },
+        "accountId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "messageType": { "type": "string", "enum": ["dm", "group", "guild", "system"] }
+      }
+    },
+    "text": { "type": "string" },
+    "status": { "type": "string", "enum": ["pending", "sent", "failed", "dead_letter"] },
+    "attempt": { "type": "number" },
+    "maxAttempts": { "type": "number" },
+    "nextRetryAt": { "type": "string" },
+    "sourceInboxMessageId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "runId": { "type": "string" },
+    "resultRef": { "type": "string" },
+    "error": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  }
+}

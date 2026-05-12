@@ -55,6 +55,11 @@ stable contract.
 - `tests/task-dispatcher.test.ts`
   - code tasks without approval move to `waiting_user_confirm`
   - approved dry-run code tasks dispatch and become `succeeded`
+- `tests/approval-store.test.ts`
+  - approved requests inject approval tokens and resume linked Runtime Tasks
+- `tests/gateway-store.test.ts`
+  - delivery idempotency
+  - retry attempts and dead-letter transition
 
 ## Add Tests When
 
@@ -62,7 +67,9 @@ stable contract.
 - TaskRuntime lifecycle transitions change.
 - Task Dispatcher routing or handler behavior changes.
 - Tool Gateway policy or audit behavior changes.
+- Approval request behavior changes.
 - Cron schedule parsing or execution changes.
 - CodeAgent task lifecycle changes.
+- Gateway delivery retry/idempotency behavior changes.
 - Docs index inclusion/exclusion rules change.
 - Channel Gateway auth, routing, delivery, or command behavior changes.

@@ -8,6 +8,8 @@ Remote channel messages can trigger local actions. Treat them as untrusted.
 - `OMNI_GATEWAY_ALLOW_SENDERS`: semicolon-separated sender allowlist.
 - Gateway writes tasks with `sourceAgentId: channel-gateway`.
 - Async task results return through Team Runtime inbox and delivery worker.
+- Delivery records use idempotency keys, retry attempts, and `dead_letter`
+  status after max attempts.
 
 ## Required Rules
 
@@ -19,7 +21,6 @@ Remote channel messages can trigger local actions. Treat them as untrusted.
 
 ## Next Security Enhancements
 
-- Approval workflow for medium/high risk remote tasks.
 - Mention-only group policy.
 - Per-channel workspace permissions.
 - Rate limits per sender and conversation.

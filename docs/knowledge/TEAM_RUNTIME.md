@@ -12,6 +12,10 @@ runtime status transitions such as `waiting_user_confirm`, `retrying`, and
 Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
 handler execution by `targetAgentId`.
 
+Approval Store sits next to Tool Gateway and persists approval requests for
+high-risk execution. Approved requests generate an approval token that can be
+copied into linked Runtime Task payload metadata.
+
 ## Core Records
 
 - Task: durable request for work from a source agent to a target agent.
@@ -98,8 +102,11 @@ intermediate migration step toward a dedicated runtime task store.
 - TaskRuntime-created tasks start as runtime `pending`.
 - Invalid runtime transitions throw before task metadata is changed.
 - Task Dispatcher currently supports `code-agent` tasks and uses Tool Gateway
-  before starting Claude Code. Code tasks without approval move to
-  `waiting_user_confirm`.
+  before starting Claude Code. It also supports basic `knowledge-agent`
+  handlers for memory index, episodic log, and doc update proposal tasks. Code
+  tasks without approval move to `waiting_user_confirm`.
+- Dispatcher uses `dispatchLeaseId` and `dispatchLeaseExpiresAt` metadata to
+  reduce duplicate dispatch.
 
 ## Low-Token Entry Point
 

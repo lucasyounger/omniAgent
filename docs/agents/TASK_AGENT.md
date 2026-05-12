@@ -64,6 +64,9 @@ work is delegated, executed, reported, and recovered across all agents.
   write `metadata.runtimeStatus` directly from feature code.
 - Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher handlers
   must use the same Tool Gateway policies as user-facing tools.
+- Approval-required tasks should create durable approval requests. Approving a
+  request injects an approval token into linked task payload metadata and moves
+  the task back to `pending`.
 
 ## Current Behavior
 
@@ -81,9 +84,12 @@ work is delegated, executed, reported, and recovered across all agents.
   `paused`.
 - Retry uses a two-step runtime lifecycle: the failed source task becomes
   `retrying`, then a new retry task is created with `pending` status.
-- Task Dispatcher currently handles `code-agent` tasks. Code tasks without an
-  approval token transition to `waiting_user_confirm`; approved dry-run code
-  tasks can complete synchronously as `succeeded`.
+- Task Dispatcher currently handles `code-agent` and `knowledge-agent` tasks.
+  Code tasks without an approval token transition to `waiting_user_confirm`;
+  approved dry-run or patch-proposal code tasks can complete synchronously as
+  `succeeded`.
+- Dispatcher lease metadata prevents duplicate dispatch while a poller is
+  working on a task.
 
 ## Known Pitfalls
 

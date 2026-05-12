@@ -1,4 +1,11 @@
 export { bootstrapRuntimeCompatibility } from './bootstrap';
+export {
+  approveApprovalRequest,
+  createApprovalRequest,
+  listApprovalRequests,
+  rejectApprovalRequest,
+} from './approval-store';
+export type { ApprovalRequest, ApprovalRequestStatus } from './approval-store';
 export { createAgentMemory } from './memory';
 export { memoryRuntime } from './memory-runtime';
 export { omniStorage } from './store';

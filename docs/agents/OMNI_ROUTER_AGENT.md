@@ -11,9 +11,6 @@ messages to report completed delegated tasks.
 - `src/mastra/agents/omni-router-agent.ts`
 - `src/mastra/tools/team-tools.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
-- `src/mastra/tools/code-tools.ts`
-- `src/mastra/tools/cron-tools.ts`
-- `src/mastra/tools/memory-tools.ts`
 - `src/mastra/runtime/index.ts`
 
 ## Sub-Agents
@@ -24,16 +21,15 @@ messages to report completed delegated tasks.
 
 ## Workflows
 
-- `taskOrchestrationWorkflow`: intake, plan, confirm, apply stages for tasks
-- `runCodeTaskWorkflow`: Claude Code execution with durable task/run records
-- `memoryMaintenanceWorkflow`: docs memory updates with proposals and index refresh
+- `taskOrchestrationWorkflow`: creates Runtime Tasks for delegated work
 
 ## Key Tools
 
 - Team discovery: `list-team-members`
 - Team Runtime: `list-agent-inbox`, `get-run-result`, `get-team-task`,
   `list-team-events`, `mark-inbox-message-read`
-- Delegation: `start-claude-code-task`, cron tools, memory tools
+- Delegation: create Runtime/Team tasks with `targetAgentId`, `taskType`, and
+  structured payload metadata
 
 ## Operating Rules
 
@@ -42,8 +38,8 @@ messages to report completed delegated tasks.
 - Mark inbox messages read after presenting or acknowledging them.
 - Prefer Team Runtime task ids over ad hoc code task ids for cross-agent
   coordination.
-- Treat direct tool use as a compatibility path while Runtime and Tool Gateway
-  migration is in progress.
+- Do not directly start CodeAgent, CronAgent, or KnowledgeAgent tools. Create a
+  Runtime Task and let Task Dispatcher or specialist handlers execute it.
 
 ## Known Pitfalls
 

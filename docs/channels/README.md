@@ -14,6 +14,7 @@ through Team Runtime.
 - `/task <workspacePath> :: <objective>` for async CodeAgent execution
 - Natural language forwarding to OmniRouterAgent
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
+- Delivery idempotency, retry attempts, and dead-letter status
 
 ## Runtime
 

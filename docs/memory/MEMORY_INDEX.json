@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-12T07:45:35.637Z",
+  "updatedAt": "2026-05-12T08:13:38.377Z",
   "scope": "knowledge-docs",
   "excludes": [
     "runs/**",
@@ -11,8 +11,8 @@
       "path": "ARCHITECTURE.md",
       "title": "Architecture",
       "purpose": "Docs file.",
-      "bytes": 4539,
-      "updatedAt": "2026-05-12T07:42:50.810Z"
+      "bytes": 4853,
+      "updatedAt": "2026-05-12T08:09:55.969Z"
     },
     {
       "path": "CODE_SEARCH.md",
@@ -60,8 +60,8 @@
       "path": "TESTING.md",
       "title": "Testing",
       "purpose": "Docs file.",
-      "bytes": 2313,
-      "updatedAt": "2026-05-12T07:44:44.508Z"
+      "bytes": 2618,
+      "updatedAt": "2026-05-12T08:12:27.676Z"
     },
     {
       "path": "agents/AGENT_INDEX.json",
@@ -74,8 +74,8 @@
       "path": "agents/CODE_AGENT.md",
       "title": "CodeAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1636,
-      "updatedAt": "2026-05-12T07:45:16.807Z"
+      "bytes": 1889,
+      "updatedAt": "2026-05-12T08:10:41.056Z"
     },
     {
       "path": "agents/CRON_AGENT.md",
@@ -95,8 +95,8 @@
       "path": "agents/OMNI_ROUTER_AGENT.md",
       "title": "OmniRouterAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 1939,
-      "updatedAt": "2026-05-12T03:17:10.193Z"
+      "bytes": 1756,
+      "updatedAt": "2026-05-12T08:10:18.886Z"
     },
     {
       "path": "agents/README.md",
@@ -109,8 +109,8 @@
       "path": "agents/TASK_AGENT.md",
       "title": "TaskAgent",
       "purpose": "Agent card or machine-readable agent index.",
-      "bytes": 4806,
-      "updatedAt": "2026-05-12T07:43:23.924Z"
+      "bytes": 5132,
+      "updatedAt": "2026-05-12T08:11:04.956Z"
     },
     {
       "path": "channels/HTTP.md",
@@ -137,15 +137,15 @@
       "path": "channels/README.md",
       "title": "Channels",
       "purpose": "Docs file.",
-      "bytes": 963,
-      "updatedAt": "2026-05-11T07:09:46.763Z"
+      "bytes": 1026,
+      "updatedAt": "2026-05-12T08:11:56.670Z"
     },
     {
       "path": "channels/SECURITY.md",
       "title": "Channel Security",
       "purpose": "Docs file.",
-      "bytes": 909,
-      "updatedAt": "2026-05-11T07:10:54.824Z"
+      "bytes": 958,
+      "updatedAt": "2026-05-12T08:12:11.618Z"
     },
     {
       "path": "context/code-agent-context.md",
@@ -228,15 +228,15 @@
       "path": "knowledge/TEAM_RUNTIME.md",
       "title": "Team Runtime Protocol",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 3778,
-      "updatedAt": "2026-05-12T07:44:24.039Z"
+      "bytes": 4204,
+      "updatedAt": "2026-05-12T08:11:21.324Z"
     },
     {
       "path": "knowledge/TOOLS.md",
       "title": "Tools",
       "purpose": "Durable implementation knowledge and known pitfalls.",
-      "bytes": 1120,
-      "updatedAt": "2026-05-12T06:58:33.482Z"
+      "bytes": 1352,
+      "updatedAt": "2026-05-12T08:11:43.040Z"
     },
     {
       "path": "knowledge/TROUBLESHOOTING.md",
@@ -295,11 +295,25 @@
       "updatedAt": "2026-05-10T05:45:23.065Z"
     },
     {
+      "path": "schemas/approval-request.schema.json",
+      "title": "approval-request.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 914,
+      "updatedAt": "2026-05-12T08:12:56.083Z"
+    },
+    {
       "path": "schemas/cron-job.schema.json",
       "title": "cron-job.schema.json",
       "purpose": "Data contract schema.",
       "bytes": 1226,
       "updatedAt": "2026-05-12T07:45:02.137Z"
+    },
+    {
+      "path": "schemas/delivery-record.schema.json",
+      "title": "delivery-record.schema.json",
+      "purpose": "Data contract schema.",
+      "bytes": 1279,
+      "updatedAt": "2026-05-12T08:13:22.868Z"
     },
     {
       "path": "schemas/doc-update.schema.json",

@@ -63,4 +63,20 @@ describe('Code task store', () => {
       ]),
     );
   });
+
+  it('records patch proposals without executing Claude Code', async () => {
+    const store = await loadCodeTaskStore();
+    const started = await store.startClaudeCodeTask({
+      workspacePath: tempRoot,
+      objective: 'create safe patch',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(started).toMatchObject({
+      status: 'completed',
+      executionMode: 'patch_proposal',
+    });
+    expect(started.patchFile).toBeTruthy();
+    await expect(fs.readFile(started.patchFile!, 'utf8')).resolves.toContain('No filesystem changes were applied');
+  });
 });

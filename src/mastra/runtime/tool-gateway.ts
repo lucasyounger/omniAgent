@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gatewayRunsRoot } from '../lib/paths';
+import { createApprovalRequest } from './approval-store';
 import type { ToolExecutionContext, ToolGatewayPolicy } from './types';
 
 export type GatewayToolDefinition<TTool> = {
@@ -30,6 +31,13 @@ export async function executeWithToolGateway<TInput, TOutput>(
     validatePolicyGuards(policy, input);
 
     if (policy.requireApproval && !executionContext.approvalToken) {
+      await createApprovalRequest({
+        toolId,
+        policy,
+        context: executionContext,
+        toolInput: input,
+        reason: `Approval required for ${policy.capability}.`,
+      });
       throw new ToolGatewayApprovalRequiredError(toolId, policy.capability);
     }
   } catch (error) {

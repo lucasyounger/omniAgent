@@ -36,9 +36,13 @@ export type ChannelSession = {
 
 export type DeliveryRecord = {
   deliveryId: string;
+  idempotencyKey: string;
   target: ChannelTarget;
   text: string;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'sent' | 'failed' | 'dead_letter';
+  attempt: number;
+  maxAttempts: number;
+  nextRetryAt?: string;
   sourceInboxMessageId?: string;
   taskId?: string;
   runId?: string;

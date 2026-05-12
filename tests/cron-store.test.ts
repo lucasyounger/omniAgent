@@ -68,16 +68,16 @@ describe('Cron store', () => {
     expect(updated.lastRunTaskId).toBe(tasks[0].taskId);
     expect(updated.lastRunTeamTaskId).toBe(tasks[0].taskId);
     expect(updated.lastRunTeamRunId).toBeUndefined();
-    expect(updated.lastDispatchStatus).toBe('skipped');
+    expect(updated.lastDispatchStatus).toBe('dispatched');
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
       sourceAgentId: 'scheduler-runtime',
       targetAgentId: 'knowledge-agent',
       objective: 'summarize repository',
-      status: 'queued',
+      status: 'completed',
       metadata: {
         taskType: 'knowledge.summary',
-        runtimeStatus: 'pending',
+        runtimeStatus: 'succeeded',
         payload: { scope: 'repo' },
       },
     });

@@ -30,6 +30,8 @@ export type CodeTask = {
   exitCode?: number | null;
   events: CodeTaskEvent[];
   logFile: string;
+  executionMode?: 'direct' | 'patch_proposal';
+  patchFile?: string;
 };
 
 const tasks = new Map<string, CodeTask>();
@@ -75,6 +77,8 @@ async function persistTaskSnapshot(task: CodeTask) {
     endedAt: task.endedAt,
     exitCode: task.exitCode,
     logFile: task.logFile,
+    executionMode: task.executionMode,
+    patchFile: task.patchFile,
   };
   const existingIndex = items.findIndex(item => item.taskId === task.taskId);
   if (existingIndex === -1) {
@@ -101,6 +105,7 @@ export async function startClaudeCodeTask(input: {
   sourceAgentId?: string;
   requestedBy?: string;
   parentTaskId?: string;
+  executionMode?: 'direct' | 'patch_proposal';
 }) {
   const workspacePath = assertAllowedWorkspace(input.workspacePath);
   const taskId = createTaskId();
@@ -127,23 +132,30 @@ export async function startClaudeCodeTask(input: {
     },
   });
   const logFile = path.join(codeRunsRoot, `${taskId}.jsonl`);
+  const executionMode = input.executionMode || (process.env.OMNI_CODE_EXECUTION_MODE === 'patch_proposal' ? 'patch_proposal' : 'direct');
   const task: CodeTask = {
     taskId,
     teamTaskId: teamTask.taskId,
     teamRunId: teamRun.runId,
     workspacePath,
     objective: input.objective,
-    status: input.dryRun ? 'completed' : 'running',
+    status: input.dryRun || executionMode === 'patch_proposal' ? 'completed' : 'running',
     startedAt: new Date().toISOString(),
     events: [],
     logFile,
+    executionMode,
   };
 
   tasks.set(taskId, task);
   await persistTaskSnapshot(task);
   await appendTaskEvent(task, {
     type: 'task_started',
-    message: input.dryRun ? 'Dry run recorded. Claude Code was not started.' : 'Claude Code task started.',
+    message:
+      executionMode === 'patch_proposal'
+        ? 'Patch proposal recorded. Claude Code was not started.'
+        : input.dryRun
+          ? 'Dry run recorded. Claude Code was not started.'
+          : 'Claude Code task started.',
     ts: new Date().toISOString(),
   });
   await appendTeamEvent({
@@ -155,8 +167,51 @@ export async function startClaudeCodeTask(input: {
       codeTaskId: task.taskId,
       workspacePath,
       dryRun: Boolean(input.dryRun),
+      executionMode,
     },
   });
+
+  if (executionMode === 'patch_proposal') {
+    const patchFile = path.join(codeRunsRoot, `${taskId}.patch.md`);
+    task.patchFile = patchFile;
+    const patchProposal = [
+      '# Patch Proposal',
+      '',
+      `Task: ${task.taskId}`,
+      `Workspace: ${workspacePath}`,
+      '',
+      '## Objective',
+      '',
+      input.objective,
+      '',
+      '## Context Brief',
+      '',
+      input.contextBrief || '(none)',
+      '',
+      '## Proposed Patch',
+      '',
+      'No filesystem changes were applied. Generate and review an actual diff before enabling direct execution.',
+      '',
+    ].join('\n');
+    await fs.writeFile(patchFile, patchProposal, 'utf8');
+    task.endedAt = new Date().toISOString();
+    task.exitCode = 0;
+    await appendTaskEvent(task, {
+      type: 'task_completed',
+      message: `Patch proposal written to ${patchFile}.`,
+      ts: task.endedAt,
+    });
+    await completeTeamRun({
+      taskId: task.teamTaskId,
+      runId: task.teamRunId,
+      executorAgentId: 'code-agent',
+      summary: 'Patch proposal recorded.',
+      output: patchProposal,
+      artifacts: [task.logFile, patchFile],
+      metadata: { codeTaskId: task.taskId, workspacePath, executionMode, patchFile },
+    });
+    return summarizeTask(task);
+  }
 
   if (input.dryRun) {
     task.endedAt = new Date().toISOString();
@@ -173,7 +228,7 @@ export async function startClaudeCodeTask(input: {
       summary: 'Dry run completed.',
       output: 'Dry run completed. Claude Code was not started.',
       artifacts: [task.logFile],
-      metadata: { codeTaskId: task.taskId, workspacePath },
+      metadata: { codeTaskId: task.taskId, workspacePath, executionMode },
     });
     return summarizeTask(task);
   }
@@ -274,8 +329,8 @@ export async function startClaudeCodeTask(input: {
         executorAgentId: 'code-agent',
         summary: output.trim().slice(0, 500) || `Claude Code task ${task.taskId} completed.`,
         output,
-        artifacts: [task.logFile],
-        metadata: { codeTaskId: task.taskId, workspacePath, stderr: errorOutput },
+    artifacts: [task.logFile],
+        metadata: { codeTaskId: task.taskId, workspacePath, stderr: errorOutput, executionMode },
       });
     } else {
       void failTeamRun({
@@ -285,7 +340,7 @@ export async function startClaudeCodeTask(input: {
         error: errorOutput.trim().slice(0, 500) || `Claude Code exited with code ${code}.`,
         output,
         artifacts: [task.logFile],
-        metadata: { codeTaskId: task.taskId, workspacePath, exitCode: code },
+        metadata: { codeTaskId: task.taskId, workspacePath, exitCode: code, executionMode },
       });
     }
   });
@@ -306,7 +361,7 @@ export async function startClaudeCodeTask(input: {
       executorAgentId: 'code-agent',
       error: error.message,
       artifacts: [task.logFile],
-      metadata: { codeTaskId: task.taskId, workspacePath },
+      metadata: { codeTaskId: task.taskId, workspacePath, executionMode },
     });
   });
 
@@ -373,6 +428,8 @@ function summarizeTask(task: CodeTask) {
     endedAt: task.endedAt,
     exitCode: task.exitCode,
     logFile: task.logFile,
+    executionMode: task.executionMode,
+    patchFile: task.patchFile,
     recentEvents,
   };
 }

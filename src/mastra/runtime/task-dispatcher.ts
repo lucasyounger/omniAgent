@@ -1,4 +1,5 @@
 import { startClaudeCodeTask } from '../lib/code-task-store';
+import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
 import { appendTeamEvent } from '../lib/team-runtime-store';
 import type { RuntimeTask } from './types';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
@@ -37,8 +38,42 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     };
   }
 
-  if (task.targetAgentId === 'code-agent') {
-    return dispatchCodeTask(task);
+  if (isLeased(task)) {
+    return {
+      taskId,
+      status: 'skipped',
+      targetAgentId: task.targetAgentId,
+      reason: 'Task is currently leased by another dispatcher.',
+    };
+  }
+
+  const leased = await leaseTask(task);
+
+  if (leased.targetAgentId === 'code-agent') {
+    return dispatchCodeTask(leased);
+  }
+
+  if (leased.targetAgentId === 'knowledge-agent') {
+    return dispatchKnowledgeTask(leased);
+  }
+
+  if (leased.targetAgentId === 'notify-agent' || leased.targetAgentId === 'research-agent') {
+    await appendTeamEvent({
+      taskId,
+      sourceAgentId: 'task-dispatcher',
+      targetAgentId: leased.targetAgentId,
+      type: 'runtime.task.dispatch.queued',
+      payload: {
+        taskType: leased.metadata?.taskType,
+        reason: 'No executable handler yet; task kept pending for future specialist.',
+      },
+    });
+    return {
+      taskId,
+      status: 'skipped',
+      targetAgentId: leased.targetAgentId,
+      reason: `Handler for ${leased.targetAgentId} is registered as pending implementation.`,
+    };
   }
 
   await appendTeamEvent({
@@ -62,7 +97,13 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
 export async function dispatchPendingRuntimeTasks(input: { limit?: number } = {}) {
   const tasks = await taskRuntime.listTasks();
-  const pending = tasks.filter(task => task.status === 'pending').slice(0, input.limit || 10);
+  const maxConcurrent = Number(process.env.OMNI_TASK_DISPATCH_MAX_CONCURRENT || 2);
+  const activeCount = tasks.filter(task => task.status === 'running' && task.metadata?.dispatchedBy === 'task-dispatcher').length;
+  const available = Math.max(0, maxConcurrent - activeCount);
+  const pending = tasks
+    .filter(task => task.status === 'pending')
+    .filter(task => !isLeased(task))
+    .slice(0, Math.min(input.limit || 10, available));
   const results: DispatchResult[] = [];
 
   for (const task of pending) {
@@ -72,6 +113,66 @@ export async function dispatchPendingRuntimeTasks(input: { limit?: number } = {}
   return results;
 }
 
+async function dispatchKnowledgeTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Dispatching to KnowledgeAgent handler.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  try {
+    const taskType = typeof task.metadata?.taskType === 'string' ? task.metadata.taskType : 'knowledge.task';
+    if (taskType === 'knowledge.memory_index') {
+      await updateMemoryIndex();
+    } else if (taskType === 'knowledge.episode') {
+      await appendEpisodicLog({
+        title: stringValue(payload.title) || task.objective,
+        summary: stringValue(payload.summary) || task.objective,
+        tags: Array.isArray(payload.tags) ? payload.tags.filter((item): item is string => typeof item === 'string') : ['dispatcher'],
+        sourceRunId: stringValue(payload.sourceRunId),
+      });
+      await updateMemoryIndex();
+    } else if (taskType === 'knowledge.doc_update_proposal') {
+      const proposal = payload.proposal;
+      if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
+        throw new Error('knowledge.doc_update_proposal requires payload.proposal.');
+      }
+      await writeDocUpdateProposal(proposal as Parameters<typeof writeDocUpdateProposal>[0]);
+    } else {
+      await appendTeamEvent({
+        taskId: task.id,
+        sourceAgentId: 'task-dispatcher',
+        targetAgentId: task.targetAgentId,
+        type: 'runtime.task.dispatch.knowledge.noop',
+        payload: { taskType, objective: task.objective },
+      });
+    }
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: 'KnowledgeAgent handler completed.',
+      sourceAgentId: 'task-dispatcher',
+    });
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'knowledge-agent',
+    };
+  } catch (error) {
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
+    });
+    throw error;
+  }
+}
+
 async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
   const payload = readPayload(task);
   const workspacePath = stringValue(payload.workspacePath);
@@ -79,6 +180,7 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
   const contextBrief = stringValue(payload.contextBrief);
   const approvalToken = stringValue(payload.approvalToken);
   const dryRun = booleanValue(payload.dryRun);
+  const executionMode = payload.executionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
 
   if (!workspacePath) {
     await taskRuntime.transition({
@@ -147,6 +249,7 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
         objective,
         contextBrief,
         dryRun,
+        executionMode,
         teamTaskId: task.id,
         sourceAgentId: 'task-dispatcher',
         requestedBy: `runtime-task:${task.id}`,
@@ -158,6 +261,7 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
           objective,
           contextBrief,
           dryRun,
+          executionMode,
           teamTaskId: task.id,
           sourceAgentId: 'task-dispatcher',
           requestedBy: `runtime-task:${task.id}`,
@@ -212,6 +316,25 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
 function readPayload(task: RuntimeTask) {
   const value = task.metadata?.payload;
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+async function leaseTask(task: RuntimeTask) {
+  return taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'pending',
+    reason: 'Leased for dispatch.',
+    sourceAgentId: 'task-dispatcher',
+    metadata: {
+      dispatchLeaseId: `lease-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      dispatchLeaseExpiresAt: new Date(Date.now() + Number(process.env.OMNI_TASK_DISPATCH_LEASE_MS || 120_000)).toISOString(),
+      dispatchedBy: 'task-dispatcher',
+    },
+  });
+}
+
+function isLeased(task: RuntimeTask) {
+  const leaseExpiresAt = task.metadata?.dispatchLeaseExpiresAt;
+  return typeof leaseExpiresAt === 'string' && new Date(leaseExpiresAt).getTime() > Date.now();
 }
 
 function stringValue(value: unknown) {

@@ -15,6 +15,7 @@ const codeTaskInputSchema = z.object({
   objective: z.string(),
   contextBrief: z.string().optional(),
   dryRun: z.boolean().default(false),
+  executionMode: z.enum(['direct', 'patch_proposal']).default('direct'),
   approvalToken: z.string().optional(),
 });
 
@@ -29,6 +30,8 @@ const codeTaskOutputSchema = z.object({
   endedAt: z.string().optional(),
   exitCode: z.number().nullable().optional(),
   logFile: z.string(),
+  executionMode: z.enum(['direct', 'patch_proposal']).optional(),
+  patchFile: z.string().optional(),
   recentEvents: z.array(
     z.object({
       type: z.string(),

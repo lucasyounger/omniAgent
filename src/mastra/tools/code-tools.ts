@@ -37,6 +37,7 @@ export const startClaudeCodeTaskTool = createTool({
     sourceAgentId: z.string().optional().describe('Agent that requested this task when no teamTaskId is provided.'),
     requestedBy: z.string().optional().describe('Human or system requester.'),
     parentTaskId: z.string().optional().describe('Optional parent Team Runtime task id.'),
+    executionMode: z.enum(['direct', 'patch_proposal']).default('direct').describe('Use patch_proposal to create a review artifact without modifying files.'),
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
@@ -50,6 +51,8 @@ export const startClaudeCodeTaskTool = createTool({
     endedAt: z.string().optional(),
     exitCode: z.number().nullable().optional(),
     logFile: z.string(),
+    executionMode: z.enum(['direct', 'patch_proposal']).optional(),
+    patchFile: z.string().optional(),
     recentEvents: z.array(
       z.object({
         type: z.string(),
@@ -78,6 +81,8 @@ export const getClaudeCodeTaskStatusTool = createTool({
     endedAt: z.string().optional(),
     exitCode: z.number().nullable().optional(),
     logFile: z.string(),
+    executionMode: z.enum(['direct', 'patch_proposal']).optional(),
+    patchFile: z.string().optional(),
     recentEvents: z.array(
       z.object({
         type: z.string(),
@@ -105,6 +110,8 @@ export const listClaudeCodeTasksTool = createTool({
       endedAt: z.string().optional(),
       exitCode: z.number().nullable().optional(),
       logFile: z.string(),
+      executionMode: z.enum(['direct', 'patch_proposal']).optional(),
+      patchFile: z.string().optional(),
       recentEvents: z.array(
         z.object({
           type: z.string(),
