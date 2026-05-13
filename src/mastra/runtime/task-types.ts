@@ -1,0 +1,96 @@
+export const runtimeTaskTypes = {
+  codeClaudeCodeTask: 'code.claude_code_task',
+  knowledgeTask: 'knowledge.task',
+  knowledgeMemoryIndex: 'knowledge.memory_index',
+  knowledgeEpisode: 'knowledge.episode',
+  knowledgeDocUpdateProposal: 'knowledge.doc_update_proposal',
+  channelMessage: 'channel.message',
+  scheduleCreate: 'schedule.create',
+  scheduleRunNow: 'schedule.run_now',
+  researchAiDailyDigest: 'research.ai_daily_digest',
+  notifySendChannelMessage: 'notify.send_channel_message',
+} as const;
+
+export type RuntimeTaskType = (typeof runtimeTaskTypes)[keyof typeof runtimeTaskTypes];
+
+export type RuntimeTaskTypeDefinition = {
+  taskType: RuntimeTaskType;
+  defaultTargetAgentId: string;
+  handler: string;
+  description: string;
+};
+
+export const runtimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDefinition> = {
+  [runtimeTaskTypes.codeClaudeCodeTask]: {
+    taskType: runtimeTaskTypes.codeClaudeCodeTask,
+    defaultTargetAgentId: 'code-agent',
+    handler: 'code-agent',
+    description: 'Run a Claude Code task through the code execution handler.',
+  },
+  [runtimeTaskTypes.knowledgeTask]: {
+    taskType: runtimeTaskTypes.knowledgeTask,
+    defaultTargetAgentId: 'knowledge-agent',
+    handler: 'knowledge-agent',
+    description: 'Generic knowledge task compatibility type.',
+  },
+  [runtimeTaskTypes.knowledgeMemoryIndex]: {
+    taskType: runtimeTaskTypes.knowledgeMemoryIndex,
+    defaultTargetAgentId: 'knowledge-agent',
+    handler: 'knowledge-agent',
+    description: 'Refresh the local memory index.',
+  },
+  [runtimeTaskTypes.knowledgeEpisode]: {
+    taskType: runtimeTaskTypes.knowledgeEpisode,
+    defaultTargetAgentId: 'knowledge-agent',
+    handler: 'knowledge-agent',
+    description: 'Append an episodic memory entry.',
+  },
+  [runtimeTaskTypes.knowledgeDocUpdateProposal]: {
+    taskType: runtimeTaskTypes.knowledgeDocUpdateProposal,
+    defaultTargetAgentId: 'knowledge-agent',
+    handler: 'knowledge-agent',
+    description: 'Write a documentation update proposal.',
+  },
+  [runtimeTaskTypes.channelMessage]: {
+    taskType: runtimeTaskTypes.channelMessage,
+    defaultTargetAgentId: 'channel-gateway',
+    handler: 'channel-gateway',
+    description: 'Send a plain channel message through Gateway Delivery.',
+  },
+  [runtimeTaskTypes.scheduleCreate]: {
+    taskType: runtimeTaskTypes.scheduleCreate,
+    defaultTargetAgentId: 'scheduler-runtime',
+    handler: 'schedule-handler',
+    description: 'Create a durable schedule from a runtime task.',
+  },
+  [runtimeTaskTypes.scheduleRunNow]: {
+    taskType: runtimeTaskTypes.scheduleRunNow,
+    defaultTargetAgentId: 'scheduler-runtime',
+    handler: 'schedule-handler',
+    description: 'Run an existing schedule immediately.',
+  },
+  [runtimeTaskTypes.researchAiDailyDigest]: {
+    taskType: runtimeTaskTypes.researchAiDailyDigest,
+    defaultTargetAgentId: 'research-agent',
+    handler: 'research-handler',
+    description: 'Produce an AI daily digest and notify the requested target.',
+  },
+  [runtimeTaskTypes.notifySendChannelMessage]: {
+    taskType: runtimeTaskTypes.notifySendChannelMessage,
+    defaultTargetAgentId: 'notify-agent',
+    handler: 'notify-handler',
+    description: 'Send a channel notification through Gateway Delivery.',
+  },
+};
+
+export function getRuntimeTaskTypeDefinition(taskType?: string) {
+  return taskType && isRuntimeTaskType(taskType) ? runtimeTaskTypeRegistry[taskType] : undefined;
+}
+
+export function isRuntimeTaskType(taskType: string): taskType is RuntimeTaskType {
+  return Object.hasOwn(runtimeTaskTypeRegistry, taskType);
+}
+
+export function defaultTargetAgentIdForTaskType(taskType?: string) {
+  return getRuntimeTaskTypeDefinition(taskType)?.defaultTargetAgentId;
+}

@@ -24,6 +24,14 @@ const scheduleRunPolicy = {
 
 const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
 
+const channelTargetSchema = z.object({
+  channel: z.string(),
+  accountId: z.string(),
+  conversationId: z.string(),
+  senderId: z.string().optional(),
+  messageType: z.enum(['dm', 'group', 'guild', 'system']),
+});
+
 const cronJobSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -34,6 +42,7 @@ const cronJobSchema = z.object({
   targetAgentId: z.string().optional(),
   workspacePath: z.string().optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
+  notifyTarget: channelTargetSchema.optional(),
   status: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -57,6 +66,7 @@ export const createCronJobTool = createTool({
     targetAgentId: z.string().optional().describe('Canonical target agent id, such as code-agent or knowledge-agent.'),
     workspacePath: z.string().optional().describe('Workspace path for codeAgent execution.'),
     payload: z.record(z.string(), z.unknown()).optional().describe('Structured payload copied into Runtime task metadata.'),
+    notifyTarget: channelTargetSchema.optional().describe('Channel target to notify when scheduled task results are ready.'),
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: cronJobSchema,

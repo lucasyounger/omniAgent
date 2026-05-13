@@ -4,6 +4,8 @@ import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
 import { dispatchRuntimeTask, type DispatchResult } from '../runtime/task-dispatcher';
+import { defaultTargetAgentIdForTaskType, runtimeTaskTypes } from '../runtime/task-types';
+import type { ChannelTarget } from '../../gateway/types';
 
 export type CronJobStatus = 'active' | 'paused';
 
@@ -17,6 +19,7 @@ export type CronJob = {
   targetAgentId?: string;
   workspacePath?: string;
   payload?: Record<string, unknown>;
+  notifyTarget?: ChannelTarget;
   status: CronJobStatus;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +70,7 @@ export async function createCronJob(input: {
   targetAgentId?: string;
   workspacePath?: string;
   payload?: Record<string, unknown>;
+  notifyTarget?: ChannelTarget;
 }) {
   const jobs = await readJobs();
   const now = new Date().toISOString();
@@ -77,9 +81,10 @@ export async function createCronJob(input: {
     task: input.task,
     taskType: input.taskType || inferTaskType(input.targetAgentId || input.targetAgent),
     targetAgent: input.targetAgent,
-    targetAgentId: input.targetAgentId || normalizeAgentId(input.targetAgent) || 'code-agent',
+    targetAgentId: input.targetAgentId || normalizeAgentId(input.targetAgent) || defaultTargetAgentIdForTaskType(input.taskType) || 'code-agent',
     workspacePath: input.workspacePath,
     payload: input.payload || buildLegacyPayload(input),
+    notifyTarget: input.notifyTarget || readPayloadNotifyTarget(input.payload),
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -318,8 +323,9 @@ async function executeCronJob(job: CronJob): Promise<{
   dispatch: DispatchResult;
 }> {
   const taskType = job.taskType || inferTaskType(job.targetAgentId || job.targetAgent);
-  const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || 'code-agent';
+  const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || defaultTargetAgentIdForTaskType(taskType) || 'code-agent';
   const payload = job.payload || buildLegacyPayload(job);
+  const notifyTarget = job.notifyTarget || readPayloadNotifyTarget(payload);
   const runtimeTask = await taskRuntime.createTask({
     sourceAgentId: 'scheduler-runtime',
     targetAgentId,
@@ -331,6 +337,7 @@ async function executeCronJob(job: CronJob): Promise<{
       schedule: job.schedule,
       taskType,
       payload,
+      notifyTarget,
       source: readPayloadSource(payload),
     },
   });
@@ -352,7 +359,7 @@ function inferWorkspacePath(task: string) {
 function inferTaskType(targetAgent?: string) {
   const agentId = normalizeAgentId(targetAgent);
   if (agentId === 'knowledge-agent') {
-    return 'knowledge.task';
+    return runtimeTaskTypes.knowledgeTask;
   }
   if (agentId === 'cron-agent') {
     return 'schedule.task';
@@ -361,9 +368,9 @@ function inferTaskType(targetAgent?: string) {
     return 'router.task';
   }
   if (agentId === 'channel-gateway') {
-    return 'channel.message';
+    return runtimeTaskTypes.channelMessage;
   }
-  return 'code.claude_code_task';
+  return runtimeTaskTypes.codeClaudeCodeTask;
 }
 
 function normalizeAgentId(agentId?: string) {
@@ -395,4 +402,24 @@ function buildLegacyPayload(input: { task: string; workspacePath?: string; paylo
 function readPayloadSource(payload: Record<string, unknown>) {
   const source = payload.source;
   return source && typeof source === 'object' && !Array.isArray(source) ? source : undefined;
+}
+
+function readPayloadNotifyTarget(payload?: Record<string, unknown>) {
+  const value = payload?.notifyTarget;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const target = value as Partial<ChannelTarget>;
+  if (!target.channel || !target.accountId || !target.conversationId || !target.messageType) {
+    return undefined;
+  }
+
+  return {
+    channel: String(target.channel),
+    accountId: String(target.accountId),
+    conversationId: String(target.conversationId),
+    senderId: target.senderId ? String(target.senderId) : undefined,
+    messageType: target.messageType,
+  } satisfies ChannelTarget;
 }

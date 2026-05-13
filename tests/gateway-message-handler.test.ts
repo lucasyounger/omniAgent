@@ -107,6 +107,13 @@ describe('Gateway message handler', () => {
       task: '\u4f60\u597d',
       taskType: 'channel.message',
       targetAgentId: 'channel-gateway',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'trusted',
+        messageType: 'dm',
+      },
     });
   });
 });

@@ -85,6 +85,22 @@ describe('Cron store', () => {
     });
   });
 
+  it('uses taskType registry defaults for new schedule records', async () => {
+    const { createCronJob } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'ai digest',
+      schedule: 'daily 09:00',
+      task: 'AI Agent digest',
+      taskType: 'research.ai_daily_digest',
+      payload: { topic: 'AI Agent' },
+    });
+
+    expect(job).toMatchObject({
+      taskType: 'research.ai_daily_digest',
+      targetAgentId: 'research-agent',
+    });
+  });
+
   it('queues channel messages when channel-gateway schedules fire', async () => {
     const { createCronJob, runDueCronJobs } = await loadCronStore();
     const { listAgentInbox, listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
@@ -94,6 +110,13 @@ describe('Cron store', () => {
       task: '你好',
       targetAgentId: 'channel-gateway',
       taskType: 'channel.message',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'user-1',
+        messageType: 'dm',
+      },
       payload: {
         text: '你好',
         source: {
@@ -118,6 +141,10 @@ describe('Cron store', () => {
       status: 'completed',
       metadata: {
         runtimeStatus: 'succeeded',
+        notifyTarget: {
+          channel: 'http',
+          conversationId: 'conv-1',
+        },
         source: {
           channel: 'http',
           conversationId: 'conv-1',

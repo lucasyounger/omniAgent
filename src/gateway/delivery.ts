@@ -20,9 +20,11 @@ type ChannelSourceMetadata = {
 
 type SourceMetadata = {
   source?: ChannelSourceMetadata;
+  notifyTarget?: ChannelTarget;
   payload?: {
     text?: unknown;
     source?: ChannelSourceMetadata;
+    notifyTarget?: ChannelTarget;
   };
 };
 
@@ -122,6 +124,11 @@ async function attemptDelivery(deliveryId: string, message: OutboundMessage, con
 }
 
 function channelTargetFromMetadata(metadata: SourceMetadata): ChannelTarget | undefined {
+  const notifyTarget = metadata.notifyTarget || metadata.payload?.notifyTarget;
+  if (isChannelTarget(notifyTarget)) {
+    return notifyTarget;
+  }
+
   const source = metadata.source || metadata.payload?.source;
   if (!source?.channel || !source.accountId || !source.conversationId) {
     return undefined;
@@ -134,6 +141,15 @@ function channelTargetFromMetadata(metadata: SourceMetadata): ChannelTarget | un
     senderId: source.senderId,
     messageType: source.messageType === 'group' || source.messageType === 'guild' || source.messageType === 'system' ? source.messageType : 'dm',
   };
+}
+
+function isChannelTarget(value: unknown): value is ChannelTarget {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const target = value as Partial<ChannelTarget>;
+  return Boolean(target.channel && target.accountId && target.conversationId && target.messageType);
 }
 
 function directMessageText(payload: unknown) {

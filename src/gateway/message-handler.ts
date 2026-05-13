@@ -192,6 +192,7 @@ function parseChannelScheduleRequest(message: ChannelMessage):
       taskType: string;
       targetAgentId: string;
       payload: Record<string, unknown>;
+      notifyTarget: ReturnType<typeof targetFromMessage>;
     }
   | undefined {
   const text = message.text.trim();
@@ -223,9 +224,11 @@ function parseChannelScheduleRequest(message: ChannelMessage):
     task: replyText,
     taskType: 'channel.message',
     targetAgentId: 'channel-gateway',
+    notifyTarget: targetFromMessage(message),
     payload: {
       text: replyText,
       source: channelSourceFromMessage(message),
+      notifyTarget: targetFromMessage(message),
     },
   };
 }

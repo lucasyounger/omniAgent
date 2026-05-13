@@ -16,6 +16,17 @@
       "type": "object",
       "additionalProperties": true
     },
+    "notifyTarget": {
+      "type": "object",
+      "required": ["channel", "accountId", "conversationId", "messageType"],
+      "properties": {
+        "channel": { "type": "string" },
+        "accountId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "messageType": { "type": "string", "enum": ["dm", "group", "guild", "system"] }
+      }
+    },
     "status": { "type": "string", "enum": ["active", "paused"] },
     "createdAt": { "type": "string" },
     "updatedAt": { "type": "string" },
