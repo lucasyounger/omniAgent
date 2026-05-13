@@ -12,6 +12,7 @@ async function loadRuntime() {
   return {
     ...(await import('../src/mastra/runtime/task-runtime')),
     ...(await import('../src/mastra/runtime/approval-store')),
+    ...(await import('../src/mastra/runtime/runtime-task-store')),
   };
 }
 
@@ -29,7 +30,7 @@ afterEach(async () => {
 
 describe('Approval Store', () => {
   it('approves a linked runtime task and injects approval token into payload', async () => {
-    const { taskRuntime, createApprovalRequest, approveApprovalRequest } = await loadRuntime();
+    const { taskRuntime, createApprovalRequest, approveApprovalRequest, getRuntimeTaskRecord, listRuntimeTaskEvents } = await loadRuntime();
     const task = await taskRuntime.createTask({
       sourceAgentId: 'scheduler-runtime',
       targetAgentId: 'code-agent',
@@ -60,5 +61,23 @@ describe('Approval Store', () => {
         },
       },
     });
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      approvalRequestId: request.requestId,
+      approvalToken: approved.approvalToken,
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime.task.updated',
+          approvalRequestId: request.requestId,
+        }),
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'waiting_user_confirm',
+          toStatus: 'pending',
+          approvalToken: approved.approvalToken,
+        }),
+      ]),
+    );
   });
 });

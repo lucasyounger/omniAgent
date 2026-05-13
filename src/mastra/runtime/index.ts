@@ -22,6 +22,15 @@ export {
 } from './orchestrator';
 export type { OrchestratorDecision, OrchestratorModelOutput } from './orchestrator';
 export {
+  appendRuntimeTaskEvent,
+  getRuntimeTaskRecord,
+  listRuntimeTaskEvents,
+  listRuntimeTaskRecords,
+  runtimeTaskFromRecord,
+  upsertRuntimeTaskRecord,
+} from './runtime-task-store';
+export type { RuntimeTaskEvent, RuntimeTaskRecord } from './runtime-task-store';
+export {
   defineGatewayTool,
   executeWithToolGateway,
   ToolGatewayApprovalRequiredError,

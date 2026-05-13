@@ -9,8 +9,13 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   delegate to existing library modules and provide the migration surface toward
   native Mastra workflow/scheduler/storage capabilities.
 - **TaskRuntime** (`src/mastra/runtime/task-runtime.ts`): runtime task lifecycle
-  boundary. It maps Team Runtime tasks into runtime tasks and owns runtime
-  status transitions such as `waiting_user_confirm`, `retrying`, and `paused`.
+  boundary. It writes RuntimeTask records, keeps Team Runtime compatibility,
+  migrates legacy TeamTask metadata on read, and owns runtime status
+  transitions such as `waiting_user_confirm`, `retrying`, and `paused`.
+- **Runtime Task Store** (`src/mastra/runtime/runtime-task-store.ts`):
+  file-backed RuntimeTask index and append-only runtime timeline. It records
+  lifecycle events, `resultRef`, approval request ids, and approval tokens while
+  preserving the external RuntimeTask protocol.
 - **Task Dispatcher** (`src/mastra/runtime/task-dispatcher.ts`): polls or
   explicitly dispatches pending Runtime Tasks to handler implementations by
   `taskType`, with `targetAgentId` kept as the executor hint and compatibility
@@ -59,6 +64,7 @@ own execution logic.
 - `docs/knowledge/**`: durable implementation knowledge and known pitfalls.
 - `~/.omni/memory/**`: canonical long-term memory and indexes.
 - `~/.omni/runs/**`: runtime artifacts. Do not load by default.
+- `~/.omni/runs/runtime-tasks/**`: RuntimeTask records and lifecycle timeline.
 - `~/.omni/runs/team/**`: durable Team Runtime records.
 - `~/.omni/runs/code-runs/tasks.json`: durable code task index.
 - `~/.omni/runs/gateway/tool-audit.jsonl`: Tool Gateway audit log.
@@ -66,21 +72,26 @@ own execution logic.
 
 ## Task Lifecycle
 
-Runtime task status is the user-facing lifecycle. Team Runtime remains the
-durable file-backed protocol underneath it.
+Runtime task status is the user-facing lifecycle. RuntimeTask records are now
+stored independently under `~/.omni/runs/runtime-tasks`, while Team Runtime
+remains the compatible execution/run/result protocol underneath it.
 
 1. Create Runtime Task through TaskRuntime.
-2. TaskRuntime records `pending` runtime status on the backing Team Task.
-3. Approval-required work can transition to `waiting_user_confirm`.
-4. Approved work transitions back to `pending`, then to `running`.
-5. Running work completes as `succeeded`, `failed`, `cancelled`, or `paused`.
-6. Failed work can transition to `retrying`, then create a new pending retry
+2. TaskRuntime records `pending` in the RuntimeTask store and mirrors it to the
+   backing Team Task metadata for compatibility.
+3. Old TeamTask-only records are migrated into RuntimeTask records when read.
+4. Approval-required work can transition to `waiting_user_confirm`; approval
+   request ids and tokens are linked in the runtime record and timeline.
+5. Approved work transitions back to `pending`, then to `running`.
+6. Running work completes as `succeeded`, `failed`, `cancelled`, or `paused`,
+   with durable `resultRef` metadata preserved on the runtime record.
+7. Failed work can transition to `retrying`, then create a new pending retry
    task.
-7. Team Runtime writes runs, progress events, result files, and inbox
+8. Team Runtime writes runs, progress events, result files, and inbox
    notifications.
-8. Task Dispatcher scans pending tasks on startup and on
+9. Task Dispatcher scans pending tasks on startup and on
    `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
-9. Dispatcher handlers currently cover `code-agent`, `knowledge-agent`,
+10. Dispatcher handlers currently cover `code-agent`, `knowledge-agent`,
    `schedule.create`, `notify.send_channel_message`, and
    `research.ai_daily_digest`.
 

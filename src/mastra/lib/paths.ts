@@ -36,6 +36,7 @@ export const runsRoot = path.join(omniRoot, 'runs');
 export const codeRunsRoot = path.join(runsRoot, 'code-runs');
 export const cronRunsRoot = path.join(runsRoot, 'cron-runs');
 export const memoryRunsRoot = path.join(runsRoot, 'memory-runs');
+export const runtimeTasksRoot = path.join(runsRoot, 'runtime-tasks');
 export const teamRunsRoot = path.join(runsRoot, 'team');
 export const gatewayRunsRoot = path.join(runsRoot, 'gateway');
 export const gatewayRoot = path.join(omniRoot, 'gateway');

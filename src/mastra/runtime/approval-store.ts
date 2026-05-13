@@ -59,6 +59,20 @@ export async function createApprovalRequest(input: {
   };
   requests.push(request);
   await writeApprovalRequests(requests);
+
+  if (request.taskId) {
+    const task = await taskRuntime.getTask(request.taskId);
+    await taskRuntime.transition({
+      taskId: request.taskId,
+      nextStatus: task.status,
+      reason: input.reason || `Approval requested: ${request.requestId}`,
+      sourceAgentId: 'approval-store',
+      metadata: {
+        approvalRequestId: request.requestId,
+      },
+    });
+  }
+
   return request;
 }
 

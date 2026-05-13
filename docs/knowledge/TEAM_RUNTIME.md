@@ -5,9 +5,10 @@ work. It is not tied to Cron. Cron, OmniRouterAgent, CodeAgent, and future
 agents all use the same task/run/event/inbox/result model.
 
 TaskRuntime sits above this file-backed protocol as the user-facing lifecycle
-boundary. Team Runtime keeps durable tasks and runs; TaskRuntime controls
-runtime status transitions such as `waiting_user_confirm`, `retrying`, and
-`paused`.
+boundary. RuntimeTask records now have their own file-backed store, while Team
+Runtime keeps compatible tasks, runs, inbox messages, and result files.
+TaskRuntime controls runtime status transitions such as
+`waiting_user_confirm`, `retrying`, and `paused`.
 
 Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
 handler execution by `targetAgentId`.
@@ -26,7 +27,12 @@ copied into linked Runtime Task payload metadata.
 
 ## Storage
 
-Runtime files live under `~/.omni/runs/team`:
+RuntimeTask files live under `~/.omni/runs/runtime-tasks`:
+
+- `tasks.json`
+- `events.jsonl`
+
+Team Runtime files live under `~/.omni/runs/team`:
 
 - `tasks.json`
 - `runs.json`
@@ -84,9 +90,12 @@ retrying
 paused
 ```
 
-The current file-backed implementation stores the runtime status in task
-metadata and maps it back to a Team Task status for compatibility. This is an
-intermediate migration step toward a dedicated runtime task store.
+The current file-backed implementation stores RuntimeTask records separately
+and still mirrors runtime status into Team Task metadata for compatibility.
+When TaskRuntime reads an old TeamTask-only record, it migrates that record into
+`~/.omni/runs/runtime-tasks/tasks.json` and appends a runtime timeline event.
+Runtime timeline events keep lifecycle transitions plus result artifact refs and
+approval linkage.
 
 ## Current Integrations
 
@@ -101,6 +110,8 @@ intermediate migration step toward a dedicated runtime task store.
 - Team Runtime supports cancellation and retry task creation.
 - TaskRuntime-created tasks start as runtime `pending`.
 - Invalid runtime transitions throw before task metadata is changed.
+- RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
+  `approvalToken` linkage alongside the append-only runtime timeline.
 - Task Dispatcher currently supports `code-agent` tasks and uses Tool Gateway
   before starting Claude Code. It also supports basic `knowledge-agent`
   handlers for memory index, episodic log, and doc update proposal tasks. Code

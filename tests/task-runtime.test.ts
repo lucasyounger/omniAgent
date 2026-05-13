@@ -9,7 +9,10 @@ async function loadTaskRuntime() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
   process.env.OMNI_HOME = path.join(tempRoot, '.omni');
-  return import('../src/mastra/runtime/task-runtime');
+  return {
+    ...(await import('../src/mastra/runtime/task-runtime')),
+    ...(await import('../src/mastra/runtime/runtime-task-store')),
+  };
 }
 
 beforeEach(async () => {
@@ -25,7 +28,7 @@ afterEach(async () => {
 
 describe('Task Runtime', () => {
   it('creates tasks with runtime pending status', async () => {
-    const { taskRuntime } = await loadTaskRuntime();
+    const { taskRuntime, getRuntimeTaskRecord, listRuntimeTaskEvents } = await loadTaskRuntime();
 
     const task = await taskRuntime.createTask({
       sourceAgentId: 'omni-router-agent',
@@ -38,6 +41,23 @@ describe('Task Runtime', () => {
       runtimeStatus: 'pending',
       runtimeStatusReason: 'Task created.',
     });
+
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      id: task.id,
+      teamTaskId: task.id,
+      status: 'pending',
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          taskId: task.id,
+          type: 'runtime.task.created',
+          toStatus: 'pending',
+        }),
+      ]),
+    );
   });
 
   it('allows valid transitions and rejects invalid transitions', async () => {
@@ -81,6 +101,77 @@ describe('Task Runtime', () => {
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
       status: 'retrying',
+    });
+  });
+
+  it('keeps result artifacts and approval linkage in the runtime timeline', async () => {
+    const { taskRuntime, listRuntimeTaskEvents, getRuntimeTaskRecord } = await loadTaskRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'research-agent',
+      objective: 'digest',
+    });
+
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'running' });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: 'done',
+      metadata: {
+        runId: 'run-1',
+        resultRef: 'omni://runs/team/results/run-1.json',
+        approvalRequestId: 'approval-1',
+      },
+    });
+
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      resultRef: 'omni://runs/team/results/run-1.json',
+      approvalRequestId: 'approval-1',
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'running',
+          toStatus: 'succeeded',
+          runId: 'run-1',
+          resultRef: 'omni://runs/team/results/run-1.json',
+          approvalRequestId: 'approval-1',
+        }),
+      ]),
+    );
+  });
+
+  it('migrates legacy TeamTask runtime metadata on read', async () => {
+    const { taskRuntime, getRuntimeTaskRecord } = await loadTaskRuntime();
+    const { createTeamTask, setTeamTaskRuntimeStatus } = await import('../src/mastra/lib/team-runtime-store');
+    const legacy = await createTeamTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'knowledge-agent',
+      objective: 'legacy task',
+      metadata: {
+        payload: { topic: 'legacy' },
+      },
+    });
+    await setTeamTaskRuntimeStatus({
+      taskId: legacy.taskId,
+      runtimeStatus: 'waiting_user_confirm',
+      reason: 'legacy approval',
+      sourceAgentId: 'legacy-test',
+    });
+
+    await expect(taskRuntime.getTask(legacy.taskId)).resolves.toMatchObject({
+      id: legacy.taskId,
+      status: 'waiting_user_confirm',
+      metadata: {
+        payload: { topic: 'legacy' },
+      },
+    });
+    await expect(getRuntimeTaskRecord(legacy.taskId)).resolves.toMatchObject({
+      id: legacy.taskId,
+      teamTaskId: legacy.taskId,
+      status: 'waiting_user_confirm',
     });
   });
 });

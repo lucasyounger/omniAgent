@@ -3,7 +3,6 @@ import {
   createTeamTask,
   getRunResult,
   getTeamTask,
-  listTeamEvents,
   listTeamRuns,
   listTeamTasks,
   retryTeamTask,
@@ -12,6 +11,13 @@ import {
   type TeamTaskStatus,
 } from '../lib/team-runtime-store';
 import type { RuntimeTask, RuntimeTaskStatus } from './types';
+import {
+  getRuntimeTaskRecord,
+  listRuntimeTaskEvents,
+  listRuntimeTaskRecords,
+  runtimeTaskFromRecord,
+  upsertRuntimeTaskRecord,
+} from './runtime-task-store';
 
 const statusMap: Record<TeamTaskStatus, RuntimeTaskStatus> = {
   queued: 'pending',
@@ -64,25 +70,45 @@ export function toRuntimeTask(task: TeamTask): RuntimeTask {
 export const taskRuntime = {
   async createTask(input: Parameters<typeof createTeamTask>[0]) {
     const task = await createTeamTask(input);
-    await setTeamTaskRuntimeStatus({
+    const updated = await setTeamTaskRuntimeStatus({
       taskId: task.taskId,
       runtimeStatus: 'pending',
       reason: 'Task created.',
       sourceAgentId: 'task-runtime',
     });
-    return toRuntimeTask(await getTeamTask(task.taskId));
+    const record = await upsertRuntimeTaskRecord({
+      teamTask: updated,
+      status: 'pending',
+      reason: 'Task created.',
+      sourceAgentId: 'task-runtime',
+    });
+    return runtimeTaskFromRecord(record);
   },
 
   async getTask(taskId: string) {
-    return toRuntimeTask(await getTeamTask(taskId));
+    try {
+      return runtimeTaskFromRecord(await getRuntimeTaskRecord(taskId));
+    } catch {
+      return runtimeTaskFromRecord(await syncLegacyTeamTask(await getTeamTask(taskId)));
+    }
   },
 
   async listTasks() {
-    return (await listTeamTasks()).map(toRuntimeTask);
+    const [records, teamTasks] = await Promise.all([listRuntimeTaskRecords(), listTeamTasks()]);
+    const byId = new Map(records.map(record => [record.id, runtimeTaskFromRecord(record)]));
+
+    for (const teamTask of teamTasks) {
+      if (!byId.has(teamTask.taskId)) {
+        const record = await syncLegacyTeamTask(teamTask);
+        byId.set(record.id, runtimeTaskFromRecord(record));
+      }
+    }
+
+    return [...byId.values()];
   },
 
   listRuns: listTeamRuns,
-  listEvents: listTeamEvents,
+  listEvents: listRuntimeTaskEvents,
   getResult: getRunResult,
   async transition(input: {
     taskId: string;
@@ -94,18 +120,27 @@ export const taskRuntime = {
     const task = await getTeamTask(input.taskId);
     const currentStatus = toRuntimeTask(task).status;
     assertTransitionAllowed(currentStatus, input.nextStatus);
-    return toRuntimeTask(
-      await setTeamTaskRuntimeStatus({
-        taskId: input.taskId,
-        runtimeStatus: input.nextStatus,
-        reason: input.reason,
-        sourceAgentId: input.sourceAgentId,
-        metadata: {
-          ...(input.metadata || {}),
-          previousRuntimeStatus: currentStatus,
-        },
-      }),
-    );
+    const updated = await setTeamTaskRuntimeStatus({
+      taskId: input.taskId,
+      runtimeStatus: input.nextStatus,
+      reason: input.reason,
+      sourceAgentId: input.sourceAgentId,
+      metadata: {
+        ...(input.metadata || {}),
+        previousRuntimeStatus: currentStatus,
+      },
+    });
+    const record = await upsertRuntimeTaskRecord({
+      teamTask: updated,
+      status: input.nextStatus,
+      reason: input.reason,
+      sourceAgentId: input.sourceAgentId,
+      metadata: {
+        ...(input.metadata || {}),
+        previousRuntimeStatus: currentStatus,
+      },
+    });
+    return runtimeTaskFromRecord(record);
   },
   async approveTask(input: { taskId: string; reason?: string; sourceAgentId?: string }) {
     return this.transition({
@@ -167,14 +202,26 @@ export const taskRuntime = {
       reason: input.reason,
       sourceAgentId: input.sourceAgentId,
     });
+    await upsertRuntimeTaskRecord({
+      teamTask: await getTeamTask(input.taskId),
+      status: 'retrying',
+      reason: input.reason,
+      sourceAgentId: input.sourceAgentId,
+    });
     const retry = await retryTeamTask(input);
-    await setTeamTaskRuntimeStatus({
+    const updatedRetry = await setTeamTaskRuntimeStatus({
       taskId: retry.taskId,
       runtimeStatus: 'pending',
       reason: `Retry of ${input.taskId}.`,
       sourceAgentId: 'task-runtime',
     });
-    return toRuntimeTask(await getTeamTask(retry.taskId));
+    const record = await upsertRuntimeTaskRecord({
+      teamTask: updatedRetry,
+      status: 'pending',
+      reason: `Retry of ${input.taskId}.`,
+      sourceAgentId: 'task-runtime',
+    });
+    return runtimeTaskFromRecord(record);
   },
 };
 
@@ -191,4 +238,13 @@ export function assertTransitionAllowed(currentStatus: RuntimeTaskStatus, nextSt
 function readRuntimeStatus(task: TeamTask): RuntimeTaskStatus | undefined {
   const value = task.metadata?.runtimeStatus;
   return typeof value === 'string' && runtimeStatuses.has(value as RuntimeTaskStatus) ? (value as RuntimeTaskStatus) : undefined;
+}
+
+async function syncLegacyTeamTask(task: TeamTask) {
+  return upsertRuntimeTaskRecord({
+    teamTask: task,
+    status: toRuntimeTask(task).status,
+    reason: 'Migrated from TeamTask compatibility record.',
+    sourceAgentId: 'task-runtime',
+  });
 }
