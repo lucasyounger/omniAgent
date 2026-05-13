@@ -331,6 +331,7 @@ async function executeCronJob(job: CronJob): Promise<{
       schedule: job.schedule,
       taskType,
       payload,
+      source: readPayloadSource(payload),
     },
   });
 
@@ -359,6 +360,9 @@ function inferTaskType(targetAgent?: string) {
   if (agentId === 'omni-router-agent') {
     return 'router.task';
   }
+  if (agentId === 'channel-gateway') {
+    return 'channel.message';
+  }
   return 'code.claude_code_task';
 }
 
@@ -386,4 +390,9 @@ function buildLegacyPayload(input: { task: string; workspacePath?: string; paylo
     objective: input.task,
     workspacePath: input.workspacePath || inferWorkspacePath(input.task) || projectRoot,
   };
+}
+
+function readPayloadSource(payload: Record<string, unknown>) {
+  const source = payload.source;
+  return source && typeof source === 'object' && !Array.isArray(source) ? source : undefined;
 }

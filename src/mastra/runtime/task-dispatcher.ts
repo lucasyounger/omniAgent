@@ -1,6 +1,6 @@
 import { startClaudeCodeTask } from '../lib/code-task-store';
 import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
-import { appendTeamEvent } from '../lib/team-runtime-store';
+import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
 import type { RuntimeTask } from './types';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
@@ -57,6 +57,10 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     return dispatchKnowledgeTask(leased);
   }
 
+  if (leased.targetAgentId === 'channel-gateway') {
+    return dispatchChannelGatewayTask(leased);
+  }
+
   if (leased.targetAgentId === 'notify-agent' || leased.targetAgentId === 'research-agent') {
     await appendTeamEvent({
       taskId,
@@ -93,6 +97,68 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     targetAgentId: task.targetAgentId,
     reason: `No dispatcher handler for target agent: ${task.targetAgentId}`,
   };
+}
+
+async function dispatchChannelGatewayTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const text = stringValue(payload.text) || task.objective;
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Dispatching to Channel Gateway.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'channel-gateway',
+  });
+
+  try {
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'channel-gateway',
+      summary: text,
+      output: text,
+      metadata: { taskType: task.metadata?.taskType },
+    });
+
+    await sendAgentInboxMessage({
+      recipientAgentId: 'channel-gateway',
+      sourceAgentId: 'task-dispatcher',
+      taskId: task.id,
+      runId: run.runId,
+      type: 'channel.message',
+      summary: text,
+      resultRef: result.resultRef,
+      payload: { text },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: 'Channel Gateway notification queued.',
+      sourceAgentId: 'task-dispatcher',
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'channel-gateway',
+      runId: run.runId,
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'channel-gateway',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export async function dispatchPendingRuntimeTasks(input: { limit?: number } = {}) {

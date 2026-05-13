@@ -84,4 +84,52 @@ describe('Cron store', () => {
       },
     });
   });
+
+  it('queues channel messages when channel-gateway schedules fire', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { listAgentInbox, listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+    await createCronJob({
+      name: 'reply hello',
+      schedule: '2026-05-12 21:08',
+      task: '你好',
+      targetAgentId: 'channel-gateway',
+      taskType: 'channel.message',
+      payload: {
+        text: '你好',
+        source: {
+          kind: 'channel',
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          messageType: 'dm',
+        },
+      },
+    });
+
+    const jobs = await runDueCronJobs(new Date('2026-05-12T13:08:30.000Z'));
+    const tasks = await listTeamTasks();
+    const inbox = await listAgentInbox({ recipientAgentId: 'channel-gateway' });
+
+    expect(jobs[0].lastRunStatus).toBe('started');
+    expect(jobs[0].status).toBe('paused');
+    expect(tasks[0]).toMatchObject({
+      targetAgentId: 'channel-gateway',
+      status: 'completed',
+      metadata: {
+        runtimeStatus: 'succeeded',
+        source: {
+          channel: 'http',
+          conversationId: 'conv-1',
+        },
+      },
+    });
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      recipientAgentId: 'channel-gateway',
+      type: 'channel.message',
+      summary: '你好',
+      payload: { text: '你好' },
+    });
+  });
 });

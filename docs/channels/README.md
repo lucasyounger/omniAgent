@@ -10,11 +10,30 @@ through Team Runtime.
 
 - HTTP webhook adapter: `POST /message`
 - OneBot-like webhook adapter: `POST /onebot`
+- Official QQ Bot websocket adapter when `OMNI_QQBOT_APPID` and
+  `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
 - `/task <workspacePath> :: <objective>` for async CodeAgent execution
 - Natural language forwarding to OmniRouterAgent
+- Direct parsing for simple channel reminders such as "today HH:mm reply ...",
+  which creates a Cron `channel.message` job
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
+
+## QQ Bot Delivery
+
+QQ Bot inbound C2C and group-at events are normalized to the shared channel
+types. Outbound QQ Bot messages use the official v2 message APIs:
+
+- C2C uses `user_openid` and `POST /v2/users/{user_openid}/messages`.
+- Group uses `group_openid` and `POST /v2/groups/{group_openid}/messages`.
+- Plain text payloads include `content`, `msg_type: 0`, and `msg_seq`.
+- Replies include `msg_id` and `message_reference.message_id` when an inbound
+  message id is available.
+
+Scheduled channel messages are delivered by storing the original channel target
+in Cron payload metadata, dispatching to `channel-gateway`, and letting the
+delivery worker send the queued inbox message.
 
 ## Runtime
 

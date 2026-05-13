@@ -285,18 +285,19 @@ function handleDispatchEvent(
 }
 
 function handleC2CMessage(d: Record<string, unknown>): void {
-  const author = d.author as { id?: string; username?: string } | undefined;
+  const author = d.author as { id?: string; user_openid?: string; username?: string } | undefined;
+  const userOpenid = author?.user_openid || author?.id;
   const content = typeof d.content === 'string' ? d.content.trim() : '';
   const id = typeof d.id === 'string' ? d.id : '';
 
-  if (!author?.id) return;
+  if (!userOpenid) return;
   if (!content) return;
 
   const message: ChannelMessage = {
     channel: 'qqbot',
     accountId: 'default',
-    conversationId: author.id,
-    senderId: author.id,
+    conversationId: userOpenid,
+    senderId: userOpenid,
     senderDisplayName: author.username,
     messageId: id,
     text: content,
@@ -304,7 +305,7 @@ function handleC2CMessage(d: Record<string, unknown>): void {
     receivedAt: new Date().toISOString(),
   };
 
-  console.log(`[qqbot] C2C from ${author.id}: ${content.slice(0, 80)}`);
+  console.log(`[qqbot] C2C from ${userOpenid}: ${content.slice(0, 80)}`);
   processIncomingMessage(message);
 }
 

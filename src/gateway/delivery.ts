@@ -9,14 +9,20 @@ import { createDelivery, listDeliveries, markDeliveryAttempt, updateDeliveryStat
 import { getQQBotAccessToken } from './qqbot-adapter';
 import type { ChannelTarget, OutboundMessage } from './types';
 
+type ChannelSourceMetadata = {
+  kind?: string;
+  channel?: string;
+  accountId?: string;
+  conversationId?: string;
+  senderId?: string;
+  messageType?: string;
+};
+
 type SourceMetadata = {
-  source?: {
-    kind?: string;
-    channel?: string;
-    accountId?: string;
-    conversationId?: string;
-    senderId?: string;
-    messageType?: string;
+  source?: ChannelSourceMetadata;
+  payload?: {
+    text?: unknown;
+    source?: ChannelSourceMetadata;
   };
 };
 
@@ -65,12 +71,14 @@ export async function deliverPendingInbox(config: GatewayConfig) {
       }
 
       const result = inboxMessage.resultRef ? await getRunResult({ resultRef: inboxMessage.resultRef }) : undefined;
-      const text = [
-        inboxMessage.type === 'team.run.completed' ? '任务完成' : '任务状态更新',
-        `Task: ${inboxMessage.taskId}`,
-        `Run: ${inboxMessage.runId}`,
-        `Summary: ${result?.summary || inboxMessage.summary}`,
-      ].join('\n');
+      const text =
+        directMessageText(inboxMessage.payload) ||
+        [
+          inboxMessage.type === 'team.run.completed' ? '任务完成' : '任务状态更新',
+          `Task: ${inboxMessage.taskId}`,
+          `Run: ${inboxMessage.runId}`,
+          `Summary: ${result?.summary || inboxMessage.summary}`,
+        ].join('\n');
 
       const delivery = await createDelivery({
         target,
@@ -114,7 +122,7 @@ async function attemptDelivery(deliveryId: string, message: OutboundMessage, con
 }
 
 function channelTargetFromMetadata(metadata: SourceMetadata): ChannelTarget | undefined {
-  const source = metadata.source;
+  const source = metadata.source || metadata.payload?.source;
   if (!source?.channel || !source.accountId || !source.conversationId) {
     return undefined;
   }
@@ -126,6 +134,14 @@ function channelTargetFromMetadata(metadata: SourceMetadata): ChannelTarget | un
     senderId: source.senderId,
     messageType: source.messageType === 'group' || source.messageType === 'guild' || source.messageType === 'system' ? source.messageType : 'dm',
   };
+}
+
+function directMessageText(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined;
+  }
+  const text = (payload as { text?: unknown }).text;
+  return typeof text === 'string' && text.trim() ? text : undefined;
 }
 
 async function sendOneBot(message: OutboundMessage, config: GatewayConfig) {
@@ -151,6 +167,17 @@ async function sendQQBot(message: OutboundMessage) {
     throw new Error('QQ Bot access token not available');
   }
 
+  const request = buildQQBotMessageRequest(message, token);
+  console.log(`[qqbot] sending ${message.target.messageType} message to ${message.target.conversationId}`);
+  const response = await fetch(request.endpoint, request.init);
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => 'unknown');
+    throw new Error(`QQBot send failed: HTTP ${response.status} ${errorBody}`);
+  }
+}
+
+export function buildQQBotMessageRequest(message: OutboundMessage, token: string) {
   const isGroup = message.target.messageType === 'group';
   const conversationId = message.target.conversationId;
   const senderId = message.target.senderId;
@@ -161,23 +188,29 @@ async function sendQQBot(message: OutboundMessage) {
   const body: Record<string, unknown> = {
     content: message.text,
     msg_type: 0,
+    msg_seq: createQQBotMessageSeq(),
   };
 
   if (message.replyToMessageId) {
     body.msg_id = message.replyToMessageId;
+    body.message_reference = {
+      message_id: message.replyToMessageId,
+    };
   }
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `QQBot ${token}`,
-      'Content-Type': 'application/json',
+  return {
+    endpoint,
+    init: {
+      method: 'POST',
+      headers: {
+        Authorization: `QQBot ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  };
+}
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => 'unknown');
-    throw new Error(`QQBot send failed: HTTP ${response.status} ${errorBody}`);
-  }
+function createQQBotMessageSeq() {
+  return Math.floor(Math.random() * 1_000_000) + 1;
 }

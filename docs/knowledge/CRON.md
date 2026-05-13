@@ -46,9 +46,24 @@ and the actual execution belongs to dispatcher handlers or specialist agent
 logic outside the cron store. The cron store must not import or call CodeAgent
 or `startClaudeCodeTask` directly.
 
-The first dispatcher handler supports `code-agent`. If a code task does not
-carry an approval token, dispatch records `pending_approval` through Tool
-Gateway and moves the Runtime Task to `waiting_user_confirm`.
+Current dispatcher handlers include:
+
+- `code-agent`: starts Claude Code through Tool Gateway approval policy. If a
+  code task does not carry an approval token, dispatch records the approval
+  requirement and moves the Runtime Task to `waiting_user_confirm`.
+- `knowledge-agent`: executes supported knowledge maintenance task types.
+- `channel-gateway`: queues direct channel messages for the Omni Gateway
+  delivery worker. This is used by scheduled QQ/HTTP/OneBot reminder messages
+  with `taskType: channel.message`.
+
+For channel schedules, the Cron payload should include:
+
+- `text`: message body to send.
+- `source`: original channel metadata, including `channel`, `accountId`,
+  `conversationId`, `senderId`, and `messageType`.
+
+Cron copies `payload.source` into Runtime Task metadata so the delivery worker
+can reconstruct the outbound target when the schedule fires.
 
 Legacy jobs without `taskType`, `targetAgentId`, or `payload` are upgraded at
 creation time. Old records still run by inferring:
