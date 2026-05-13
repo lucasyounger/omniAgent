@@ -77,6 +77,9 @@ QQBot / OneBot / HTTP / CLI
 
 - 2026-05-13 Step 1 已完成：建立 `taskType` registry、`notifyTarget` 持久化和 Delivery 读取优先级；已通过 `npm test`、`npm run typecheck`、`npm run dev` API 验证，并推送到 GitHub。
 - 2026-05-13 Step 2 已完成：Gateway 定时自然语言入口改为创建 `schedule.create` RuntimeTask；Dispatcher 按 `taskType` 进入 schedule handler；handler 持久化 Schedule 并返回结构化结果。已通过 `npm test`、`npm run typecheck`、`npm run dev` API 验证。
+- 2026-05-13 Step 3 已完成：实现 `notify.send_channel_message` handler，普通通知进入 Gateway Delivery Queue；Delivery 支持 pending 投递、失败重试、dead letter 查询和 HTTP 查询接口。已通过 `npm test`、`npm run typecheck`、`npm run dev`、Gateway HTTP 状态接口验证，并推送到 GitHub。
+- 2026-05-13 Step 4 已完成：实现 `research.ai_daily_digest` MVP，生成可验证日报文本，并通过 `notify.send_channel_message` 回推原会话。已通过 Schedule -> Research -> Notify -> Delivery Queue 单元测试、`npm test`、`npm run typecheck`、`npm run dev` 验证，并推送到 GitHub。
+- 2026-05-13 Step 5 代码已实现，真实 QQ 消息回环未验证：QQBot adapter 增加安全状态查询和事件归一化测试；`.env` QQBot 凭据可获取 access token，websocket 可进入 READY，Gateway `/qqbot/status` 返回正常。尚未由用户在 QQ 内发送真实 C2C/group-at 消息验证“定时创建 -> 触发 -> 回到同一 QQ 会话”。
 
 ### Step 1: Runtime/Gateway 协议地基
 

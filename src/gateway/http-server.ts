@@ -4,6 +4,7 @@ import type { GatewayConfig } from './config';
 import { sendOutbound } from './delivery';
 import { listDeadLetterDeliveries, listDeliveries } from './gateway-store';
 import { handleChannelMessage } from './message-handler';
+import { getQQBotAdapterStatus } from './qqbot-adapter';
 import type { ChannelMessage } from './types';
 
 export function startGatewayHttpServer(config: GatewayConfig) {
@@ -21,6 +22,11 @@ export function startGatewayHttpServer(config: GatewayConfig) {
 
       if (req.method === 'GET' && req.url === '/deliveries/dead-letter') {
         sendJson(res, 200, { ok: true, deliveries: await listDeadLetterDeliveries() });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/qqbot/status') {
+        sendJson(res, 200, { ok: true, qqbot: getQQBotAdapterStatus() });
         return;
       }
 

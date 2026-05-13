@@ -12,6 +12,22 @@ type QQBotState =
   | 'IDENTIFYING'
   | 'READY';
 
+export type QQBotAdapterStatus = {
+  configured: boolean;
+  state: QQBotState;
+  hasAccessToken: boolean;
+  accessTokenExpiresAt?: string;
+  sessionActive: boolean;
+  lastSequence: number | null;
+  heartbeatIntervalMs: number;
+  reconnectAttempts: number;
+  websocketReadyState?: number;
+  lastReadyAt?: string;
+  lastEventAt?: string;
+  lastMessageAt?: string;
+  lastError?: string;
+};
+
 let state: QQBotState = 'CLOSED';
 let ws: WebSocket | null = null;
 let accessToken: string | null = null;
@@ -25,18 +41,40 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let connectReadyTimer: ReturnType<typeof setTimeout> | null = null;
 let cfg: GatewayConfig | null = null;
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let lastReadyAt: string | undefined;
+let lastEventAt: string | undefined;
+let lastMessageAt: string | undefined;
+let lastError: string | undefined;
 
 export function getQQBotAccessToken(): string | null {
   return accessToken;
 }
 
+export function getQQBotAdapterStatus(): QQBotAdapterStatus {
+  return {
+    configured: Boolean(cfg?.qqbotAppId && cfg.qqbotClientSecret),
+    state,
+    hasAccessToken: Boolean(accessToken),
+    accessTokenExpiresAt: accessTokenExpiresAt ? new Date(accessTokenExpiresAt).toISOString() : undefined,
+    sessionActive: Boolean(sessionId),
+    lastSequence,
+    heartbeatIntervalMs,
+    reconnectAttempts,
+    websocketReadyState: ws?.readyState,
+    lastReadyAt,
+    lastEventAt,
+    lastMessageAt,
+    lastError,
+  };
+}
+
 export async function startQQBotAdapter(config: GatewayConfig): Promise<void> {
+  cfg = config;
+
   if (!config.qqbotAppId || !config.qqbotClientSecret) {
     console.log('[qqbot] adapter disabled (set OMNI_QQBOT_APPID and OMNI_QQBOT_CLIENTSECRET)');
     return;
   }
-
-  cfg = config;
 
   await refreshAccessToken();
   startTokenRefreshLoop();
@@ -71,6 +109,7 @@ async function refreshAccessToken(): Promise<void> {
     console.log(`[qqbot] access token refreshed, expires in ${data.expires_in ?? 7200}s`);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
+    lastError = msg;
     console.error(`[qqbot] token refresh failed: ${msg}`);
   }
 }
@@ -117,6 +156,7 @@ async function connect(): Promise<void> {
         };
         handleWsMessage(payload);
       } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
         console.error('[qqbot] message parse error:', e);
       }
     };
@@ -135,9 +175,11 @@ async function connect(): Promise<void> {
     };
 
     ws.onerror = () => {
+      lastError = `websocket error (state=${state}, readyState=${ws?.readyState ?? 'none'})`;
       console.error(`[qqbot] websocket error (state=${state}, readyState=${ws?.readyState ?? 'none'})`);
     };
   } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
     console.error('[qqbot] connection failed:', error);
     cleanupWs();
     state = 'CLOSED';
@@ -181,6 +223,9 @@ function handleWsMessage(payload: {
 }): void {
   if (payload.s != null) {
     lastSequence = payload.s;
+  }
+  if (payload.t) {
+    lastEventAt = new Date().toISOString();
   }
 
   switch (payload.op) {
@@ -258,6 +303,7 @@ function handleDispatchEvent(
       sessionId = d.session_id as string;
       reconnectAttempts = 0;
       state = 'READY';
+      lastReadyAt = new Date().toISOString();
       clearConnectReadyTimer();
       const user = d.user as { id?: string; username?: string } | undefined;
       console.log(`[qqbot] ready: bot=${user?.username ?? 'unknown'} session=${sessionId}`);
@@ -266,6 +312,7 @@ function handleDispatchEvent(
     case 'RESUMED': {
       reconnectAttempts = 0;
       state = 'READY';
+      lastReadyAt = new Date().toISOString();
       clearConnectReadyTimer();
       console.log('[qqbot] resumed');
       break;
@@ -285,15 +332,34 @@ function handleDispatchEvent(
 }
 
 function handleC2CMessage(d: Record<string, unknown>): void {
+  const message = normalizeQQBotC2CMessage(d);
+  if (!message) return;
+
+  console.log(`[qqbot] C2C from ${message.senderId}: ${message.text.slice(0, 80)}`);
+  lastMessageAt = message.receivedAt;
+  processIncomingMessage(message);
+}
+
+function handleGroupAtMessage(d: Record<string, unknown>): void {
+  const message = normalizeQQBotGroupAtMessage(d);
+  if (!message) return;
+
+  console.log(`[qqbot] GROUP from ${message.senderId} in ${message.conversationId}: ${message.text.slice(0, 80)}`);
+  lastMessageAt = message.receivedAt;
+  processIncomingMessage(message);
+}
+
+export function normalizeQQBotC2CMessage(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelMessage | undefined {
   const author = d.author as { id?: string; user_openid?: string; username?: string } | undefined;
   const userOpenid = author?.user_openid || author?.id;
   const content = typeof d.content === 'string' ? d.content.trim() : '';
   const id = typeof d.id === 'string' ? d.id : '';
 
-  if (!userOpenid) return;
-  if (!content) return;
+  if (!userOpenid || !content) {
+    return undefined;
+  }
 
-  const message: ChannelMessage = {
+  return {
     channel: 'qqbot',
     accountId: 'default',
     conversationId: userOpenid,
@@ -302,25 +368,26 @@ function handleC2CMessage(d: Record<string, unknown>): void {
     messageId: id,
     text: content,
     messageType: 'dm',
-    receivedAt: new Date().toISOString(),
+    receivedAt,
   };
-
-  console.log(`[qqbot] C2C from ${userOpenid}: ${content.slice(0, 80)}`);
-  processIncomingMessage(message);
 }
 
-function handleGroupAtMessage(d: Record<string, unknown>): void {
+export function normalizeQQBotGroupAtMessage(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelMessage | undefined {
   const groupOpenid = typeof d.group_openid === 'string' ? d.group_openid : '';
   const author = d.author as { id?: string; username?: string } | undefined;
   const rawContent = typeof d.content === 'string' ? d.content : '';
   const id = typeof d.id === 'string' ? d.id : '';
 
-  if (!groupOpenid || !author?.id) return;
+  if (!groupOpenid || !author?.id) {
+    return undefined;
+  }
 
   const content = rawContent.replace(/<@!?\d+>/g, ' ').trim();
-  if (!content) return;
+  if (!content) {
+    return undefined;
+  }
 
-  const message: ChannelMessage = {
+  return {
     channel: 'qqbot',
     accountId: 'default',
     conversationId: groupOpenid,
@@ -329,11 +396,8 @@ function handleGroupAtMessage(d: Record<string, unknown>): void {
     messageId: id,
     text: content,
     messageType: 'group',
-    receivedAt: new Date().toISOString(),
+    receivedAt,
   };
-
-  console.log(`[qqbot] GROUP from ${author.id} in ${groupOpenid}: ${content.slice(0, 80)}`);
-  processIncomingMessage(message);
 }
 
 function processIncomingMessage(message: ChannelMessage): void {

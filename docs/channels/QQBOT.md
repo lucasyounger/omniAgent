@@ -25,6 +25,9 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 - Deferred replies and scheduled channel messages flow through Team Runtime
   inbox messages addressed to `channel-gateway`, then the delivery worker sends
   them to QQ Bot.
+- Gateway exposes `GET /qqbot/status` for local diagnostics. The status output
+  intentionally reports only safe fields such as configured state, websocket
+  state, token presence, session activity, reconnect attempts, and timestamps.
 
 ## Sending
 
@@ -77,3 +80,13 @@ When official QQ Bot credentials are not configured, use:
 
 - HTTP channel for local testing.
 - OneBot-like channel for NapCat-style local QQ bridges.
+
+With official credentials configured, start the gateway and check:
+
+```shell
+curl http://localhost:4120/qqbot/status
+```
+
+For a verified real loop, send a QQ C2C or group-at message to the bot, then
+confirm the status shows recent message/event timestamps and that Schedule,
+RuntimeTask, and Delivery records reflect the same conversation target.

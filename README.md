@@ -198,6 +198,15 @@ npm run build
 The adapter exchanges these values for an access token through QQ Bot APIs.
 Leave both empty to disable the official QQ Bot adapter.
 
+When the gateway is running, inspect the adapter without exposing credentials:
+
+```shell
+curl http://localhost:4120/qqbot/status
+```
+
+The response reports whether QQBot is configured, the websocket state, token
+presence, session activity, reconnect attempts, and recent event timestamps.
+
 ## Common Local Workflows
 
 Create a scheduled task through CronAgent tools or the UI. Cron creates a

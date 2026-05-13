@@ -41,6 +41,37 @@ afterEach(async () => {
 });
 
 describe('Gateway HTTP server', () => {
+  it('returns QQBot adapter status without exposing credentials', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer(baseConfig());
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/qqbot/status`);
+      const body = (await response.json()) as { ok: boolean; qqbot: Record<string, unknown> };
+
+      expect(response.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.qqbot).toMatchObject({
+        configured: false,
+        state: 'CLOSED',
+        hasAccessToken: false,
+        sessionActive: false,
+      });
+      expect(body.qqbot).not.toHaveProperty('accessToken');
+      expect(body.qqbot).not.toHaveProperty('sessionId');
+    } finally {
+      server.close();
+    }
+  });
+
   it('returns dead-letter deliveries', async () => {
     const { createDelivery, markDeliveryAttempt, startGatewayHttpServer } = await loadGateway();
     const delivery = await createDelivery({
