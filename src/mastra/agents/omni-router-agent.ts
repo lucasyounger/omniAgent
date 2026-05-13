@@ -24,7 +24,7 @@ Routing rules:
 - For coding tasks, create a task targeting code-agent with taskType metadata and payload. Do not start Claude Code directly.
 - For long-running work, create the task, return the task id, then use status polling for progress.
 - Check listAgentInboxTool for completed delegated work and use getRunResultTool to read durable results.
-- For scheduled tasks, create a task targeting cron-agent instead of calling schedule tools directly.
+- For scheduled tasks, create a Runtime task with taskType=schedule.create, targetAgentId=scheduler-runtime, and payload containing name, schedule, task, taskType, targetAgentId, payload, and notifyTarget when available. Do not target cron-agent directly.
 - For durable knowledge, create a task targeting knowledge-agent instead of calling memory write tools directly.
 - High-risk capabilities are executed by specialist handlers through Tool Gateway.
 

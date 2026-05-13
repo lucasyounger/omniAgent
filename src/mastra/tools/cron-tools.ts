@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { createCronJob, deleteCronJob, getCronJobNextRunAt, listCronJobs, runCronJobNow, updateCronJobStatus } from '../lib/cron-store';
+import type { CronJob } from '../lib/cron-store';
 import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const scheduleReadPolicy = {
@@ -15,12 +16,15 @@ const scheduleWritePolicy = {
   audit: true,
 } as const;
 
-const scheduleRunPolicy = {
-  risk: 'dangerous',
-  capability: 'schedule.run_now',
-  requireApproval: true,
-  audit: true,
-} as const;
+function resolveScheduleRunPolicy(job: CronJob) {
+  const isDangerousCodeTask = job.taskType === 'code.claude_code_task' && job.payload?.executionMode !== 'patch_proposal';
+  return {
+    risk: isDangerousCodeTask ? 'dangerous' : 'medium',
+    capability: 'schedule.run_now',
+    requireApproval: isDangerousCodeTask,
+    audit: true,
+  } as const;
+}
 
 const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
 
@@ -105,7 +109,6 @@ export const deleteCronJobTool = createTool({
     id: z.string(),
     deleted: z.boolean(),
   }),
-  requireApproval: true,
   execute: async input => executeWithToolGateway('delete-cron-job', scheduleWritePolicy, input, () => deleteCronJob(input.id)),
 });
 
@@ -117,8 +120,13 @@ export const runCronJobNowTool = createTool({
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: cronJobSchema,
-  requireApproval: true,
-  execute: async input => executeWithToolGateway('run-cron-job-now', scheduleRunPolicy, input, () => runCronJobNow(input.id)),
+  execute: async input => {
+    const job = (await listCronJobs()).find(item => item.id === input.id);
+    if (!job) {
+      throw new Error(`Cron job not found: ${input.id}`);
+    }
+    return executeWithToolGateway('run-cron-job-now', resolveScheduleRunPolicy(job), input, () => runCronJobNow(input.id));
+  },
 });
 
 export const explainCronJobNextRunTool = createTool({

@@ -89,6 +89,55 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
       .join('\n');
   }
 
+  if (decision.taskType === runtimeTaskTypes.scheduleList) {
+    const schedules = arrayValue(dispatch.status === 'dispatched' ? dispatch.result?.schedules : undefined);
+    const lines = schedules.slice(0, 10).map((item, index) => {
+      const schedule = objectValue(item);
+      if (!schedule) {
+        return undefined;
+      }
+      const name = stringValue(schedule.name) || stringValue(schedule.id) || `#${index + 1}`;
+      const status = stringValue(schedule.status) || 'unknown';
+      const time = stringValue(schedule.schedule) || 'unknown schedule';
+      return `${index + 1}. ${name} | ${status} | ${time}`;
+    });
+    return [
+      '\u5b9a\u65f6\u4efb\u52a1\u5217\u8868\uff1a',
+      ...lines.filter((item): item is string => Boolean(item)),
+      schedules.length > 10 ? `\u8fd8\u6709 ${schedules.length - 10} \u4e2a\u672a\u663e\u793a\u3002` : undefined,
+      schedules.length === 0 ? '\u6682\u65e0\u5b9a\u65f6\u4efb\u52a1\u3002' : undefined,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.scheduleDelete) {
+    const deletedIds = stringArrayValue(dispatch.status === 'dispatched' ? dispatch.result?.deletedScheduleIds : undefined);
+    return [
+      '\u5b9a\u65f6\u4efb\u52a1\u5df2\u5220\u9664\u3002',
+      `Runtime Task: ${task.id}`,
+      deletedIds.length ? `Deleted: ${deletedIds.join(', ')}` : `Dispatch: ${dispatch.status}`,
+    ].join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.schedulePause || decision.taskType === runtimeTaskTypes.scheduleResume) {
+    const ids = stringArrayValue(dispatch.status === 'dispatched' ? dispatch.result?.scheduleIds : undefined);
+    return [
+      decision.taskType === runtimeTaskTypes.schedulePause ? '\u5b9a\u65f6\u4efb\u52a1\u5df2\u6682\u505c\u3002' : '\u5b9a\u65f6\u4efb\u52a1\u5df2\u6062\u590d\u3002',
+      `Runtime Task: ${task.id}`,
+      ids.length ? `Schedules: ${ids.join(', ')}` : `Dispatch: ${dispatch.status}`,
+    ].join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.scheduleRunNow) {
+    const scheduleId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.scheduleId) : undefined;
+    return [
+      '\u5b9a\u65f6\u4efb\u52a1\u5df2\u624b\u52a8\u89e6\u53d1\u3002',
+      `Runtime Task: ${task.id}`,
+      scheduleId ? `Schedule: ${scheduleId}` : `Dispatch: ${dispatch.status}`,
+    ].join('\n');
+  }
+
   if (decision.taskType === runtimeTaskTypes.notifySendChannelMessage) {
     const deliveryId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.deliveryId) : undefined;
     return [
@@ -239,4 +288,12 @@ function stringValue(value: unknown) {
 
 function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function arrayValue(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function stringArrayValue(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
 }

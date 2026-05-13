@@ -74,8 +74,9 @@ work is delegated, executed, reported, and recovered across all agents.
   called without `teamTaskId`.
 - CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
 - CodeAgent writes completed or failed results and inbox messages.
-- Cron execution goes through CodeAgent and records `lastRunTeamTaskId` and
-  `lastRunTeamRunId` on cron job records.
+- Cron execution creates Runtime Tasks and immediately asks Task Dispatcher to
+  route them by `taskType`; cron records `lastRunTeamTaskId`,
+  `lastRunTaskId`, and dispatch status on job records.
 - Cancel, retry, timeout, and interrupted states are part of the protocol.
 - TaskRuntime records runtime lifecycle status on backing Team Tasks through
   `metadata.runtimeStatus`.
@@ -84,10 +85,14 @@ work is delegated, executed, reported, and recovered across all agents.
   `paused`.
 - Retry uses a two-step runtime lifecycle: the failed source task becomes
   `retrying`, then a new retry task is created with `pending` status.
-- Task Dispatcher currently handles `code-agent` and `knowledge-agent` tasks.
-  Code tasks without an approval token transition to `waiting_user_confirm`;
-  approved dry-run or patch-proposal code tasks can complete synchronously as
-  `succeeded`.
+- Task Dispatcher currently handles `code-agent`, `knowledge-agent`,
+  `channel-gateway`, `notify-agent`, `research-agent`, and schedule-handler
+  task types. Code tasks without an approval token transition to
+  `waiting_user_confirm`; approved dry-run or patch-proposal code tasks can
+  complete synchronously as `succeeded`.
+- Schedule create/list/delete/pause/resume maintenance tasks are audited but do
+  not require approval. `schedule.run_now` dynamically requires approval when
+  the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task.
 

@@ -20,12 +20,14 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   explicitly dispatches pending Runtime Tasks to handler implementations by
   `taskType`, with `targetAgentId` kept as the executor hint and compatibility
   field. It uses a short lease, a max-concurrency guard, and the same Tool
-  Gateway approval boundary used by tools and workflows.
+  Gateway approval boundary used by tools and workflows. The schedule handler
+  covers create/list/delete/pause/resume/run-now maintenance tasks.
 - **Runtime Orchestrator** (`src/mastra/runtime/orchestrator.ts`): converts
   channel natural language into structured runtime intents. The current
   deterministic parser covers one-time reminders, daily AI digests, immediate
-  channel notifications, status queries, and low-confidence clarification. The
-  model-output boundary is a strict JSON schema for future LLM parsing.
+  channel notifications, schedule maintenance, status queries, and
+  low-confidence clarification. The model-output boundary is a strict JSON
+  schema for future LLM parsing.
 - **Tool Gateway** (`src/mastra/runtime/tool-gateway.ts`): policy boundary for
   tool execution. It audits calls, redacts sensitive fields, blocks missing
   capabilities or denied commands, and stops approval-required tools until an
@@ -92,7 +94,8 @@ remains the compatible execution/run/result protocol underneath it.
 9. Task Dispatcher scans pending tasks on startup and on
    `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
 10. Dispatcher handlers currently cover `code-agent`, `knowledge-agent`,
-   `schedule.create`, `notify.send_channel_message`, and
+   `schedule.create`, `schedule.list`, `schedule.delete`, `schedule.pause`,
+   `schedule.resume`, `schedule.run_now`, `notify.send_channel_message`, and
    `research.ai_daily_digest`.
 
 Valid runtime transitions are enforced by TaskRuntime. Callers should not write
@@ -112,6 +115,18 @@ statuses:
 
 Approval-required tool input schemas should include optional `approvalToken` so
 the approval result can be passed through normal tool input.
+
+Schedule maintenance uses a risk-tiered policy:
+
+- `schedule.list`: safe, audited, no approval.
+- `schedule.create`, `schedule.delete`, `schedule.pause`, `schedule.resume`:
+  medium risk, audited, no Tool Gateway approval.
+- `schedule.run_now`: audited with dynamic risk. Ordinary reminder/knowledge
+  jobs do not require approval; direct code execution jobs require Tool Gateway
+  approval unless the scheduled payload is patch-proposal only.
+
+User-experience confirmations, such as confirming a bulk delete in chat, are a
+separate layer from Tool Gateway security approval and are not yet implemented.
 
 ## Reliability Rules
 

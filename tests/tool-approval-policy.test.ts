@@ -97,8 +97,27 @@ describe('tool approval policy', () => {
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
 
-  it('still requires approval for immediate scheduled execution', async () => {
-    const { createCronJobTool, runCronJobNowTool, ToolGatewayApprovalRequiredError } = await loadTools();
+  it('allows deleting scheduled records without approval', async () => {
+    const { createCronJobTool, deleteCronJobTool } = await loadTools();
+    const job = await executeTool<
+      { name: string; schedule: string; task: string; targetAgentId: string },
+      { id: string }
+    >(createCronJobTool, {
+      name: 'temporary reminder',
+      schedule: 'daily 09:30',
+      task: 'delete me',
+      targetAgentId: 'knowledge-agent',
+    });
+
+    await expect(executeTool(deleteCronJobTool, { id: job.id })).resolves.toMatchObject({
+      id: job.id,
+      deleted: true,
+    });
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+  it('allows immediate non-code scheduled execution without approval', async () => {
+    const { createCronJobTool, runCronJobNowTool } = await loadTools();
     const job = await executeTool<
       { name: string; schedule: string; task: string; targetAgentId: string },
       { id: string }
@@ -107,6 +126,31 @@ describe('tool approval policy', () => {
       schedule: 'daily 09:30',
       task: 'run now',
       targetAgentId: 'knowledge-agent',
+    });
+
+    await expect(executeTool(runCronJobNowTool, { id: job.id })).resolves.toMatchObject({
+      id: job.id,
+      lastRunStatus: 'started',
+    });
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+  it('requires approval for immediate direct code scheduled execution', async () => {
+    const { createCronJobTool, runCronJobNowTool, ToolGatewayApprovalRequiredError } = await loadTools();
+    const job = await executeTool<
+      { name: string; schedule: string; task: string; taskType: string; targetAgentId: string; payload: Record<string, unknown> },
+      { id: string }
+    >(createCronJobTool, {
+      name: 'manual direct code run',
+      schedule: 'daily 09:30',
+      task: 'change files',
+      taskType: 'code.claude_code_task',
+      targetAgentId: 'code-agent',
+      payload: {
+        workspacePath: tempRoot,
+        objective: 'change files',
+        executionMode: 'direct',
+      },
     });
 
     await expect(executeTool(runCronJobNowTool, { id: job.id })).rejects.toBeInstanceOf(ToolGatewayApprovalRequiredError);

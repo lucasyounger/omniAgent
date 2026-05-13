@@ -4,6 +4,11 @@ import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
 
 const orchestratorTaskTypes = [
   runtimeTaskTypes.scheduleCreate,
+  runtimeTaskTypes.scheduleList,
+  runtimeTaskTypes.scheduleDelete,
+  runtimeTaskTypes.schedulePause,
+  runtimeTaskTypes.scheduleResume,
+  runtimeTaskTypes.scheduleRunNow,
   runtimeTaskTypes.researchAiDailyDigest,
   runtimeTaskTypes.notifySendChannelMessage,
 ] as const;
@@ -17,7 +22,18 @@ const channelTargetSchema = z.object({
 });
 
 export const orchestratorModelSchema = z.object({
-  intent: z.enum(['schedule.create', 'research.ai_daily_digest', 'notify.send_channel_message', 'status.query', 'unknown']),
+  intent: z.enum([
+    'schedule.create',
+    'schedule.list',
+    'schedule.delete',
+    'schedule.pause',
+    'schedule.resume',
+    'schedule.run_now',
+    'research.ai_daily_digest',
+    'notify.send_channel_message',
+    'status.query',
+    'unknown',
+  ]),
   confidence: z.number().min(0).max(1),
   taskType: z.enum(orchestratorTaskTypes).optional(),
   targetAgentId: z.string().min(1).optional(),
@@ -68,6 +84,20 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
       kind: 'status',
       confidence: 0.94,
       message: 'Omni Gateway 在线。可以创建定时任务、AI 日报任务，或使用 /task <workspace> :: <objective> 创建异步代码任务。',
+    };
+  }
+
+  const scheduleMaintenance = parseScheduleMaintenance(text);
+  if (scheduleMaintenance) {
+    return {
+      kind: 'runtime_task',
+      confidence: scheduleMaintenance.confidence,
+      taskType: scheduleMaintenance.taskType,
+      targetAgentId: defaultTargetAgentIdForTaskType(scheduleMaintenance.taskType) || 'scheduler-runtime',
+      objective: scheduleMaintenance.objective,
+      notifyTarget,
+      source,
+      payload: scheduleMaintenance.payload,
     };
   }
 
@@ -288,6 +318,130 @@ function extractDigestTopic(text: string) {
 
 function isStatusQuery(text: string) {
   return /^(状态|查询状态|查看状态|运行状态|status)$/i.test(text.trim());
+}
+
+function parseScheduleMaintenance(text: string):
+  | {
+      taskType:
+        | typeof runtimeTaskTypes.scheduleList
+        | typeof runtimeTaskTypes.scheduleDelete
+        | typeof runtimeTaskTypes.schedulePause
+        | typeof runtimeTaskTypes.scheduleResume
+        | typeof runtimeTaskTypes.scheduleRunNow;
+      confidence: number;
+      objective: string;
+      payload: Record<string, unknown>;
+    }
+  | undefined {
+  if (/(列出|查看|查询|list|show).*(定时任务|计划任务|schedule|cron)/i.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.scheduleList,
+      confidence: 0.9,
+      objective: 'List schedules',
+      payload: {},
+    };
+  }
+
+  if (/(删除|删掉|移除|delete|remove).*(定时任务|计划任务|任务|schedule|cron|日报|提醒)/i.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.scheduleDelete,
+      confidence: 0.86,
+      objective: 'Delete schedules',
+      payload: parseScheduleSelector(text, ['删除', '删掉', '移除', 'delete', 'remove']),
+    };
+  }
+
+  if (/(暂停|停用|pause).*(定时任务|计划任务|任务|schedule|cron|日报|提醒)/i.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.schedulePause,
+      confidence: 0.86,
+      objective: 'Pause schedules',
+      payload: parseScheduleSelector(text, ['暂停', '停用', 'pause']),
+    };
+  }
+
+  if (/(恢复|启用|resume).*(定时任务|计划任务|任务|schedule|cron|日报|提醒)/i.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.scheduleResume,
+      confidence: 0.86,
+      objective: 'Resume schedules',
+      payload: parseScheduleSelector(text, ['恢复', '启用', 'resume']),
+    };
+  }
+
+  if (/(立即运行|现在运行|手动跑|跑一次|run\s*now).*(定时任务|计划任务|任务|schedule|cron|日报|提醒)/i.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.scheduleRunNow,
+      confidence: 0.82,
+      objective: 'Run schedule now',
+      payload: parseScheduleSelector(text, ['立即运行', '现在运行', '手动跑', '跑一次', 'run now']),
+    };
+  }
+
+  return undefined;
+}
+
+function parseScheduleSelector(text: string, verbs: string[]) {
+  const payload: Record<string, unknown> = {};
+  const first = text.match(/前\s*([一二两三四五六七八九十\d]+)\s*个/);
+  if (first) {
+    payload.first = parseCount(first[1]);
+    return payload;
+  }
+
+  const index = text.match(/第\s*([一二两三四五六七八九十\d]+)\s*个?/);
+  if (index) {
+    payload.index = parseCount(index[1]);
+    return payload;
+  }
+
+  const id = text.match(/\bcron-[a-z0-9-]+\b/i);
+  if (id) {
+    payload.id = id[0];
+    return payload;
+  }
+
+  const verbPattern = verbs.map(escapeRegex).join('|');
+  const nameMatch = text.match(new RegExp(`(?:${verbPattern})\\s*([^，。,.]+)`, 'i'));
+  const name = nameMatch ? cleanScheduleName(nameMatch[1]) : undefined;
+  if (name) {
+    payload.name = name;
+  }
+
+  return payload;
+}
+
+function parseCount(value: string) {
+  if (/^\d+$/.test(value)) {
+    return Number(value);
+  }
+
+  const numbers: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  return numbers[value] || 1;
+}
+
+function cleanScheduleName(value: string) {
+  const cleaned = cleanText(value)
+    .replace(/^(一下|这个|那个|我的)\s*/, '')
+    .replace(/(定时任务|计划任务|schedule|cron|任务)$/i, '')
+    .trim();
+  return cleaned || undefined;
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function looksLikeScheduleRequest(text: string) {

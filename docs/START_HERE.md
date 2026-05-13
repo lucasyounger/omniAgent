@@ -8,9 +8,10 @@ Purpose: load the smallest useful context before changing OmniAgent.
 2. `docs/agents/README.md`
 3. `docs/ARCHITECTURE.md` when changing runtime behavior
 4. `docs/CODE_SEARCH.md` when changing source code
-5. The one relevant `docs/agents/*.md` card
-6. One context pack from `docs/CONTEXT_PACKS.md`
-7. Only then read linked source files
+5. `docs/CHANGE_GATES.md` before behavior-changing edits
+6. The one relevant `docs/agents/*.md` card
+7. One context pack from `docs/CONTEXT_PACKS.md`
+8. Only then read linked source files
 
 ## Do Not Start With
 
@@ -33,3 +34,6 @@ same task, update or add tests, then refresh `~/.omni/memory/MEMORY_INDEX.json`.
 If GitNexus or another code index is used for this repo, refresh it after
 successful typecheck/tests when the code change should be discoverable by later
 agents.
+
+Run `npm run verify` before commit. It includes typecheck, tests, and the
+code/docs/tests sync guard.

@@ -48,6 +48,9 @@ or `startClaudeCodeTask` directly.
 
 Current dispatcher handlers include:
 
+- `schedule-handler`: creates and maintains schedule records through
+  `schedule.create`, `schedule.list`, `schedule.delete`, `schedule.pause`,
+  `schedule.resume`, and `schedule.run_now`.
 - `code-agent`: starts Claude Code through Tool Gateway approval policy. If a
   code task does not carry an approval token, dispatch records the approval
   requirement and moves the Runtime Task to `waiting_user_confirm`.
@@ -64,6 +67,29 @@ For channel schedules, the Cron payload should include:
 
 Cron copies `payload.source` into Runtime Task metadata so the delivery worker
 can reconstruct the outbound target when the schedule fires.
+
+## Schedule Maintenance And Approval
+
+Schedule maintenance is routed through RuntimeTask rather than direct agent
+tool calls:
+
+- `schedule.list`: returns current schedule records.
+- `schedule.delete`: deletes records selected by `id`, `ids`, 1-based
+  `index`, `indexes`, `first`, or name/query match.
+- `schedule.pause`: changes selected records to `paused`.
+- `schedule.resume`: changes selected records to `active`.
+- `schedule.run_now`: triggers one schedule immediately.
+
+Create/list/delete/pause/resume are audited through Tool Gateway but do not
+require security approval. `schedule.run_now` uses dynamic policy:
+
+- Ordinary reminder, research, notify, or knowledge tasks run without approval.
+- Direct code execution schedules require Tool Gateway approval.
+- Patch-proposal code schedules are not treated as direct high-risk execution.
+
+Chat confirmation is a separate UX concern. For example, confirming deletion
+of multiple schedules should be implemented as a conversation confirmation
+state, not as Tool Gateway approval.
 
 Legacy jobs without `taskType`, `targetAgentId`, or `payload` are upgraded at
 creation time. Old records still run by inferring:

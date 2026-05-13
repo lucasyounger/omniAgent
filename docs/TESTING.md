@@ -17,6 +17,10 @@ stable contract.
 
 - `npm test`: run the focused Vitest suite.
 - `npm run typecheck`: verify strict TypeScript.
+- `npm run verify:change-sync`: fail if source behavior changes are not
+  accompanied by docs and tests, or if GitNexus support files are missing.
+- `npm run verify`: run typecheck, tests, and change sync verification.
+- `npm run index:code`: refresh the GitNexus code index after verification.
 - `npm run build`: verify Mastra bundle when runtime wiring changes.
 
 ## Current Coverage
@@ -31,6 +35,7 @@ stable contract.
   - sender pairing and allowlist
   - basic command routing
   - task command validation
+  - natural-language schedule creation through RuntimeTask
 - `tests/code-task-store.test.ts`
   - dry-run task summary persistence
   - status and list recovery after module reload
@@ -53,6 +58,10 @@ stable contract.
   - invalid runtime transitions are rejected
   - failed tasks transition through `retrying` before retry task creation
 - `tests/task-dispatcher.test.ts`
+  - `schedule.create` persists cron jobs
+  - schedule list/delete/pause/resume RuntimeTasks dispatch without approval
+  - direct-code `schedule.run_now` moves to `waiting_user_confirm`
+  - research daily digest queues notify delivery
   - code tasks without approval move to `waiting_user_confirm`
   - approved dry-run code tasks dispatch and become `succeeded`
 - `tests/approval-store.test.ts`
@@ -60,6 +69,13 @@ stable contract.
 - `tests/gateway-store.test.ts`
   - delivery idempotency
   - retry attempts and dead-letter transition
+- `tests/orchestrator.test.ts`
+  - one-time reminders and daily AI digest schedule parsing
+  - schedule maintenance parsing for list/delete/pause/resume
+- `tests/tool-approval-policy.test.ts`
+  - memory writes, schedule writes, and schedule deletes do not require approval
+  - non-code `run_now` does not require approval
+  - direct-code `run_now` requires Tool Gateway approval
 
 ## Add Tests When
 

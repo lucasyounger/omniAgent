@@ -1,5 +1,7 @@
 # CronAgent Context
 
-CronAgent owns scheduled job records, not execution-loop scheduling yet.
+CronAgent owns scheduled job records and the in-process due-job scheduler.
 
-It should create clear records and explain the first-version limitation when needed.
+It should create clear records and dispatch due work through RuntimeTask. New
+schedule creation and maintenance should prefer `scheduler-runtime` and
+`schedule.*` RuntimeTasks over direct `cron-agent` task targeting.

@@ -18,6 +18,8 @@ source files.
 - `channels/`: Omni Gateway adapters for phone messaging apps.
 - `ARCHITECTURE.md`: compact system overview and lifecycle rules.
 - `CODE_SEARCH.md`: GitNexus/code index workflow and refresh policy.
+- `CHANGE_GATES.md`: required context, search, sync, and verification gates
+  before behavior-changing commits.
 - `TESTING.md`: test rules and required verification commands.
 - `knowledge/`: durable facts about projects, tools, and operating procedures.
 - `skills/`: reusable task playbooks for agents.

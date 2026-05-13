@@ -80,5 +80,6 @@ When code changes affect behavior:
 - Update relevant docs and agent cards.
 - Update or add tests.
 - Refresh `~/.omni/memory/MEMORY_INDEX.json`.
+- Run `npm run verify:change-sync`.
 - Refresh GitNexus/code index when the change should be discoverable by future
   code search.

@@ -29,9 +29,28 @@ Approval requests can be approved or rejected through the Approval Store API.
 Approval issues an `approvalToken`; rejection can cancel the linked Runtime
 Task.
 
+## Approval Model
+
+Use three distinct layers:
+
+- Audit-only execution: safe and medium-risk operations that should be recorded
+  but should not interrupt the user.
+- Chat confirmation: user-experience confirmation for ambiguous or bulk
+  operations, such as deleting several schedules. This is not Tool Gateway
+  approval.
+- Security approval: high-risk side effects, such as direct code execution,
+  shell/file mutation, secret access, or external write-heavy actions.
+
+For schedule operations, create/list/delete/pause/resume are audit-only today.
+Immediate run is dynamic: ordinary scheduled reminders do not need approval,
+while direct code execution schedules require Tool Gateway approval.
+
 ## Cron Records
 
-CronAgent currently manages scheduled job records under `~/.omni/runs/cron-runs/jobs.json`. A persistent execution loop is planned as a later extension.
+CronAgent currently manages scheduled job records under
+`~/.omni/runs/cron-runs/jobs.json`. Schedule create/list/delete/pause/resume
+and run-now maintenance can be routed through RuntimeTask `schedule.*` handler
+paths.
 
 ## Docs Memory
 

@@ -27,17 +27,26 @@ TaskRuntime.
   channel.message` and payload source metadata.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
   preserving legacy `task`, `targetAgent`, and `workspacePath` records.
+- Schedule maintenance can also enter through Runtime Tasks handled by
+  `schedule-handler`: `schedule.list`, `schedule.delete`, `schedule.pause`,
+  `schedule.resume`, and `schedule.run_now`.
 - Records `lastRunTaskId` and `lastRunTeamTaskId` as the created runtime/team
   task id. `lastRunTeamRunId` is only present if a later executor creates a run
   synchronously.
 - Records `lastDispatchStatus` and optional `lastDispatchError` for the
   immediate dispatch attempt.
+- Ordinary create/list/delete/pause/resume schedule maintenance is audited but
+  does not require Tool Gateway approval. Manual `schedule.run_now` dynamically
+  requires approval only when it would trigger direct code execution.
 
 ## Known Pitfalls
 
 - Cron is not the result protocol. Results belong to Team Runtime.
 - Cron is not an executor. It should dispatch to TaskRuntime and let routing or
   specialist agents execute the task.
+- Deleting or pausing a schedule is schedule maintenance, not high-risk
+  execution. Bulk operations may need chat confirmation in a future UX layer,
+  but they should not be represented as Tool Gateway security approval.
 - The scheduler is in-process; jobs do not run while OmniAgent is stopped.
 - One-time jobs pause after starting to avoid repeated execution.
 - The cron store must self-initialize missing directories and `jobs.json`.

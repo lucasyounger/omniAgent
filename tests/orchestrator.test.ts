@@ -49,6 +49,38 @@ describe('Runtime Orchestrator', () => {
     });
   });
 
+  it('parses schedule maintenance requests into runtime tasks', () => {
+    expect(orchestrateChannelMessage(message('列出我的定时任务'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.list',
+      targetAgentId: 'scheduler-runtime',
+    });
+
+    expect(orchestrateChannelMessage(message('删除前两个定时任务'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.delete',
+      payload: {
+        first: 2,
+      },
+    });
+
+    expect(orchestrateChannelMessage(message('暂停 AI Agents 日报任务'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.pause',
+      payload: {
+        name: 'AI Agents 日报',
+      },
+    });
+
+    expect(orchestrateChannelMessage(message('恢复第3个任务'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.resume',
+      payload: {
+        index: 3,
+      },
+    });
+  });
+
   it('asks for clarification when schedule-like messages are incomplete', () => {
     const decision = orchestrateChannelMessage(message('帮我建个定时任务'));
 

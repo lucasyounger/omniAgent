@@ -13,3 +13,4 @@ dist
 .gateway.err.log
 .gateway.pid
 output.txt
+.gitnexus

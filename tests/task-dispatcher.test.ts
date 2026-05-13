@@ -90,6 +90,131 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('dispatches schedule maintenance tasks without approval', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { createCronJob, listCronJobs } = await import('../src/mastra/lib/cron-store');
+    const job1 = await createCronJob({
+      name: 'first reminder',
+      schedule: 'daily 09:00',
+      task: 'first',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    });
+    const job2 = await createCronJob({
+      name: 'second reminder',
+      schedule: 'daily 10:00',
+      task: 'second',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    });
+
+    const listTask = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'list schedules',
+      metadata: {
+        taskType: 'schedule.list',
+        payload: {},
+      },
+    });
+    const pauseTask = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'pause first schedule',
+      metadata: {
+        taskType: 'schedule.pause',
+        payload: { id: job1.id },
+      },
+    });
+    const resumeTask = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'resume first schedule',
+      metadata: {
+        taskType: 'schedule.resume',
+        payload: { index: 1 },
+      },
+    });
+    const deleteTask = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'delete first two schedules',
+      metadata: {
+        taskType: 'schedule.delete',
+        payload: { first: 2 },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(listTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      handler: 'schedule-handler',
+      result: {
+        scheduleCount: 2,
+      },
+    });
+    await expect(dispatchRuntimeTask(pauseTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: {
+        scheduleIds: [job1.id],
+        status: 'paused',
+      },
+    });
+    await expect(dispatchRuntimeTask(resumeTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: {
+        scheduleIds: [job1.id],
+        status: 'active',
+      },
+    });
+    await expect(dispatchRuntimeTask(deleteTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: {
+        deletedCount: 2,
+        deletedScheduleIds: [job1.id, job2.id],
+      },
+    });
+    await expect(listCronJobs()).resolves.toHaveLength(0);
+  });
+
+  it('moves direct code schedule.run_now tasks into waiting_user_confirm', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { createCronJob } = await import('../src/mastra/lib/cron-store');
+    const job = await createCronJob({
+      name: 'direct code',
+      schedule: 'daily 09:00',
+      task: 'change files',
+      taskType: 'code.claude_code_task',
+      targetAgentId: 'code-agent',
+      payload: {
+        workspacePath: tempRoot,
+        objective: 'change files',
+        executionMode: 'direct',
+      },
+    });
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'run direct code schedule',
+      metadata: {
+        taskType: 'schedule.run_now',
+        payload: {
+          id: job.id,
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'waiting_user_confirm',
+      targetAgentId: 'scheduler-runtime',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'waiting_user_confirm',
+    });
+  });
+
   it('dispatches notify.send_channel_message tasks into the delivery queue', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { listDeliveries } = await import('../src/gateway/gateway-store');

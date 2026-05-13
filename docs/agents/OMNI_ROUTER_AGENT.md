@@ -38,6 +38,12 @@ messages to report completed delegated tasks.
 - Mark inbox messages read after presenting or acknowledging them.
 - Prefer Team Runtime task ids over ad hoc code task ids for cross-agent
   coordination.
+- For scheduled work, create Runtime Tasks with `taskType: schedule.create`,
+  `targetAgentId: scheduler-runtime`, and a structured schedule payload. Do not
+  create new work targeting `cron-agent` directly.
+- For schedule maintenance, prefer Runtime Tasks such as `schedule.list`,
+  `schedule.delete`, `schedule.pause`, `schedule.resume`, and
+  `schedule.run_now`.
 - Do not directly start CodeAgent, CronAgent, or KnowledgeAgent tools. Create a
   Runtime Task and let Task Dispatcher or specialist handlers execute it.
 

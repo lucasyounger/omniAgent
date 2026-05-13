@@ -9,7 +9,10 @@
     "build": "mastra build",
     "start": "mastra start",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:change-sync": "node scripts/verify-change-sync.mjs",
+    "index:code": "npx gitnexus analyze",
+    "verify": "npm run typecheck && npm test && npm run verify:change-sync"
   },
   "engines": {
     "node": ">=22.13.0"

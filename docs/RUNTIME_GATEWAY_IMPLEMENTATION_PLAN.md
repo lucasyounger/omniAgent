@@ -82,6 +82,7 @@ QQBot / OneBot / HTTP / CLI
 - 2026-05-13 Step 5 代码已实现，真实 QQ 消息回环未验证：QQBot adapter 增加安全状态查询和事件归一化测试；`.env` QQBot 凭据可获取 access token，websocket 可进入 READY，Gateway `/qqbot/status` 返回正常。尚未由用户在 QQ 内发送真实 C2C/group-at 消息验证“定时创建 -> 触发 -> 回到同一 QQ 会话”。
 - 2026-05-13 Step 6 代码已实现，真实 QQ 覆盖未验证：新增 Runtime Orchestrator 规则解析和严格 JSON schema 校验；Gateway 自然语言入口统一转换为 `taskType + payload + notifyTarget` RuntimeTask，覆盖一次性提醒、每日 AI 日报、即时通知、状态查询和低置信度澄清。已通过 `npm test`、`npm run typecheck`、`npm run dev` 端口探测、临时 Gateway HTTP 日报创建验证；尚未完成 QQBot 真实每日定时、一次性提醒、查询状态验收。
 - 2026-05-13 Step 7 已完成：新增独立 RuntimeTask file store 和 append-only runtime timeline；TaskRuntime 写入 `~/.omni/runs/runtime-tasks`，保留 TeamTask metadata 镜像并支持旧 TeamTask-only 数据按需迁移；runtime record/timeline 保留 `resultRef`、`approvalRequestId`、`approvalToken`。已通过迁移测试、审批链路测试、`npm test`、`npm run typecheck`、`npm run dev` 端口探测。
+- 2026-05-13 Step 8 已完成：补齐 schedule 维护 RuntimeTask 类型和审批策略。Router prompt 改为 `schedule.create + scheduler-runtime`，不再引导创建 `cron-agent` 任务；Dispatcher 支持 `schedule.list/delete/pause/resume/run_now`；普通 schedule 维护只审计不审批，`schedule.run_now` 对 direct code 任务动态要求 Tool Gateway approval。已通过 `npm test`、`npm run typecheck`；GitNexus index 已刷新。
 
 ### Step 1: Runtime/Gateway 协议地基
 
@@ -174,6 +175,36 @@ QQBot / OneBot / HTTP / CLI
 - `npm test`
 - `npm run typecheck`
 - Git commit + push 到 GitHub。
+
+### Step 8: Schedule 维护 Runtime 化和动态审批
+
+目标：
+- Router fallback 创建 `schedule.create` RuntimeTask，目标为
+  `scheduler-runtime`，不再把定时任务路由到 `cron-agent`。
+- Runtime task registry 增加 `schedule.list`、`schedule.delete`、
+  `schedule.pause`、`schedule.resume`、`schedule.run_now`。
+- Dispatcher schedule handler 支持查看、删除、暂停、恢复和手动触发。
+- 普通 schedule 维护只写 Tool Gateway audit；`schedule.run_now` 根据
+  被触发任务类型动态决定是否要求 approval。
+
+验收：
+- Orchestrator 测试覆盖“列出定时任务 / 删除前两个 / 暂停 / 恢复”。
+- Dispatcher 测试覆盖 schedule 维护 RuntimeTask。
+- Tool policy 测试覆盖删除 schedule 不需要 approval、普通 run_now 不需要
+  approval、direct code run_now 需要 approval。
+- `npm test`
+- `npm run typecheck`
+
+### 后续 P1: UX confirmation 和可恢复删除
+
+目标：
+- 批量删除、跨会话发送、覆盖长期记忆等动作增加聊天确认层。
+- 明确区分聊天确认 confirmation 和 Tool Gateway 安全审批 approval。
+- CronJob 增加删除审计字段并评估 soft delete/restore/purge。
+
+验收：
+- 会话确认状态可过期、可取消、不可跨用户误用。
+- 单元测试覆盖确认令牌、批量删除确认和高危 approval 不被绕过。
 
 ## 每轮工作规则
 

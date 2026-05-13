@@ -11,7 +11,8 @@ TaskRuntime controls runtime status transitions such as
 `waiting_user_confirm`, `retrying`, and `paused`.
 
 Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
-handler execution by `targetAgentId`.
+handler execution primarily by `taskType`, with `targetAgentId` retained as an
+executor hint and compatibility field.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be
@@ -103,8 +104,9 @@ approval linkage.
   `teamTaskId`.
 - CodeAgent writes stdout/stderr progress as events.
 - CodeAgent writes completed or failed results and notifies inbox recipients.
-- Cron creates CodeAgent work through the same Team Runtime path and stores
-  `lastRunTeamTaskId` and `lastRunTeamRunId` on cron job records.
+- Cron creates Runtime Tasks through the same Team Runtime path and stores
+  `lastRunTaskId`, `lastRunTeamTaskId`, and dispatch status on cron job
+  records.
 - Startup recovery marks runs left in `running` as `interrupted`.
 - Timeout scanning marks overdue running runs as `timed_out`.
 - Team Runtime supports cancellation and retry task creation.
@@ -112,10 +114,12 @@ approval linkage.
 - Invalid runtime transitions throw before task metadata is changed.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
-- Task Dispatcher currently supports `code-agent` tasks and uses Tool Gateway
-  before starting Claude Code. It also supports basic `knowledge-agent`
-  handlers for memory index, episodic log, and doc update proposal tasks. Code
-  tasks without approval move to `waiting_user_confirm`.
+- Task Dispatcher currently supports code, knowledge, channel, notify,
+  research, and schedule-handler task types. Code tasks without approval move
+  to `waiting_user_confirm`.
+- Schedule create/list/delete/pause/resume maintenance tasks are audited but do
+  not require Tool Gateway approval. `schedule.run_now` dynamically requires
+  approval when it would trigger direct code execution.
 - Dispatcher uses `dispatchLeaseId` and `dispatchLeaseExpiresAt` metadata to
   reduce duplicate dispatch.
 

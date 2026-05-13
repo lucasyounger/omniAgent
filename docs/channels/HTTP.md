@@ -37,6 +37,14 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
   a `channel.message` reminder.
 - `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for
   `research.ai_daily_digest`.
+- `列出我的定时任务` creates a `schedule.list` RuntimeTask.
+- `删除前两个定时任务` creates a `schedule.delete` RuntimeTask with `first: 2`.
+- `暂停 AI Agents 日报任务` creates a `schedule.pause` RuntimeTask using a
+  name/query selector.
+- `恢复第3个任务` creates a `schedule.resume` RuntimeTask using a 1-based
+  index selector.
+- `手动跑一次第3个任务` creates a `schedule.run_now` RuntimeTask. Direct code
+  schedules still require Tool Gateway approval.
 - `通知我：hello` creates a `notify.send_channel_message` task.
 - `状态` returns Gateway runtime status.
 
