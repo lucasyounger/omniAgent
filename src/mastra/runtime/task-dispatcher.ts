@@ -1,9 +1,11 @@
 import { startClaudeCodeTask } from '../lib/code-task-store';
 import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
 import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
+import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
+import { runtimeTaskTypes } from './task-types';
 
 const dispatchCodeTaskPolicy = {
   risk: 'dangerous',
@@ -19,6 +21,7 @@ export type DispatchResult =
       targetAgentId: string;
       handler: string;
       runId?: string;
+      result?: Record<string, unknown>;
     }
   | {
       taskId: string;
@@ -48,6 +51,15 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
   }
 
   const leased = await leaseTask(task);
+  const taskType = readTaskType(leased);
+
+  if (taskType === runtimeTaskTypes.scheduleCreate) {
+    return dispatchScheduleCreateTask(leased);
+  }
+
+  if (taskType === runtimeTaskTypes.channelMessage) {
+    return dispatchChannelGatewayTask(leased);
+  }
 
   if (leased.targetAgentId === 'code-agent') {
     return dispatchCodeTask(leased);
@@ -97,6 +109,112 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     targetAgentId: task.targetAgentId,
     reason: `No dispatcher handler for target agent: ${task.targetAgentId}`,
   };
+}
+
+async function dispatchScheduleCreateTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const name = stringValue(payload.name);
+  const schedule = stringValue(payload.schedule);
+  const scheduledTask = stringValue(payload.task);
+  const scheduledTaskType = stringValue(payload.taskType);
+  const scheduledTargetAgentId = stringValue(payload.targetAgentId);
+  const scheduledTargetAgent = stringValue(payload.targetAgent);
+  const workspacePath = stringValue(payload.workspacePath);
+  const scheduledPayload = objectValue(payload.payload);
+  const notifyTarget = objectValue(payload.notifyTarget || task.metadata?.notifyTarget);
+
+  if (!name || !schedule || !scheduledTask) {
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: 'schedule.create requires payload.name, payload.schedule, and payload.task.',
+      sourceAgentId: 'task-dispatcher',
+    });
+    return {
+      taskId: task.id,
+      status: 'failed',
+      targetAgentId: task.targetAgentId,
+      reason: 'schedule.create requires payload.name, payload.schedule, and payload.task.',
+    };
+  }
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Creating schedule.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'schedule-handler',
+  });
+
+  try {
+    const { createCronJob } = await import('../lib/cron-store');
+    const job = await createCronJob({
+      name,
+      schedule,
+      task: scheduledTask,
+      taskType: scheduledTaskType,
+      targetAgent: scheduledTargetAgent,
+      targetAgentId: scheduledTargetAgentId,
+      workspacePath,
+      payload: scheduledPayload,
+      notifyTarget: isChannelTargetLike(notifyTarget) ? notifyTarget : undefined,
+    });
+
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'schedule-handler',
+      summary: `Schedule created: ${job.id}`,
+      output: JSON.stringify(job, null, 2),
+      metadata: {
+        taskType: runtimeTaskTypes.scheduleCreate,
+        scheduleId: job.id,
+      },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: 'Schedule created.',
+      sourceAgentId: 'task-dispatcher',
+      metadata: {
+        resultRef: result.resultRef,
+        scheduleId: job.id,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'schedule-handler',
+      runId: run.runId,
+      result: {
+        scheduleId: job.id,
+        schedule: job.schedule,
+        taskType: job.taskType,
+        targetAgentId: job.targetAgentId,
+      },
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'schedule-handler',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
+    });
+    throw error;
+  }
 }
 
 async function dispatchChannelGatewayTask(task: RuntimeTask): Promise<DispatchResult> {
@@ -384,6 +502,10 @@ function readPayload(task: RuntimeTask) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function readTaskType(task: RuntimeTask) {
+  return typeof task.metadata?.taskType === 'string' ? task.metadata.taskType : undefined;
+}
+
 async function leaseTask(task: RuntimeTask) {
   return taskRuntime.transition({
     taskId: task.id,
@@ -409,4 +531,21 @@ function stringValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   return typeof value === 'boolean' ? value : false;
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function isChannelTargetLike(value: unknown): value is ChannelTarget {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const target = value as Record<string, unknown>;
+  return (
+    typeof target.channel === 'string' &&
+    typeof target.accountId === 'string' &&
+    typeof target.conversationId === 'string' &&
+    typeof target.messageType === 'string'
+  );
 }

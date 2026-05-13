@@ -30,6 +30,66 @@ afterEach(async () => {
 });
 
 describe('Task Dispatcher', () => {
+  it('dispatches schedule.create tasks and persists cron jobs', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: 'create channel reminder',
+      metadata: {
+        taskType: 'schedule.create',
+        payload: {
+          name: 'reply hello',
+          schedule: '2026-05-12 21:08',
+          task: '你好',
+          taskType: 'channel.message',
+          targetAgentId: 'channel-gateway',
+          payload: {
+            text: '你好',
+          },
+          notifyTarget: {
+            channel: 'http',
+            accountId: 'local',
+            conversationId: 'conv-1',
+            senderId: 'user-1',
+            messageType: 'dm',
+          },
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const jobs = await listCronJobs();
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: 'scheduler-runtime',
+      handler: 'schedule-handler',
+      result: {
+        scheduleId: jobs[0].id,
+      },
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      schedule: '2026-05-12 21:08',
+      task: '你好',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+      notifyTarget: {
+        channel: 'http',
+        conversationId: 'conv-1',
+      },
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        scheduleId: jobs[0].id,
+      },
+    });
+  });
+
   it('moves code tasks without approval into waiting_user_confirm', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({

@@ -73,6 +73,11 @@ QQBot / OneBot / HTTP / CLI
 
 ## 分阶段实施
 
+## 实施记录
+
+- 2026-05-13 Step 1 已完成：建立 `taskType` registry、`notifyTarget` 持久化和 Delivery 读取优先级；已通过 `npm test`、`npm run typecheck`、`npm run dev` API 验证，并推送到 GitHub。
+- 2026-05-13 Step 2 已完成：Gateway 定时自然语言入口改为创建 `schedule.create` RuntimeTask；Dispatcher 按 `taskType` 进入 schedule handler；handler 持久化 Schedule 并返回结构化结果。已通过 `npm test`、`npm run typecheck`、`npm run dev` API 验证。
+
 ### Step 1: Runtime/Gateway 协议地基
 
 目标：

@@ -88,6 +88,7 @@ describe('Gateway message handler', () => {
   it('creates channel reminder cron jobs directly from natural language', async () => {
     const { handleChannelMessage } = await loadHandler();
     const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+    const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
     const input = message(
       '\u5e2e\u6211\u5b9a\u4e00\u4e2a\u5b9a\u65f6\u4efb\u52a1\uff0c\u4eca\u592921\u70b908\u5206\uff0cOmniAgent\u7ed9\u6211\u56de\u590d\u4e00\u53e5\uff1a\u4f60\u597d',
       'trusted',
@@ -99,9 +100,22 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
     const jobs = await listCronJobs();
+    const tasks = await listTeamTasks();
 
     expect(replies[0].text).toContain('\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f');
+    expect(replies[0].text).toContain('Runtime Task:');
     expect(jobs).toHaveLength(1);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      status: 'completed',
+      metadata: {
+        taskType: 'schedule.create',
+        runtimeStatus: 'succeeded',
+        scheduleId: jobs[0].id,
+      },
+    });
     expect(jobs[0]).toMatchObject({
       schedule: '2026-05-12 21:08',
       task: '\u4f60\u597d',

@@ -1,6 +1,8 @@
 import { startClaudeCodeTask } from '../mastra/lib/code-task-store';
-import { createCronJob } from '../mastra/lib/cron-store';
 import { createTeamTask } from '../mastra/lib/team-runtime-store';
+import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
+import { taskRuntime } from '../mastra/runtime/task-runtime';
+import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage } from './types';
@@ -36,14 +38,28 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
 
   const scheduleRequest = parseChannelScheduleRequest(message);
   if (scheduleRequest) {
-    const job = await createCronJob(scheduleRequest);
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'scheduler-runtime',
+      objective: `Create schedule: ${scheduleRequest.name}`,
+      requestedBy: `${message.channel}:${message.senderId}`,
+      metadata: {
+        taskType: runtimeTaskTypes.scheduleCreate,
+        payload: scheduleRequest,
+        notifyTarget: scheduleRequest.notifyTarget,
+        source: channelSourceFromMessage(message),
+      },
+    });
+    const dispatch = await dispatchRuntimeTask(task.id);
+    const scheduleId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.scheduleId) : undefined;
     return [
       reply(
         message,
         [
           '\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f\u3002',
-          `Cron Job: ${job.id}`,
-          `\u6267\u884c\u65f6\u95f4: ${job.schedule}`,
+          `Runtime Task: ${task.id}`,
+          scheduleId ? `Cron Job: ${scheduleId}` : `Dispatch: ${dispatch.status}`,
+          `\u6267\u884c\u65f6\u95f4: ${scheduleRequest.schedule}`,
           `\u56de\u590d\u5185\u5bb9: ${scheduleRequest.payload.text}`,
         ].join('\n'),
       ),
@@ -258,4 +274,8 @@ function formatLocalSchedule(date: Date, hours: number, minutes: number) {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
