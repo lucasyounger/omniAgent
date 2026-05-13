@@ -1,5 +1,6 @@
 import { startClaudeCodeTask } from '../mastra/lib/code-task-store';
 import { createTeamTask } from '../mastra/lib/team-runtime-store';
+import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
@@ -36,38 +37,80 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
     return [reply(message, await handleTaskCommand(message, text.slice('/task '.length)))];
   }
 
-  const scheduleRequest = parseChannelScheduleRequest(message);
-  if (scheduleRequest) {
-    const task = await taskRuntime.createTask({
-      sourceAgentId: 'channel-gateway',
-      targetAgentId: 'scheduler-runtime',
-      objective: `Create schedule: ${scheduleRequest.name}`,
-      requestedBy: `${message.channel}:${message.senderId}`,
-      metadata: {
-        taskType: runtimeTaskTypes.scheduleCreate,
-        payload: scheduleRequest,
-        notifyTarget: scheduleRequest.notifyTarget,
-        source: channelSourceFromMessage(message),
-      },
-    });
-    const dispatch = await dispatchRuntimeTask(task.id);
-    const scheduleId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.scheduleId) : undefined;
-    return [
-      reply(
-        message,
-        [
-          '\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f\u3002',
-          `Runtime Task: ${task.id}`,
-          scheduleId ? `Cron Job: ${scheduleId}` : `Dispatch: ${dispatch.status}`,
-          `\u6267\u884c\u65f6\u95f4: ${scheduleRequest.schedule}`,
-          `\u56de\u590d\u5185\u5bb9: ${scheduleRequest.payload.text}`,
-        ].join('\n'),
-      ),
-    ];
+  const orchestratorDecision = orchestrateChannelMessage(message);
+  if (orchestratorDecision.kind === 'status') {
+    return [reply(message, orchestratorDecision.message)];
+  }
+
+  if (orchestratorDecision.kind === 'clarify') {
+    return [reply(message, orchestratorDecision.question)];
+  }
+
+  if (orchestratorDecision.kind === 'runtime_task') {
+    return [reply(message, await handleRuntimeTaskDecision(message, orchestratorDecision))];
   }
 
   const response = await callOmniRouter(message, config);
   return [reply(message, response)];
+}
+
+async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extract<OrchestratorDecision, { kind: 'runtime_task' }>) {
+  const task = await taskRuntime.createTask({
+    sourceAgentId: 'channel-gateway',
+    targetAgentId: decision.targetAgentId,
+    objective: decision.objective,
+    requestedBy: `${message.channel}:${message.senderId}`,
+    metadata: {
+      taskType: decision.taskType,
+      payload: decision.payload,
+      notifyTarget: decision.notifyTarget,
+      source: decision.source,
+      orchestrator: {
+        confidence: decision.confidence,
+      },
+    },
+  });
+  const dispatch = await dispatchRuntimeTask(task.id);
+
+  if (decision.taskType === runtimeTaskTypes.scheduleCreate) {
+    const scheduleId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.scheduleId) : undefined;
+    const scheduledTaskType = stringValue(decision.payload.taskType);
+    const scheduledPayload = objectValue(decision.payload.payload);
+    const scheduledText = stringValue(scheduledPayload?.text) || stringValue(decision.payload.task);
+    return [
+      '\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f\u3002',
+      `Runtime Task: ${task.id}`,
+      scheduleId ? `Cron Job: ${scheduleId}` : `Dispatch: ${dispatch.status}`,
+      `\u6267\u884c\u65f6\u95f4: ${decision.payload.schedule}`,
+      scheduledTaskType ? `\u4efb\u52a1\u7c7b\u578b: ${scheduledTaskType}` : undefined,
+      scheduledText ? `\u56de\u590d\u5185\u5bb9: ${scheduledText}` : undefined,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.notifySendChannelMessage) {
+    const deliveryId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.deliveryId) : undefined;
+    return [
+      '\u901a\u77e5\u4efb\u52a1\u5df2\u521b\u5efa\u3002',
+      `Runtime Task: ${task.id}`,
+      deliveryId ? `Delivery: ${deliveryId}` : `Dispatch: ${dispatch.status}`,
+    ].join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.researchAiDailyDigest) {
+    const deliveryId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.deliveryId) : undefined;
+    return [
+      'AI \u65e5\u62a5\u4efb\u52a1\u5df2\u521b\u5efa\u3002',
+      `Runtime Task: ${task.id}`,
+      `Dispatch: ${dispatch.status}`,
+      deliveryId ? `Delivery: ${deliveryId}` : undefined,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
+  return ['Runtime Task \u5df2\u521b\u5efa\u3002', `Runtime Task: ${task.id}`, `Dispatch: ${dispatch.status}`].join('\n');
 }
 
 async function authorizeMessage(message: ChannelMessage, config: GatewayConfig): Promise<{ allowed: boolean; reason: string }> {
@@ -178,7 +221,7 @@ function helpText() {
     '/task <workspacePath> :: <objective> \u521b\u5efa\u5f02\u6b65 CodeAgent \u4efb\u52a1',
     '/pair <token> \u914d\u5bf9\u5f53\u524d\u4f1a\u8bdd',
     '',
-    '\u666e\u901a\u81ea\u7136\u8bed\u8a00\u6d88\u606f\u4f1a\u8f6c\u53d1\u7ed9 OmniRouterAgent \u5e76\u540c\u6b65\u56de\u590d\u3002',
+    '\u81ea\u7136\u8bed\u8a00\u53ef\u521b\u5efa\u5b9a\u65f6\u63d0\u9192\u3001AI \u65e5\u62a5\u548c\u901a\u77e5\uff1b\u5176\u4ed6\u6d88\u606f\u4f1a\u8f6c\u53d1\u7ed9 OmniRouterAgent \u5e76\u540c\u6b65\u56de\u590d\u3002',
   ].join('\n');
 }
 
@@ -190,92 +233,10 @@ function reply(message: ChannelMessage, text: string): OutboundMessage {
   };
 }
 
-function targetFromMessage(message: ChannelMessage) {
-  return {
-    channel: message.channel,
-    accountId: message.accountId,
-    conversationId: message.conversationId,
-    senderId: message.senderId,
-    messageType: message.messageType,
-  };
-}
-
-function parseChannelScheduleRequest(message: ChannelMessage):
-  | {
-      name: string;
-      schedule: string;
-      task: string;
-      taskType: string;
-      targetAgentId: string;
-      payload: Record<string, unknown>;
-      notifyTarget: ReturnType<typeof targetFromMessage>;
-    }
-  | undefined {
-  const text = message.text.trim();
-  const scheduleWords = /(\u5b9a\u65f6\u4efb\u52a1|\u5b9a\u65f6|\u63d0\u9192|\u5230\u70b9|\u4eca\u5929)/;
-  if (!scheduleWords.test(text) || !/\u56de\u590d/.test(text)) {
-    return undefined;
-  }
-
-  const time = text.match(/\u4eca\u5929\s*(\d{1,2})\s*(?:\u70b9|:|\uff1a)\s*(\d{1,2})?\s*(?:\u5206)?/);
-  if (!time) {
-    return undefined;
-  }
-
-  const replyText = extractReplyText(text);
-  if (!replyText) {
-    return undefined;
-  }
-
-  const receivedAt = new Date(message.receivedAt);
-  const schedule = formatLocalSchedule(
-    Number.isNaN(receivedAt.getTime()) ? new Date() : receivedAt,
-    Number(time[1]),
-    Number(time[2] || 0),
-  );
-
-  return {
-    name: `reply ${replyText.slice(0, 20)}`,
-    schedule,
-    task: replyText,
-    taskType: 'channel.message',
-    targetAgentId: 'channel-gateway',
-    notifyTarget: targetFromMessage(message),
-    payload: {
-      text: replyText,
-      source: channelSourceFromMessage(message),
-      notifyTarget: targetFromMessage(message),
-    },
-  };
-}
-
-function extractReplyText(text: string) {
-  const match = text.match(/\u56de\u590d(?:\u4e00\u53e5|\u6211)?\s*[:\uff1a]\s*(.+)$/);
-  if (!match) {
-    return undefined;
-  }
-  return match[1].trim().replace(/^["'\u201c\u201d\u2018\u2019]+|["'\u201c\u201d\u2018\u2019]+$/g, '');
-}
-
-function channelSourceFromMessage(message: ChannelMessage) {
-  return {
-    kind: 'channel',
-    channel: message.channel,
-    accountId: message.accountId,
-    conversationId: message.conversationId,
-    senderId: message.senderId,
-    messageId: message.messageId,
-    messageType: message.messageType,
-  };
-}
-
-function formatLocalSchedule(date: Date, hours: number, minutes: number) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }

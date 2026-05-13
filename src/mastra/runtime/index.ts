@@ -14,6 +14,14 @@ export { assertTransitionAllowed, taskRuntime, toRuntimeTask } from './task-runt
 export { dispatchPendingRuntimeTasks, dispatchRuntimeTask } from './task-dispatcher';
 export type { DispatchResult } from './task-dispatcher';
 export {
+  channelSourceFromMessage,
+  orchestrateChannelMessage,
+  orchestratorModelSchema,
+  parseOrchestratorModelOutput,
+  targetFromMessage,
+} from './orchestrator';
+export type { OrchestratorDecision, OrchestratorModelOutput } from './orchestrator';
+export {
   defineGatewayTool,
   executeWithToolGateway,
   ToolGatewayApprovalRequiredError,

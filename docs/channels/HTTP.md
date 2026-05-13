@@ -29,4 +29,16 @@ POST http://localhost:4120/message
 - `/status`
 - `/task <workspacePath> :: <objective>`
 
-Normal text is forwarded to OmniRouterAgent for synchronous response.
+## Natural Language Runtime Intents
+
+Supported runtime intents are parsed before OmniRouterAgent fallback:
+
+- `今天21点08分回复一句：你好` creates a one-time `schedule.create` task for
+  a `channel.message` reminder.
+- `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for
+  `research.ai_daily_digest`.
+- `通知我：hello` creates a `notify.send_channel_message` task.
+- `状态` returns Gateway runtime status.
+
+Incomplete schedule-like messages return a clarification question. Other
+normal text is forwarded to OmniRouterAgent for synchronous response.

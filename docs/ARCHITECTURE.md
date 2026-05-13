@@ -13,8 +13,14 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   status transitions such as `waiting_user_confirm`, `retrying`, and `paused`.
 - **Task Dispatcher** (`src/mastra/runtime/task-dispatcher.ts`): polls or
   explicitly dispatches pending Runtime Tasks to handler implementations by
-  `targetAgentId`. It uses a short lease, a max-concurrency guard, and the same
-  Tool Gateway approval boundary used by tools and workflows.
+  `taskType`, with `targetAgentId` kept as the executor hint and compatibility
+  field. It uses a short lease, a max-concurrency guard, and the same Tool
+  Gateway approval boundary used by tools and workflows.
+- **Runtime Orchestrator** (`src/mastra/runtime/orchestrator.ts`): converts
+  channel natural language into structured runtime intents. The current
+  deterministic parser covers one-time reminders, daily AI digests, immediate
+  channel notifications, status queries, and low-confidence clarification. The
+  model-output boundary is a strict JSON schema for future LLM parsing.
 - **Tool Gateway** (`src/mastra/runtime/tool-gateway.ts`): policy boundary for
   tool execution. It audits calls, redacts sensitive fields, blocks missing
   capabilities or denied commands, and stops approval-required tools until an
@@ -28,7 +34,9 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
 - KnowledgeAgent: maintains file-backed long-term memory.
 - Team Runtime: task, run, event, inbox, and result protocol used by all agents.
 - Omni Gateway: channel adapter layer for phone messaging apps such as QQ-like
-  bots and OneBot-compatible bridges.
+  bots and OneBot-compatible bridges. It authorizes and normalizes messages,
+  then asks the Runtime Orchestrator for `taskType + payload + notifyTarget`
+  instead of embedding business execution logic in channel adapters.
 
 ## Data Flow
 

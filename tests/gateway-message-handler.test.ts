@@ -130,4 +130,41 @@ describe('Gateway message handler', () => {
       },
     });
   });
+
+  it('creates scheduled AI digest jobs from natural language', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+
+    const replies = await handleChannelMessage(message('每天09点给我发 AI Agents 日报', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const jobs = await listCronJobs();
+
+    expect(replies[0].text).toContain('\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f');
+    expect(replies[0].text).toContain('research.ai_daily_digest');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      schedule: 'daily 09:00',
+      taskType: 'research.ai_daily_digest',
+      targetAgentId: 'research-agent',
+      payload: {
+        topic: 'AI Agents',
+      },
+      notifyTarget: {
+        channel: 'http',
+        conversationId: 'conv-1',
+      },
+    });
+  });
+
+  it('asks a clarifying question for incomplete natural language schedules', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const replies = await handleChannelMessage(message('帮我建个定时任务', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
+  });
 });

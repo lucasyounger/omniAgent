@@ -14,9 +14,12 @@ through Team Runtime.
   `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
 - `/task <workspacePath> :: <objective>` for async CodeAgent execution
-- Natural language forwarding to OmniRouterAgent
-- Direct parsing for simple channel reminders such as "today HH:mm reply ...",
-  which creates a Cron `channel.message` job
+- Natural language first passes through the Runtime Orchestrator. Supported
+  intents create RuntimeTasks with `taskType + payload + notifyTarget`; unknown
+  general chat still forwards to OmniRouterAgent.
+- Structured parsing for simple channel reminders such as "today HH:mm reply
+  ...", daily AI digest schedules, immediate channel notifications, natural
+  status queries, and low-confidence clarification.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records
