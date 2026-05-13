@@ -2,6 +2,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { GatewayConfig } from './config';
 import { sendOutbound } from './delivery';
+import { listDeadLetterDeliveries, listDeliveries } from './gateway-store';
 import { handleChannelMessage } from './message-handler';
 import type { ChannelMessage } from './types';
 
@@ -10,6 +11,16 @@ export function startGatewayHttpServer(config: GatewayConfig) {
     try {
       if (req.method === 'GET' && req.url === '/health') {
         sendJson(res, 200, { ok: true, service: 'omni-gateway' });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/deliveries') {
+        sendJson(res, 200, { ok: true, deliveries: await listDeliveries() });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/deliveries/dead-letter') {
+        sendJson(res, 200, { ok: true, deliveries: await listDeadLetterDeliveries() });
         return;
       }
 

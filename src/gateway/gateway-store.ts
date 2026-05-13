@@ -109,6 +109,10 @@ export async function listDeliveries() {
   return readArray<DeliveryRecord>(deliveriesFile);
 }
 
+export async function listDeadLetterDeliveries() {
+  return (await listDeliveries()).filter(delivery => delivery.status === 'dead_letter');
+}
+
 export async function updateDeliveryStatus(deliveryId: string, status: DeliveryRecord['status'], error?: string) {
   const deliveries = await listDeliveries();
   const delivery = deliveries.find(item => item.deliveryId === deliveryId);

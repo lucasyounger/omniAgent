@@ -19,6 +19,8 @@ through Team Runtime.
   which creates a Cron `channel.message` job
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
+- `notify.send_channel_message` RuntimeTasks can enqueue Delivery records
+  directly, and `research.ai_daily_digest` uses that path for scheduled digests.
 
 ## QQ Bot Delivery
 
@@ -34,6 +36,10 @@ types. Outbound QQ Bot messages use the official v2 message APIs:
 Scheduled channel messages are delivered by storing the original channel target
 in Cron payload metadata, dispatching to `channel-gateway`, and letting the
 delivery worker send the queued inbox message.
+
+Scheduled research digests use the same channel target metadata, dispatch to
+`research.ai_daily_digest`, then create a `notify.send_channel_message` task
+that queues the outbound delivery.
 
 ## Runtime
 

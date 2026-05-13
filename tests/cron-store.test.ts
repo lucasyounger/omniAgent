@@ -159,4 +159,67 @@ describe('Cron store', () => {
       payload: { text: '你好' },
     });
   });
+
+  it('runs scheduled research digests through notify delivery queue', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    await createCronJob({
+      name: 'ai daily digest',
+      schedule: '2026-05-13 09:00',
+      task: 'AI Agent daily digest',
+      taskType: 'research.ai_daily_digest',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'user-1',
+        messageType: 'dm',
+      },
+      payload: {
+        topic: 'AI Agents',
+        date: '2026-05-13',
+      },
+    });
+
+    const jobs = await runDueCronJobs(new Date('2026-05-13T01:00:30.000Z'));
+    const tasks = await listTeamTasks();
+    const deliveries = await listDeliveries();
+    const researchTask = tasks.find(task => task.metadata?.taskType === 'research.ai_daily_digest');
+    const notifyTask = tasks.find(task => task.metadata?.taskType === 'notify.send_channel_message');
+
+    expect(jobs[0]).toMatchObject({
+      status: 'paused',
+      lastRunStatus: 'started',
+      lastDispatchStatus: 'dispatched',
+    });
+    expect(researchTask).toMatchObject({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'research-agent',
+      status: 'completed',
+      metadata: {
+        runtimeStatus: 'succeeded',
+        notifyTaskId: notifyTask?.taskId,
+        deliveryId: deliveries[0].deliveryId,
+      },
+    });
+    expect(notifyTask).toMatchObject({
+      sourceAgentId: 'research-handler',
+      targetAgentId: 'notify-agent',
+      status: 'completed',
+      metadata: {
+        runtimeStatus: 'succeeded',
+      },
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({
+      status: 'pending',
+      taskId: researchTask?.taskId,
+      text: expect.stringContaining('Topic: AI Agents'),
+      target: {
+        channel: 'http',
+        conversationId: 'conv-1',
+      },
+    });
+  });
 });

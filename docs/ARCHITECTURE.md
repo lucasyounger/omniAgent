@@ -72,8 +72,9 @@ durable file-backed protocol underneath it.
    notifications.
 8. Task Dispatcher scans pending tasks on startup and on
    `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
-9. Dispatcher handlers currently cover `code-agent` and `knowledge-agent`.
-   `research-agent` and `notify-agent` are registered as pending handlers.
+9. Dispatcher handlers currently cover `code-agent`, `knowledge-agent`,
+   `schedule.create`, `notify.send_channel_message`, and
+   `research.ai_daily_digest`.
 
 Valid runtime transitions are enforced by TaskRuntime. Callers should not write
 runtime status metadata directly.

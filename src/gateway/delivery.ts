@@ -50,7 +50,7 @@ export function startDeliveryWorker(config: GatewayConfig) {
 }
 
 export async function deliverPendingInbox(config: GatewayConfig) {
-  await retryDueDeliveries(config);
+  await deliverQueuedDeliveries(config);
   const messages = await listAgentInbox({
     recipientAgentId: 'channel-gateway',
     status: 'unread',
@@ -100,10 +100,12 @@ export async function deliverPendingInbox(config: GatewayConfig) {
   }
 }
 
-async function retryDueDeliveries(config: GatewayConfig) {
+async function deliverQueuedDeliveries(config: GatewayConfig) {
   const now = Date.now();
   const deliveries = (await listDeliveries()).filter(
-    delivery => delivery.status === 'failed' && delivery.nextRetryAt && new Date(delivery.nextRetryAt).getTime() <= now,
+    delivery =>
+      delivery.status === 'pending' ||
+      (delivery.status === 'failed' && delivery.nextRetryAt && new Date(delivery.nextRetryAt).getTime() <= now),
   );
 
   for (const delivery of deliveries) {

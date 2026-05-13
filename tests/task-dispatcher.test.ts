@@ -90,6 +90,136 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('dispatches notify.send_channel_message tasks into the delivery queue', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'research-handler',
+      targetAgentId: 'notify-agent',
+      objective: 'send digest',
+      metadata: {
+        taskType: 'notify.send_channel_message',
+        payload: {
+          text: 'daily digest ready',
+          idempotencyKey: 'digest:2026-05-13:conv-1',
+          target: {
+            channel: 'http',
+            accountId: 'local',
+            conversationId: 'conv-1',
+            senderId: 'user-1',
+            messageType: 'dm',
+          },
+          taskId: 'source-task-1',
+          runId: 'source-run-1',
+          resultRef: 'omni://runs/team/results/source-run-1.json',
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const deliveries = await listDeliveries();
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: 'notify-agent',
+      handler: 'notify-handler',
+      result: {
+        idempotencyKey: 'digest:2026-05-13:conv-1',
+        deliveryStatus: 'pending',
+      },
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({
+      idempotencyKey: 'digest:2026-05-13:conv-1',
+      status: 'pending',
+      text: 'daily digest ready',
+      taskId: 'source-task-1',
+      runId: 'source-run-1',
+      resultRef: 'omni://runs/team/results/source-run-1.json',
+      target: {
+        channel: 'http',
+        conversationId: 'conv-1',
+      },
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        deliveryId: deliveries[0].deliveryId,
+        idempotencyKey: 'digest:2026-05-13:conv-1',
+      },
+    });
+  });
+
+  it('dispatches research.ai_daily_digest tasks and queues notification through notify handler', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'research-agent',
+      objective: 'AI Agent daily digest',
+      metadata: {
+        taskType: 'research.ai_daily_digest',
+        notifyTarget: {
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          messageType: 'dm',
+        },
+        payload: {
+          topic: 'AI Agents',
+          date: '2026-05-13',
+          items: [
+            {
+              title: 'Runtime routing',
+              summary: 'TaskType based routing is now the stable boundary.',
+              action: 'Keep new handlers behind dispatcher contracts.',
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const deliveries = await listDeliveries();
+    const tasks = await taskRuntime.listTasks();
+    const notifyTask = tasks.find(item => item.metadata?.taskType === 'notify.send_channel_message');
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: 'research-agent',
+      handler: 'research-handler',
+      result: {
+        digestDate: '2026-05-13',
+        notifyDispatchStatus: 'dispatched',
+      },
+    });
+    expect(notifyTask).toMatchObject({
+      sourceAgentId: 'research-handler',
+      targetAgentId: 'notify-agent',
+      status: 'succeeded',
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({
+      status: 'pending',
+      taskId: task.id,
+      text: expect.stringContaining('AI Daily Digest - 2026-05-13'),
+      target: {
+        channel: 'http',
+        conversationId: 'conv-1',
+      },
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        notifyTaskId: notifyTask?.id,
+        deliveryId: deliveries[0].deliveryId,
+      },
+    });
+  });
+
   it('moves code tasks without approval into waiting_user_confirm', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({

@@ -30,7 +30,7 @@ afterEach(async () => {
 
 describe('Gateway store deliveries', () => {
   it('deduplicates deliveries and dead-letters after max attempts', async () => {
-    const { createDelivery, markDeliveryAttempt } = await loadGatewayStore();
+    const { createDelivery, listDeadLetterDeliveries, markDeliveryAttempt } = await loadGatewayStore();
     const input = {
       target: {
         channel: 'http',
@@ -52,7 +52,14 @@ describe('Gateway store deliveries', () => {
     expect(failed.nextRetryAt).toBeTruthy();
 
     const dead = await markDeliveryAttempt({ deliveryId: first.deliveryId, error: 'still down' });
+    const deadLetters = await listDeadLetterDeliveries();
+
     expect(dead.status).toBe('dead_letter');
     expect(dead.nextRetryAt).toBeUndefined();
+    expect(deadLetters).toHaveLength(1);
+    expect(deadLetters[0]).toMatchObject({
+      deliveryId: first.deliveryId,
+      error: 'still down',
+    });
   });
 });

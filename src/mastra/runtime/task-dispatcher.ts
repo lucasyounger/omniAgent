@@ -1,6 +1,7 @@
 import { startClaudeCodeTask } from '../lib/code-task-store';
 import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
 import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
+import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
@@ -61,6 +62,14 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     return dispatchChannelGatewayTask(leased);
   }
 
+  if (taskType === runtimeTaskTypes.notifySendChannelMessage) {
+    return dispatchNotifySendChannelMessageTask(leased);
+  }
+
+  if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
+    return dispatchResearchAiDailyDigestTask(leased);
+  }
+
   if (leased.targetAgentId === 'code-agent') {
     return dispatchCodeTask(leased);
   }
@@ -109,6 +118,220 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
     targetAgentId: task.targetAgentId,
     reason: `No dispatcher handler for target agent: ${task.targetAgentId}`,
   };
+}
+
+async function dispatchNotifySendChannelMessageTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const text = stringValue(payload.text) || stringValue(payload.message) || task.objective;
+  const target = readChannelTarget(payload.target) || readChannelTarget(payload.notifyTarget) || readChannelTarget(task.metadata?.notifyTarget);
+
+  if (!text || !target) {
+    const reason = 'notify.send_channel_message requires payload.text and payload.target or notifyTarget.';
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'running',
+      reason: 'Validating channel notification.',
+      sourceAgentId: 'task-dispatcher',
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason,
+      sourceAgentId: 'task-dispatcher',
+    });
+    return {
+      taskId: task.id,
+      status: 'failed',
+      targetAgentId: task.targetAgentId,
+      reason,
+    };
+  }
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Queueing channel notification.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'notify-handler',
+  });
+
+  try {
+    const delivery = await createDelivery({
+      target,
+      text,
+      idempotencyKey: stringValue(payload.idempotencyKey),
+      maxAttempts: numberValue(payload.maxAttempts),
+      sourceInboxMessageId: stringValue(payload.sourceInboxMessageId),
+      taskId: stringValue(payload.taskId) || task.id,
+      runId: stringValue(payload.runId),
+      resultRef: stringValue(payload.resultRef),
+    });
+
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'notify-handler',
+      summary: `Notification queued: ${delivery.deliveryId}`,
+      output: JSON.stringify(delivery, null, 2),
+      metadata: {
+        taskType: runtimeTaskTypes.notifySendChannelMessage,
+        deliveryId: delivery.deliveryId,
+        idempotencyKey: delivery.idempotencyKey,
+      },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: 'Channel notification queued.',
+      sourceAgentId: 'task-dispatcher',
+      metadata: {
+        deliveryId: delivery.deliveryId,
+        idempotencyKey: delivery.idempotencyKey,
+        resultRef: result.resultRef,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'notify-handler',
+      runId: run.runId,
+      result: {
+        deliveryId: delivery.deliveryId,
+        idempotencyKey: delivery.idempotencyKey,
+        deliveryStatus: delivery.status,
+      },
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'notify-handler',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
+    });
+    throw error;
+  }
+}
+
+async function dispatchResearchAiDailyDigestTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const notifyTarget = readChannelTarget(payload.notifyTarget) || readChannelTarget(task.metadata?.notifyTarget);
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Generating AI daily digest.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'research-handler',
+  });
+
+  try {
+    const digest = buildAiDailyDigest({
+      topic: stringValue(payload.topic) || stringValue(payload.query) || 'AI Agents',
+      date: stringValue(payload.date),
+      items: arrayValue(payload.items),
+      note: stringValue(payload.note),
+    });
+
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'research-handler',
+      summary: digest.summary,
+      output: digest.text,
+      metadata: {
+        taskType: runtimeTaskTypes.researchAiDailyDigest,
+        digest,
+      },
+    });
+
+    let notifyTaskId: string | undefined;
+    let deliveryId: string | undefined;
+    let notifyDispatchStatus: DispatchResult['status'] | undefined;
+    if (notifyTarget) {
+      const notifyTask = await taskRuntime.createTask({
+        sourceAgentId: 'research-handler',
+        targetAgentId: 'notify-agent',
+        objective: `Send AI daily digest for ${digest.topic}`,
+        requestedBy: `runtime-task:${task.id}`,
+        parentTaskId: task.id,
+        metadata: {
+          taskType: runtimeTaskTypes.notifySendChannelMessage,
+          notifyTarget,
+          payload: {
+            text: digest.text,
+            target: notifyTarget,
+            taskId: task.id,
+            runId: run.runId,
+            resultRef: result.resultRef,
+            idempotencyKey: createNotifyIdempotencyKey(task.id, notifyTarget),
+          },
+        },
+      });
+      notifyTaskId = notifyTask.id;
+      const notifyDispatch = await dispatchRuntimeTask(notifyTask.id);
+      notifyDispatchStatus = notifyDispatch.status;
+      deliveryId = notifyDispatch.status === 'dispatched' ? stringValue(notifyDispatch.result?.deliveryId) : undefined;
+    }
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: notifyTarget ? 'AI daily digest generated and notification queued.' : 'AI daily digest generated.',
+      sourceAgentId: 'task-dispatcher',
+      metadata: {
+        resultRef: result.resultRef,
+        notifyTaskId,
+        notifyDispatchStatus,
+        deliveryId,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'research-handler',
+      runId: run.runId,
+      result: {
+        resultRef: result.resultRef,
+        digestDate: digest.date,
+        notifyTaskId,
+        notifyDispatchStatus,
+        deliveryId,
+      },
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'research-handler',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
+    });
+    throw error;
+  }
 }
 
 async function dispatchScheduleCreateTask(task: RuntimeTask): Promise<DispatchResult> {
@@ -533,8 +756,95 @@ function booleanValue(value: unknown) {
   return typeof value === 'boolean' ? value : false;
 }
 
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function arrayValue(value: unknown) {
+  return Array.isArray(value) ? value : undefined;
+}
+
 function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function readChannelTarget(value: unknown): ChannelTarget | undefined {
+  return isChannelTargetLike(value) ? value : undefined;
+}
+
+function buildAiDailyDigest(input: { topic: string; date?: string; items?: unknown[]; note?: string }) {
+  const date = input.date || new Date().toISOString().slice(0, 10);
+  const items = normalizeDigestItems(input.items);
+  const highlights = items.length
+    ? items
+    : [
+        {
+          title: `${input.topic} landscape check`,
+          summary: 'MVP digest generated from structured task payload. External feeds are not connected yet.',
+          action: 'Connect arXiv, GitHub, or PapersWithCode sources in a later iteration.',
+        },
+      ];
+
+  const lines = [
+    `AI Daily Digest - ${date}`,
+    `Topic: ${input.topic}`,
+    '',
+    'Highlights:',
+    ...highlights.map((item, index) => `${index + 1}. ${item.title} - ${item.summary}`),
+    '',
+    'Suggested Actions:',
+    ...highlights.map((item, index) => `${index + 1}. ${item.action}`),
+  ];
+
+  if (input.note) {
+    lines.push('', `Note: ${input.note}`);
+  }
+
+  return {
+    date,
+    topic: input.topic,
+    summary: `${input.topic} daily digest for ${date}`,
+    highlights,
+    text: lines.join('\n'),
+  };
+}
+
+function normalizeDigestItems(items?: unknown[]) {
+  if (!items) {
+    return [];
+  }
+
+  return items
+    .map(item => {
+      if (typeof item === 'string' && item.trim()) {
+        return {
+          title: item.trim(),
+          summary: 'Provided digest item.',
+          action: 'Review and decide whether to track this item.',
+        };
+      }
+
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return undefined;
+      }
+
+      const record = item as Record<string, unknown>;
+      const title = stringValue(record.title) || stringValue(record.name);
+      if (!title) {
+        return undefined;
+      }
+
+      return {
+        title,
+        summary: stringValue(record.summary) || stringValue(record.description) || 'No summary provided.',
+        action: stringValue(record.action) || 'Review and decide whether to track this item.',
+      };
+    })
+    .filter((item): item is { title: string; summary: string; action: string } => Boolean(item));
+}
+
+function createNotifyIdempotencyKey(taskId: string, target: ChannelTarget) {
+  return ['research-digest', taskId, target.channel, target.accountId, target.conversationId].join(':');
 }
 
 function isChannelTargetLike(value: unknown): value is ChannelTarget {
