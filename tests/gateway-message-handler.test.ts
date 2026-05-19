@@ -45,6 +45,7 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
+  delete process.env.OMNI_ALLOWED_WORKSPACES;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -85,6 +86,51 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u683c\u5f0f\u9519\u8bef');
   });
 
+  it('creates task commands as approval-gated RuntimeTasks', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    const { handleChannelMessage } = await loadHandler();
+    const { listApprovalRequests } = await import('../src/mastra/runtime/approval-store');
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+
+    const replies = await handleChannelMessage(message(`/task ${tempRoot} :: change files`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const replyText = replies[0].text;
+    const taskId = replyText.match(/Runtime Task: (task-[^\n]+)/)?.[1];
+    const requests = await listApprovalRequests({ status: 'pending' });
+    const task = taskId ? await taskRuntime.getTask(taskId) : undefined;
+
+    expect(replyText).toContain('Runtime Task:');
+    expect(replyText).toContain('Dispatch: waiting_user_confirm');
+    expect(replyText).toContain('Tool Gateway');
+    expect(taskId).toBeDefined();
+    expect(task).toMatchObject({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'code-agent',
+      objective: 'change files',
+      status: 'waiting_user_confirm',
+      metadata: {
+        taskType: 'code.claude_code_task',
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'change files',
+          executionMode: 'direct',
+        },
+      },
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      toolId: 'dispatcher.start-claude-code-task',
+      capability: 'code.execute_claude_code_task',
+      status: 'pending',
+      taskId,
+      inputPreview: {
+        workspacePath: tempRoot,
+        objective: 'change files',
+      },
+    });
+  });
   it('creates channel reminder cron jobs directly from natural language', async () => {
     const { handleChannelMessage } = await loadHandler();
     const { listCronJobs } = await import('../src/mastra/lib/cron-store');

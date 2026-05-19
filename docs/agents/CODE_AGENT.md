@@ -19,7 +19,8 @@ execution through Team Runtime.
 - `run-code-task-workflow` also uses Tool Gateway and requires the same
   approval path as the tool call.
 - Task Dispatcher can dispatch approved `code-agent` Runtime Tasks into
-  Claude Code execution.
+  Claude Code execution. Gateway-created `/task` requests use this path and
+  must pass Tool Gateway approval before the CLI can spawn.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn Claude Code or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.

@@ -27,7 +27,10 @@ POST http://localhost:4120/message
 - `/pair <token>`
 - `/help`
 - `/status`
-- `/task <workspacePath> :: <objective>`
+- `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
+  RuntimeTask and dispatches it through Task Dispatcher. Direct Claude Code
+  startup normally returns `Dispatch: waiting_user_confirm` until Tool Gateway
+  approval is granted.
 
 ## Natural Language Runtime Intents
 

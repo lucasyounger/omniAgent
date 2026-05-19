@@ -1,5 +1,3 @@
-import { startClaudeCodeTask } from '../mastra/lib/code-task-store';
-import { createTeamTask } from '../mastra/lib/team-runtime-store';
 import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
@@ -197,33 +195,36 @@ async function handleTaskCommand(message: ChannelMessage, raw: string) {
     return '\u683c\u5f0f\u9519\u8bef\u3002\u7528\u6cd5\uff1a/task <workspacePath> :: <objective>';
   }
 
-  const teamTask = await createTeamTask({
+  const task = await taskRuntime.createTask({
     sourceAgentId: 'channel-gateway',
     targetAgentId: 'code-agent',
     requestedBy: `${message.channel}:${message.senderId}`,
     objective,
     metadata: {
+      taskType: runtimeTaskTypes.codeClaudeCodeTask,
       source: channelSourceFromMessage(message),
-      workspacePath,
+      payload: {
+        workspacePath,
+        objective,
+        contextBrief: `Requested from ${message.channel} conversation ${message.conversationId}. Reply result through Omni Gateway.`,
+        executionMode: 'direct',
+      },
     },
   });
 
-  const codeTask = await startClaudeCodeTask({
-    workspacePath,
-    objective,
-    contextBrief: `Requested from ${message.channel} conversation ${message.conversationId}. Reply result through Omni Gateway.`,
-    teamTaskId: teamTask.taskId,
-    sourceAgentId: 'channel-gateway',
-    requestedBy: `${message.channel}:${message.senderId}`,
-  });
+  const dispatch = await dispatchRuntimeTask(task.id);
 
   return [
     '\u4efb\u52a1\u5df2\u521b\u5efa\u3002',
-    `Team Task: ${teamTask.taskId}`,
-    `Team Run: ${codeTask.teamRunId}`,
-    `Code Task: ${codeTask.taskId}`,
+    `Runtime Task: ${task.id}`,
+    `Dispatch: ${dispatch.status}`,
+    dispatch.status === 'waiting_user_confirm' ? '\u9700\u8981\u5b8c\u6210 Tool Gateway \u5ba1\u6279\u540e\u624d\u4f1a\u542f\u52a8 Claude Code\u3002' : undefined,
+    dispatch.status !== 'dispatched' && dispatch.reason ? `Reason: ${dispatch.reason}` : undefined,
+    dispatch.status === 'dispatched' && dispatch.runId ? `Team Run: ${dispatch.runId}` : undefined,
     '\u5b8c\u6210\u540e\u4f1a\u4e3b\u52a8\u63a8\u9001\u7ed3\u679c\u6458\u8981\u5230\u5f53\u524d\u4f1a\u8bdd\u3002',
-  ].join('\n');
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join('\n');
 }
 
 async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {

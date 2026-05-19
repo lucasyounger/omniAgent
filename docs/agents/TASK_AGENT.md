@@ -85,11 +85,12 @@ work is delegated, executed, reported, and recovered across all agents.
   `paused`.
 - Retry uses a two-step runtime lifecycle: the failed source task becomes
   `retrying`, then a new retry task is created with `pending` status.
-- Task Dispatcher currently handles `code-agent`, `knowledge-agent`,
-  `channel-gateway`, `notify-agent`, `research-agent`, and schedule-handler
-  task types. Code tasks without an approval token transition to
-  `waiting_user_confirm`; approved dry-run or patch-proposal code tasks can
-  complete synchronously as `succeeded`.
+- Gateway `/task <workspacePath> :: <objective>` commands create `code-agent`
+  Runtime Tasks and enter Task Dispatcher instead of directly starting
+  CodeAgent.
+- Code tasks without an approval token transition to `waiting_user_confirm`;
+  approving the linked Tool Gateway request injects the token and moves the task
+  back to `pending`.
 - Schedule create/list/delete/pause/resume maintenance tasks are audited but do
   not require approval. `schedule.run_now` dynamically requires approval when
   the target schedule would trigger direct code execution.

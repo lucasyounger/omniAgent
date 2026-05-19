@@ -142,6 +142,8 @@ npm run build
 - `OMNI_CODE_EXECUTION_MODE`: `patch_proposal` or `direct`.
   `patch_proposal` is safer and writes a review artifact without modifying
   workspace files. `direct` can start Claude Code after approval.
+- Gateway `/task <workspacePath> :: <objective>` commands also enter the
+  RuntimeTask + Tool Gateway approval path before direct Claude Code execution.
 - `OMNI_CODE_TASK_BACKGROUND_TIMEOUT_MS`: background timeout for code task
   tools.
 - `OMNI_CODE_TASK_BACKGROUND_MAX_RETRIES`: retry count for background code

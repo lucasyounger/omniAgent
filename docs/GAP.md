@@ -87,6 +87,11 @@ Workflow 调 lib：绕过 Gateway
 Gateway 命令：直接 startClaudeCodeTask
 ```
 
+> 2026-05-19 verified slice: Gateway `/task <workspacePath> :: <objective>` no
+> longer starts Claude Code directly. It now creates a `code.claude_code_task`
+> RuntimeTask, dispatches through Task Dispatcher, and enters
+> `waiting_user_confirm` until Tool Gateway approval is granted.
+
 下一步要统一成：
 
 ```text
