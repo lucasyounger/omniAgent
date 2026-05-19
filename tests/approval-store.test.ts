@@ -80,4 +80,52 @@ describe('Approval Store', () => {
       ]),
     );
   });
+
+  it('rejects a linked runtime task and cancels it', async () => {
+    const { taskRuntime, createApprovalRequest, rejectApprovalRequest, getRuntimeTaskRecord, listRuntimeTaskEvents } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'code-agent',
+      objective: 'reject approval',
+      metadata: {
+        payload: { workspacePath: tempRoot, objective: 'reject approval' },
+      },
+    });
+    await taskRuntime.waitForUserConfirm({ taskId: task.id });
+
+    const request = await createApprovalRequest({
+      toolId: 'test-tool',
+      policy: { risk: 'dangerous', capability: 'test.execute', requireApproval: true },
+      context: { requestId: 'rejection-test' },
+      toolInput: { taskId: task.id },
+    });
+    const rejected = await rejectApprovalRequest({ requestId: request.requestId, decidedBy: 'tester', reason: 'not allowed' });
+
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: 'not allowed',
+      decidedBy: 'tester',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'cancelled',
+      metadata: {
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'reject approval',
+        },
+      },
+    });
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      approvalRequestId: request.requestId,
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'waiting_user_confirm',
+          toStatus: 'cancelled',
+        }),
+      ]),
+    );
+  });
 });

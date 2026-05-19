@@ -211,7 +211,7 @@ GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 
 ## PR-03：审批恢复链路端到端测试
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
@@ -224,12 +224,27 @@ GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 - `src/mastra/runtime/task-dispatcher.ts`
 - Gateway `/task` 或 schedule direct code 测试路径。
 
+### 已完成内容
+
+- `tests/approval-store.test.ts`
+  - 保留 approve 链路测试：approval token 注入 payload，RuntimeTask 回到 `pending`。
+  - 新增 reject 链路测试：pending approval 被拒绝后，linked RuntimeTask 转为 `cancelled`。
+- `docs/knowledge/TOOLS.md`
+  - 明确 approval approve/reject 对 RuntimeTask 的状态影响。
+
 ### 验收标准
 
-- 未审批：`waiting_user_confirm`。
+- 未审批：`waiting_user_confirm` 已由 gateway/dispatcher 测试覆盖。
 - 审批通过：payload 注入 `approvalToken`，任务回到 `pending`。
-- 审批拒绝：任务进入 rejected/cancelled 或约定失败状态。
-- 不实际 spawn Claude Code，使用 dry-run 或 patch-proposal 验证恢复链路。
+- 审批拒绝：任务进入 `cancelled`。
+- 不实际 spawn Claude Code。
+
+### 验证命令
+
+```bash
+npm test -- tests/approval-store.test.ts tests/gateway-message-handler.test.ts tests/task-dispatcher.test.ts
+npm run verify
+```
 
 ---
 
@@ -580,9 +595,9 @@ src/mastra/runtime/context-pack/
 
 ```text
 当前阶段：M0 安全边界闭环
-当前优先级：PR-03 审批恢复链路端到端测试
-上一步完成：PR-02 Tool Gateway capability 默认语义收紧
-下一步建议：补齐 approval request 创建、approve/reject、RuntimeTask 状态恢复的端到端测试
+当前优先级：PR-04 RuntimeTask / TeamTask 状态一致性审计
+上一步完成：PR-03 审批恢复链路端到端测试
+下一步建议：审计 RuntimeTask 与兼容 TeamTask 的状态、metadata、event log 一致性
 ```
 
 ## 6. 中断恢复步骤

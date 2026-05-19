@@ -27,8 +27,9 @@ Audit records are written to `~/.omni/runs/gateway/tool-audit.jsonl` with one of
 these statuses: `succeeded`, `failed`, `pending_approval`, or `blocked`.
 
 Approval requests can be approved or rejected through the Approval Store API.
-Approval issues an `approvalToken`; rejection can cancel the linked Runtime
-Task.
+Approval issues an `approvalToken`, injects it into linked RuntimeTask payload
+metadata, and moves the task back to `pending`. Rejection cancels the linked
+RuntimeTask.
 
 ## Approval Model
 
