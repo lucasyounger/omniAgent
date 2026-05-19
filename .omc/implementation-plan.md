@@ -250,11 +250,31 @@ npm run verify
 
 ## PR-04：RuntimeTask / TeamTask 状态一致性审计
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 确保 RuntimeTask 与兼容 TeamTask 的状态、metadata、event log 不冲突。
+
+### 本次审查结论
+
+- `taskRuntime.transition` 的 GitNexus impact 为 CRITICAL：19 个直接调用、6 条流程受影响。
+- 因此本片不修改状态机实现，只补一致性回归测试和文档审计，避免触碰高风险行为。
+- RuntimeTask record 是生命周期主源，TeamTask metadata 作为兼容镜像。
+- 对 `retrying` 等 RuntimeTask-only 状态，TeamTask status 可能保持最接近的 legacy 值，真实 runtime 状态以 metadata 和 RuntimeTask record 为准。
+
+### 已完成内容
+
+- `tests/task-runtime.test.ts`
+  - 新增 running → succeeded 路径一致性测试。
+  - 验证 RuntimeTask record、TeamTask metadata、runtime event log 的 status/reason/previousRuntimeStatus 同步。
+  - 扩展 failed → retrying → retry task 测试，验证原任务和 retry task 的 RuntimeTask/TeamTask 兼容 metadata 对齐。
+- `docs/ARCHITECTURE.md`
+  - 明确 RuntimeTask 是用户可见生命周期主源，TeamTask metadata 是兼容镜像。
+- `docs/TESTING.md`
+  - 更新 TaskRuntime 当前测试覆盖。
+- `docs/GAP.md`
+  - 记录本片 verified slice 和 CRITICAL impact 决策。
 
 ### 验收标准
 
@@ -262,6 +282,18 @@ npm run verify
 - TeamTask 兼容层不被业务代码直接写 `runtimeStatus`。
 - event log 能解释每次状态转换。
 - 增加一致性测试。
+
+### 验证结果
+
+```bash
+npm test -- tests/task-runtime.test.ts
+npm run typecheck
+npm run verify:change-sync
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。完整验证为 16 个 test files / 62 个 tests 通过。GitNexus detect_changes：risk low，changed_symbols 仅 `tests/task-runtime.test.ts:loadTaskRuntime` 与 `docs/TESTING.md` section，无 affected processes。
 
 ---
 
@@ -594,10 +626,10 @@ src/mastra/runtime/context-pack/
 ## 5. 当前执行状态
 
 ```text
-当前阶段：M0 安全边界闭环
-当前优先级：PR-04 RuntimeTask / TeamTask 状态一致性审计
-上一步完成：PR-03 审批恢复链路端到端测试
-下一步建议：审计 RuntimeTask 与兼容 TeamTask 的状态、metadata、event log 一致性
+当前阶段：M1 最小记忆与上下文骨架
+当前优先级：PR-05 Memory Skeleton 现状整理与最小目录固化
+上一步完成：PR-04 RuntimeTask / TeamTask 状态一致性审计
+下一步建议：整理 docs/knowledge、.omc/wiki、项目 memory、运行时 memory 的边界
 ```
 
 ## 6. 中断恢复步骤

@@ -12,6 +12,7 @@ async function loadTaskRuntime() {
   return {
     ...(await import('../src/mastra/runtime/task-runtime')),
     ...(await import('../src/mastra/runtime/runtime-task-store')),
+    ...(await import('../src/mastra/lib/team-runtime-store')),
   };
 }
 
@@ -83,8 +84,63 @@ describe('Task Runtime', () => {
     expect(approved.status).toBe('pending');
   });
 
+  it('keeps TeamTask metadata, RuntimeTask records, and events consistent across transitions', async () => {
+    const { taskRuntime, getRuntimeTaskRecord, getTeamTask, listRuntimeTaskEvents } = await loadTaskRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'consistent transitions',
+    });
+
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'running', reason: 'started', sourceAgentId: 'test-runner' });
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'succeeded', reason: 'done', sourceAgentId: 'test-runner' });
+
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        runtimeStatus: 'succeeded',
+        runtimeStatusReason: 'done',
+        previousRuntimeStatus: 'running',
+      },
+    });
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        runtimeStatus: 'succeeded',
+        runtimeStatusReason: 'done',
+        previousRuntimeStatus: 'running',
+      },
+    });
+    await expect(getTeamTask(task.id)).resolves.toMatchObject({
+      status: 'completed',
+      metadata: {
+        runtimeStatus: 'succeeded',
+        runtimeStatusReason: 'done',
+        previousRuntimeStatus: 'running',
+      },
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'pending',
+          toStatus: 'running',
+          reason: 'started',
+          metadata: expect.objectContaining({ previousRuntimeStatus: 'pending' }),
+        }),
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'running',
+          toStatus: 'succeeded',
+          reason: 'done',
+          metadata: expect.objectContaining({ previousRuntimeStatus: 'running' }),
+        }),
+      ]),
+    );
+  });
+
   it('marks failed tasks as retrying before creating a retry task', async () => {
-    const { taskRuntime } = await loadTaskRuntime();
+    const { taskRuntime, getRuntimeTaskRecord, getTeamTask, listRuntimeTaskEvents } = await loadTaskRuntime();
     const task = await taskRuntime.createTask({
       sourceAgentId: 'omni-router-agent',
       targetAgentId: 'code-agent',
@@ -101,7 +157,51 @@ describe('Task Runtime', () => {
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
       status: 'retrying',
+      metadata: {
+        runtimeStatus: 'retrying',
+        runtimeStatusReason: 'try again',
+      },
     });
+    await expect(getRuntimeTaskRecord(task.id)).resolves.toMatchObject({
+      status: 'retrying',
+      metadata: {
+        runtimeStatus: 'retrying',
+        runtimeStatusReason: 'try again',
+      },
+    });
+    await expect(getTeamTask(task.id)).resolves.toMatchObject({
+      status: 'queued',
+      metadata: {
+        runtimeStatus: 'retrying',
+        runtimeStatusReason: 'try again',
+      },
+    });
+    await expect(getRuntimeTaskRecord(retry.id)).resolves.toMatchObject({
+      status: 'pending',
+      retryOfTaskId: task.id,
+      metadata: {
+        runtimeStatus: 'pending',
+        runtimeStatusReason: `Retry of ${task.id}.`,
+      },
+    });
+    await expect(getTeamTask(retry.id)).resolves.toMatchObject({
+      status: 'queued',
+      retryOfTaskId: task.id,
+      metadata: {
+        runtimeStatus: 'pending',
+        runtimeStatusReason: `Retry of ${task.id}.`,
+      },
+    });
+    await expect(listRuntimeTaskEvents({ taskId: task.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime.task.transitioned',
+          fromStatus: 'failed',
+          toStatus: 'retrying',
+          reason: 'try again',
+        }),
+      ]),
+    );
   });
 
   it('keeps result artifacts and approval linkage in the runtime timeline', async () => {

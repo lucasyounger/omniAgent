@@ -56,7 +56,9 @@ stable contract.
   - TaskRuntime-created tasks expose runtime `pending` status
   - valid runtime transitions are accepted
   - invalid runtime transitions are rejected
+  - RuntimeTask records, TeamTask metadata, and runtime events remain consistent across transitions
   - failed tasks transition through `retrying` before retry task creation
+  - retry tasks keep RuntimeTask and TeamTask compatibility metadata aligned
 - `tests/task-dispatcher.test.ts`
   - `schedule.create` persists cron jobs
   - schedule list/delete/pause/resume RuntimeTasks dispatch without approval

@@ -76,7 +76,12 @@ own execution logic.
 
 Runtime task status is the user-facing lifecycle. RuntimeTask records are now
 stored independently under `~/.omni/runs/runtime-tasks`, while Team Runtime
-remains the compatible execution/run/result protocol underneath it.
+remains the compatible execution/run/result protocol underneath it. TeamTask
+metadata mirrors `runtimeStatus`, `runtimeStatusReason`, and transition metadata
+for compatibility; business callers should treat the RuntimeTask record and
+append-only runtime timeline as the audit source. Some RuntimeTask-only states,
+such as `retrying`, may be represented in TeamTask metadata while the legacy
+TeamTask status stays on its closest compatible value.
 
 1. Create Runtime Task through TaskRuntime.
 2. TaskRuntime records `pending` in the RuntimeTask store and mirrors it to the

@@ -28,7 +28,12 @@ interrupted
 timed_out
 ```
 
-并且 `task-runtime.ts` 只是做了状态映射。([GitHub][8])
+并且 `task-runtime.ts` 已经不再只是被动状态映射：它会校验 RuntimeTask 状态转换、写入独立 RuntimeTask store，并把 runtime 状态镜像到 TeamTask metadata 兼容层。
+
+> 2026-05-19 verified slice: RuntimeTask / TeamTask 一致性审计已补强
+> 回归测试。新增覆盖确认 RuntimeTask record、TeamTask metadata 和 runtime
+> event log 在 running/succeeded 与 failed/retrying/retry-task 路径上保持一致。
+> `transition` 影响面为 CRITICAL，因此本片只固化现状与审计契约，不改状态机行为。
 
 这会导致一个问题：**设计文档里说有 TaskRuntime，但代码里还没有真正的任务生命周期控制。**
 
