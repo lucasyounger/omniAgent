@@ -42,13 +42,13 @@ const runtimeStatuses = new Set<RuntimeTaskStatus>([
 ]);
 
 const transitions: Record<RuntimeTaskStatus, RuntimeTaskStatus[]> = {
-  created: ['waiting_user_confirm', 'pending', 'cancelled'],
-  waiting_user_confirm: ['pending', 'cancelled'],
-  pending: ['running', 'cancelled', 'waiting_user_confirm'],
+  created: ['waiting_user_confirm', 'pending', 'cancelled', 'failed'],
+  waiting_user_confirm: ['pending', 'cancelled', 'failed'],
+  pending: ['running', 'cancelled', 'waiting_user_confirm', 'failed'],
   running: ['succeeded', 'failed', 'cancelled', 'paused'],
-  paused: ['running', 'cancelled'],
+  paused: ['running', 'cancelled', 'failed'],
   failed: ['retrying', 'cancelled'],
-  retrying: ['pending', 'cancelled'],
+  retrying: ['pending', 'cancelled', 'failed'],
   succeeded: [],
   cancelled: [],
 };

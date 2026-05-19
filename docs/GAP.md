@@ -377,13 +377,13 @@ TaskRuntime.createTask({
 
 ```ts
 const transitions = {
-  created: ["waiting_user_confirm", "pending", "cancelled"],
-  waiting_user_confirm: ["pending", "cancelled"],
-  pending: ["running", "cancelled"],
+  created: ["waiting_user_confirm", "pending", "cancelled", "failed"],
+  waiting_user_confirm: ["pending", "cancelled", "failed"],
+  pending: ["running", "cancelled", "waiting_user_confirm", "failed"],
   running: ["succeeded", "failed", "cancelled", "paused"],
-  paused: ["running", "cancelled"],
-  failed: ["retrying"],
-  retrying: ["pending"],
+  paused: ["running", "cancelled", "failed"],
+  failed: ["retrying", "cancelled"],
+  retrying: ["pending", "cancelled", "failed"],
 }
 ```
 

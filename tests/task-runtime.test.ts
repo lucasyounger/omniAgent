@@ -80,8 +80,44 @@ describe('Task Runtime', () => {
       }),
     ).rejects.toThrow('Invalid task status transition: waiting_user_confirm -> succeeded');
 
-    const approved = await taskRuntime.approveTask({ taskId: task.id });
-    expect(approved.status).toBe('pending');
+    const failed = await taskRuntime.transition({ taskId: task.id, nextStatus: 'failed', reason: 'approval expired' });
+    expect(failed.status).toBe('failed');
+
+    const retrying = await taskRuntime.retryTask({ taskId: task.id, reason: 'retry after expired approval' });
+    expect(retrying.status).toBe('pending');
+  });
+
+  it('allows failure from non-terminal pre-execution states', async () => {
+    const { taskRuntime } = await loadTaskRuntime();
+
+    const createdFailure = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'created failure',
+    });
+    await expect(
+      taskRuntime.transition({ taskId: createdFailure.id, nextStatus: 'failed', reason: 'setup failed' }),
+    ).resolves.toMatchObject({ status: 'failed' });
+
+    const pendingFailure = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'pending failure',
+    });
+    await expect(
+      taskRuntime.transition({ taskId: pendingFailure.id, nextStatus: 'failed', reason: 'dispatch failed' }),
+    ).resolves.toMatchObject({ status: 'failed' });
+
+    const pausedFailure = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'paused failure',
+    });
+    await taskRuntime.transition({ taskId: pausedFailure.id, nextStatus: 'running' });
+    await taskRuntime.pauseTask({ taskId: pausedFailure.id });
+    await expect(
+      taskRuntime.transition({ taskId: pausedFailure.id, nextStatus: 'failed', reason: 'resume failed' }),
+    ).resolves.toMatchObject({ status: 'failed' });
   });
 
   it('keeps TeamTask metadata, RuntimeTask records, and events consistent across transitions', async () => {
