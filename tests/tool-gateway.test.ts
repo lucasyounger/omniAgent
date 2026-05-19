@@ -60,7 +60,7 @@ describe('Tool Gateway', () => {
     await expect(
       executeWithToolGateway('failing-tool', { risk: 'dangerous', capability: 'test.fail', audit: true }, {}, async () => {
         throw new Error('boom');
-      }),
+      }, { capabilities: ['test.fail'] }),
     ).rejects.toThrow('boom');
 
     const records = await readAuditRecords();
@@ -120,7 +120,7 @@ describe('Tool Gateway', () => {
     await expect(
       executeWithToolGateway(
         'capability-tool',
-        { risk: 'medium', capability: 'test.required', audit: true },
+        { risk: 'dangerous', capability: 'test.required', audit: true },
         {},
         async () => ({ ok: true }),
         { capabilities: ['test.other'] },
@@ -138,5 +138,38 @@ describe('Tool Gateway', () => {
 
     const records = await readAuditRecords();
     expect(records.map(record => record.status)).toEqual(['blocked', 'blocked']);
+  });
+
+  it('blocks dangerous calls without approval or explicit capability', async () => {
+    const { executeWithToolGateway, ToolGatewayBlockedError } = await loadToolGateway();
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    await expect(
+      executeWithToolGateway('dangerous-tool', { risk: 'dangerous', capability: 'test.dangerous', audit: true }, {}, execute),
+    ).rejects.toBeInstanceOf(ToolGatewayBlockedError);
+
+    expect(execute).not.toHaveBeenCalled();
+    const records = await readAuditRecords();
+    expect(records[0]).toMatchObject({
+      toolId: 'dangerous-tool',
+      status: 'blocked',
+    });
+  });
+
+  it('allows dangerous calls with explicit capability', async () => {
+    const { executeWithToolGateway } = await loadToolGateway();
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    await expect(
+      executeWithToolGateway(
+        'dangerous-tool',
+        { risk: 'dangerous', capability: 'test.dangerous', audit: true },
+        {},
+        execute,
+        { capabilities: ['test.dangerous'] },
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    expect(execute).toHaveBeenCalledOnce();
   });
 });

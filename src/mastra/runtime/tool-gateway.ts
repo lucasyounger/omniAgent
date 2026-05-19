@@ -163,11 +163,19 @@ function normalizeExecutionContext(input: unknown, context: ToolExecutionContext
 }
 
 function validateCapability(policy: ToolGatewayPolicy, context: ToolExecutionContext) {
-  if (!context.capabilities?.length) {
+  if (policy.risk !== 'dangerous') {
     return;
   }
 
-  if (!context.capabilities.includes(policy.capability)) {
+  if (context.approvalToken) {
+    return;
+  }
+
+  if (policy.requireApproval) {
+    return;
+  }
+
+  if (!context.capabilities?.includes(policy.capability)) {
     throw new ToolGatewayBlockedError(`Missing capability ${policy.capability}.`);
   }
 }

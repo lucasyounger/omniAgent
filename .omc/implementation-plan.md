@@ -159,7 +159,7 @@ GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 
 ## PR-02：Tool Gateway capability 默认语义收紧
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
@@ -171,17 +171,41 @@ GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 - 外部入口、Gateway、Scheduler、Runtime dispatch 不能因为缺省 capabilities 而绕过检查。
 - 需要兼容现有测试和工具调用。
 
-### 预期改动
+### 本次策略
 
-- 梳理 `src/mastra/runtime/tool-gateway.ts` capability 判断。
-- 为不同调用来源补齐 `ToolExecutionContext`。
-- 更新 approval policy 测试。
+- `safe` / `medium` 暂保持兼容，避免误伤读/list/普通维护路径。
+- `dangerous` 且不需要审批的调用，必须提供匹配 capability 或 approval token。
+- `dangerous` 且 `requireApproval: true` 的调用仍优先走审批请求，避免破坏现有 approval flow。
+
+### 已完成内容
+
+- `src/mastra/runtime/tool-gateway.ts`
+  - 收紧 `validateCapability`：dangerous 非审批调用缺少 matching capability 时阻断。
+- `tests/tool-gateway.test.ts`
+  - 增加 dangerous 缺省 capability 阻断测试。
+  - 增加 dangerous 显式 capability 放行测试。
+  - 更新失败调用测试，显式提供 capability 后验证失败 audit。
+- `docs/knowledge/TOOLS.md`
+  - 记录 dangerous non-approval 调用的 capability 规则。
 
 ### 验收标准
 
-- 缺少 capability 的外部高危调用不会默认放行。
+- 缺少 capability 的 dangerous 非审批调用不会默认放行。
+- approval-required dangerous 调用仍生成审批请求。
 - 低风险 read/list 类工具不被误伤。
 - 测试覆盖：允许、拒绝、审批、audit 四类路径。
+
+### 验证结果
+
+```bash
+npm test -- tests/tool-gateway.test.ts tests/tool-approval-policy.test.ts tests/task-dispatcher.test.ts tests/gateway-message-handler.test.ts
+npm run typecheck
+npm run verify
+```
+
+结果：全部通过。完整验证为 16 个 test files / 60 个 tests 通过。
+
+GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 
 ---
 
@@ -556,9 +580,9 @@ src/mastra/runtime/context-pack/
 
 ```text
 当前阶段：M0 安全边界闭环
-当前优先级：PR-02 Tool Gateway capability 默认语义收紧
-上一步完成：PR-01 Workflow 高危能力统一走 Tool Gateway
-下一步建议：梳理 Tool Gateway capability 缺省语义，避免外部高危调用因缺省 capabilities 默认放行
+当前优先级：PR-03 审批恢复链路端到端测试
+上一步完成：PR-02 Tool Gateway capability 默认语义收紧
+下一步建议：补齐 approval request 创建、approve/reject、RuntimeTask 状态恢复的端到端测试
 ```
 
 ## 6. 中断恢复步骤

@@ -18,7 +18,8 @@ Tool Gateway is the policy boundary for tool execution. It supports:
 - audit records with sensitive-field redaction
 - approval-required blocking
 - durable approval requests in `~/.omni/runs/gateway/tool-approvals.json`
-- optional capability checks
+- optional capability checks; dangerous non-approval calls require either an
+  approval token or an explicit matching capability
 - optional denied-command checks
 - optional allowed-path checks
 
