@@ -314,11 +314,31 @@ gitnexus_detect_changes(scope=all)
 
 ## PR-05：Memory Skeleton 现状整理与最小目录固化
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 整理现有 `docs/knowledge/*`、`.omc/wiki/*`、项目 memory、运行时 memory 的边界，不重复造一套混乱目录。
+
+### 本次整理结论
+
+- `~/.omni/memory/**` 是规范长期记忆与索引位置。
+- `docs/knowledge/**` 是随代码一起评审的项目知识位置。
+- `.omc/wiki/**` 是本地 operator wiki / session synthesis，不作为 runtime canonical memory。
+- `~/.omni/runs/**` 是任务过程记录、审计和 artifacts，不默认提升为长期知识。
+- Mastra LibSQL memory 仅用于 agent 对话连续性，不作为长期记忆或项目文档。
+- memory proposal 写入 `~/.omni/memory/doc-update-proposals.jsonl`；未确认内容不进入稳定记忆或项目知识。
+
+### 已完成内容
+
+- `docs/knowledge/PROJECTS.md`
+  - 新增 Memory And Knowledge Boundaries。
+  - 明确长期记忆、项目知识、任务过程记录、operator wiki、Mastra conversation memory 的边界。
+  - 明确 explicit user fact 可直写、推断/高风险更新走 proposal。
+- `docs/agents/KNOWLEDGE_AGENT.md`
+  - 补充 `.omc/wiki/**` 不是 runtime canonical memory。
+- `docs/CONTEXT_PACKS.md`
+  - Docs Memory context pack 纳入 `docs/knowledge/PROJECTS.md`。
 
 ### 验收标准
 
@@ -327,6 +347,16 @@ gitnexus_detect_changes(scope=all)
 - 明确哪些是任务过程记录。
 - 明确 memory proposal 不直接写入核心记忆。
 - 文档写入 `docs/knowledge` 或 `.omc` 对应位置。
+
+### 验证结果
+
+```bash
+npm run verify:change-sync
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。完整验证为 16 个 test files / 63 个 tests 通过。GitNexus detect_changes：risk low，4 个文档文件变更，无 changed symbols / affected processes。
 
 ---
 
@@ -627,9 +657,9 @@ src/mastra/runtime/context-pack/
 
 ```text
 当前阶段：M1 最小记忆与上下文骨架
-当前优先级：PR-05 Memory Skeleton 现状整理与最小目录固化
-上一步完成：PR-04 RuntimeTask / TeamTask 状态一致性审计
-下一步建议：整理 docs/knowledge、.omc/wiki、项目 memory、运行时 memory 的边界
+当前优先级：PR-06 Context Pack Schema + Builder MVP
+上一步完成：PR-05 Memory Skeleton 现状整理与最小目录固化
+下一步建议：实现最小 context-pack schema、builder、loader 与单元测试
 ```
 
 ## 6. 中断恢复步骤

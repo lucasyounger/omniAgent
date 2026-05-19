@@ -28,6 +28,7 @@ knowledge, decisions, and procedures synchronized with code behavior.
 - Explicit user-provided identity facts such as name may be written directly to
   `~/.omni/memory/USER.md`; inferred facts should use proposals.
 - Runtime logs under `~/.omni/runs` are not the same as durable knowledge.
+- `.omc/wiki/**` is operator wiki context, not runtime canonical memory.
 - When code behavior changes, update relevant `docs/agents/*` and
   `docs/knowledge/*` files, then refresh `MEMORY_INDEX.json`.
 

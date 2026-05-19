@@ -38,6 +38,7 @@ Use these packs to assemble focused context with fewer tokens.
 ## Docs Memory
 
 - `docs/agents/KNOWLEDGE_AGENT.md`
+- `docs/knowledge/PROJECTS.md`
 - `docs/skills/doc-sync.md`
 - `docs/skills/memory-maintenance.md`
 - Source after docs: `src/mastra/lib/docs-memory.ts`,
