@@ -419,7 +419,7 @@ gitnexus_detect_changes(scope=all)
 
 ## PR-07：ContextJuice 简版
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
@@ -432,12 +432,38 @@ gitnexus_detect_changes(scope=all)
 - doc summary 摘要
 - context budget 计算
 
+### 已完成内容
+
+- `src/mastra/runtime/context-pack/context-juice.ts`
+  - 新增 deterministic ContextJuice 简版摘要器。
+  - `summarizeGitDiff` 输出变更文件、基础风险提示和 evidence ref。
+  - `summarizeTestLog` 失败时保留失败原因，成功时压缩为通过计数摘要。
+  - `summarizeDoc` 提取标题和 bullet/body 摘要。
+  - `calculateContextBudget` 计算可用上下文、估算已用 token、剩余 token 和 section 明细。
+- `src/mastra/runtime/context-pack/index.ts`、`src/mastra/runtime/index.ts`
+  - 导出 ContextJuice runtime API 和类型。
+- `tests/context-pack.test.ts`
+  - 保留 PR-06 context pack 生成/读写测试。
+  - 新增 ContextJuice 覆盖：失败日志、成功日志、diff 风险提示、doc summary、context budget、evidence ref。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 ContextJuice runtime 用法和 evidence ref 约定。
+
 ### 验收标准
 
 - 测试失败日志保留失败原因。
 - 成功日志可压缩。
 - diff 摘要包含变更文件和风险提示。
 - 输出带 evidence ref。
+
+### 验证结果
+
+```bash
+npm test -- tests/context-pack.test.ts
+npm run typecheck
+npm run verify
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 6 个 tests 通过；完整验证为 17 个 test files / 69 个 tests 通过，`verify:change-sync` 通过。
 
 ---
 
@@ -689,9 +715,9 @@ gitnexus_detect_changes(scope=all)
 
 ```text
 当前阶段：M1 最小记忆与上下文骨架
-当前优先级：PR-07 ContextJuice 简版
-上一步完成：PR-06 Context Pack Schema + Builder MVP
-下一步建议：实现 git diff / test log / doc summary / context budget 简版压缩器
+当前优先级：PR-08 Memory Proposal MVP
+上一步完成：PR-07 ContextJuice 简版
+下一步建议：生成 reviewable memory proposal 文件，区分 user/project/lesson/reference 类型
 ```
 
 ## 6. 中断恢复步骤

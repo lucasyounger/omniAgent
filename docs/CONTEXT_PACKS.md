@@ -18,6 +18,23 @@ A generated pack includes:
 Use `buildContextPack` for in-process generation and `writeContextPack` /
 `loadContextPack` when a long-running task needs a persisted artifact.
 
+## ContextJuice Runtime
+
+`context-pack/context-juice.ts` provides deterministic, low-cost summaries for
+large context inputs before they are added to a pack or run artifact.
+
+The first compressors are intentionally simple:
+
+- `summarizeGitDiff` lists changed files and emits risk hints such as source,
+  docs/plan, dependency, CI, or deletion changes.
+- `summarizeTestLog` keeps failure reasons for failed runs and compresses
+  successful runs down to pass-count lines.
+- `summarizeDoc` extracts a title and first bullets or short body lines.
+- `calculateContextBudget` estimates section token use and remaining context.
+
+Every summary includes an `evidenceRef` with a kind and source string so later
+artifacts can cite the original diff, log, document, or budget input.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

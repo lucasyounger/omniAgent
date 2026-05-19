@@ -1,5 +1,28 @@
-export { buildContextPack, loadContextPack, writeContextPack } from './context-pack';
-export type { BuildContextPackInput, ContextPack, ContextPackDocumentRef, ContextPackTaskType } from './context-pack';
+export {
+  buildContextPack,
+  calculateContextBudget,
+  loadContextPack,
+  summarizeDoc,
+  summarizeGitDiff,
+  summarizeTestLog,
+  writeContextPack,
+} from './context-pack';
+export type {
+  BuildContextPackInput,
+  ContextBudgetSection,
+  ContextBudgetSectionInput,
+  ContextBudgetSummary,
+  ContextJuiceResult,
+  ContextPack,
+  ContextPackDocumentRef,
+  ContextPackTaskType,
+  DocSummary,
+  EvidenceKind,
+  EvidenceRef,
+  GitDiffFileSummary,
+  GitDiffSummary,
+  TestLogSummary,
+} from './context-pack';
 export { bootstrapRuntimeCompatibility } from './bootstrap';
 export {
   approveApprovalRequest,
