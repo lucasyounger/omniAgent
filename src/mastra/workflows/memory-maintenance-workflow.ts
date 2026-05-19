@@ -1,6 +1,13 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
+
+const memoryWorkflowWritePolicy = {
+  risk: 'safe',
+  capability: 'memory.write',
+  audit: true,
+} as const;
 
 const memoryMaintenanceInputSchema = z.object({
   title: z.string(),
@@ -33,28 +40,43 @@ const memoryMaintenanceOutputSchema = z.object({
   indexUpdatedAt: z.string(),
 });
 
+type MemoryMaintenanceInput = z.infer<typeof memoryMaintenanceInputSchema>;
+type MemoryMaintenanceOutput = z.infer<typeof memoryMaintenanceOutputSchema>;
+
+export async function runMemoryMaintenance(inputData: MemoryMaintenanceInput): Promise<MemoryMaintenanceOutput> {
+  const episodicLogInput = {
+    title: inputData.title,
+    summary: inputData.summary,
+    tags: inputData.tags,
+    sourceRunId: inputData.sourceRunId,
+  };
+  const episodicLog = await executeWithToolGateway(
+    'workflow.append-episodic-log',
+    memoryWorkflowWritePolicy,
+    episodicLogInput,
+    () => appendEpisodicLog(episodicLogInput),
+  );
+
+  const proposal = inputData.proposal
+    ? await executeWithToolGateway('workflow.propose-doc-update', memoryWorkflowWritePolicy, inputData.proposal, () =>
+        writeDocUpdateProposal(inputData.proposal!),
+      )
+    : undefined;
+  const index = await executeWithToolGateway('workflow.update-memory-index', memoryWorkflowWritePolicy, {}, () => updateMemoryIndex());
+
+  return {
+    episodicLog,
+    proposalId: proposal?.id,
+    indexUpdatedAt: index.updatedAt,
+  };
+}
+
 const maintainMemoryStep = createStep({
   id: 'maintain-docs-memory',
   description: 'Append low-risk episode memory, optionally record a doc update proposal, and refresh index.',
   inputSchema: memoryMaintenanceInputSchema,
   outputSchema: memoryMaintenanceOutputSchema,
-  execute: async ({ inputData }) => {
-    const episodicLog = await appendEpisodicLog({
-      title: inputData.title,
-      summary: inputData.summary,
-      tags: inputData.tags,
-      sourceRunId: inputData.sourceRunId,
-    });
-
-    const proposal = inputData.proposal ? await writeDocUpdateProposal(inputData.proposal) : undefined;
-    const index = await updateMemoryIndex();
-
-    return {
-      episodicLog,
-      proposalId: proposal?.id,
-      indexUpdatedAt: index.updatedAt,
-    };
-  },
+  execute: async ({ inputData }) => runMemoryMaintenance(inputData),
 });
 
 export const memoryMaintenanceWorkflow = createWorkflow({

@@ -110,7 +110,7 @@ Gateway `/task <workspacePath> :: <objective>` 曾经直接调用 `startClaudeCo
 
 ## PR-01：Workflow 高危能力统一走 Tool Gateway
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
@@ -125,26 +125,35 @@ Gateway `/task <workspacePath> :: <objective>` 曾经直接调用 `startClaudeCo
 - `src/mastra/workflows/task-orchestration-workflow.ts`
 - `src/mastra/workflows/*`
 
-### 预期改动
+### 本次审查结论
 
-- 如果 workflow 直接调用高危 lib 函数，改为：
-  - 创建 RuntimeTask；或
-  - 通过 `executeWithToolGateway` 包裹。
-- 明确哪些 workflow 是低风险内部流程，不需要审批但仍需要 audit。
+- `code-task-workflow.ts` 已经通过 `executeWithToolGateway` 包裹 `startClaudeCodeTask`。
+- 当前明确绕过点是 `memory-maintenance-workflow.ts` 直接调用 `appendEpisodicLog`、`writeDocUpdateProposal`、`updateMemoryIndex`。
+- `memory-maintenance-workflow.ts` 文件级 GitNexus impact 为 LOW，直接影响 `src/mastra/workflows/index.ts`。
 
-### 验收标准
+### 已完成内容
 
-- 高危 workflow 不直接调用本地代码执行、文件写入、调度执行等能力。
-- 对应测试覆盖审批/拦截路径。
-- 文档更新 workflow 安全边界。
+- `src/mastra/workflows/memory-maintenance-workflow.ts`
+  - 新增 `runMemoryMaintenance` 可测试执行函数。
+  - workflow step 复用该函数。
+  - `appendEpisodicLog`、`writeDocUpdateProposal`、`updateMemoryIndex` 均通过 `executeWithToolGateway` 审计。
+- `tests/memory-maintenance-workflow.test.ts`
+  - 验证 memory workflow 三个写操作都生成 Tool Gateway audit record。
+- `docs/knowledge/TOOLS.md`
+  - 记录 memory maintenance workflow 使用 `memory.write` capability 进入 Tool Gateway audit。
 
-### 验证命令
+### 验证结果
 
 ```bash
-npm test -- tests/tool-gateway.test.ts tests/tool-approval-policy.test.ts
+npm test -- tests/memory-maintenance-workflow.test.ts tests/tool-gateway.test.ts tests/tool-approval-policy.test.ts
 npm run typecheck
+npm run verify:change-sync
 npm run verify
 ```
+
+结果：全部通过。完整验证为 16 个 test files / 58 个 tests 通过。
+
+GitNexus `detect_changes(scope=all)`：risk low，无 affected processes。
 
 ---
 
@@ -547,9 +556,9 @@ src/mastra/runtime/context-pack/
 
 ```text
 当前阶段：M0 安全边界闭环
-当前优先级：PR-01 Workflow 高危能力统一走 Tool Gateway
-上一步完成：PR-00 Gateway /task 审批路径闭环
-下一步建议：先审查 workflow 直接调用高危 lib 的路径，再决定最小修改点
+当前优先级：PR-02 Tool Gateway capability 默认语义收紧
+上一步完成：PR-01 Workflow 高危能力统一走 Tool Gateway
+下一步建议：梳理 Tool Gateway capability 缺省语义，避免外部高危调用因缺省 capabilities 默认放行
 ```
 
 ## 6. 中断恢复步骤

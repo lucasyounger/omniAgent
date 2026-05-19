@@ -54,4 +54,6 @@ paths.
 
 ## Docs Memory
 
-KnowledgeAgent reads and updates file-backed memory with guarded tools.
+KnowledgeAgent reads and updates file-backed memory with guarded tools. Memory
+maintenance workflows also route append/proposal/index writes through Tool
+Gateway audit records using the `memory.write` capability.
