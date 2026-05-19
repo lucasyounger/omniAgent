@@ -362,11 +362,31 @@ gitnexus_detect_changes(scope=all)
 
 ## PR-06：Context Pack Schema + Builder MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 实现最小 `context-pack`：输入任务类型和目标，输出结构化上下文包。
+
+### 已完成内容
+
+- `src/mastra/runtime/context-pack/context-pack.schema.ts`
+  - 定义 `requirement_e2e` context pack schema。
+  - 固化 task、user、project、documents、tokenBudget 字段。
+- `src/mastra/runtime/context-pack/context-pack-builder.ts`
+  - 新增 `buildContextPack`。
+  - 从 `memory/USER.md` 读取用户偏好和 profile facts。
+  - 从 `docs/knowledge/PROJECTS.md` 读取项目目标和 memory/knowledge boundaries。
+  - 为 `requirement_e2e` 选择最小相关文档列表。
+- `src/mastra/runtime/context-pack/context-pack-loader.ts`
+  - 新增 `loadContextPack` / `writeContextPack` 并通过 schema 校验。
+- `src/mastra/runtime/index.ts`
+  - 导出 context-pack runtime API。
+- `tests/context-pack.test.ts`
+  - 覆盖 `requirement_e2e` pack 生成。
+  - 覆盖写入/读取时的 schema validation。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 Context Pack Runtime MVP 的输入来源、输出内容和 API。
 
 ### 预期目录
 
@@ -382,6 +402,18 @@ src/mastra/runtime/context-pack/
 - 输入 `requirement_e2e` 任务能生成 context pack。
 - 包含用户偏好、项目目标、当前任务目标、相关文档列表、token budget。
 - 有单元测试。
+
+### 验证结果
+
+```bash
+npm test -- tests/context-pack.test.ts
+npm run typecheck
+npm run verify:change-sync
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 2 个 tests 通过；完整验证为 17 个 test files / 65 个 tests 通过。GitNexus detect_changes：risk low，无 changed symbols / affected processes。
 
 ---
 
@@ -657,9 +689,9 @@ src/mastra/runtime/context-pack/
 
 ```text
 当前阶段：M1 最小记忆与上下文骨架
-当前优先级：PR-06 Context Pack Schema + Builder MVP
-上一步完成：PR-05 Memory Skeleton 现状整理与最小目录固化
-下一步建议：实现最小 context-pack schema、builder、loader 与单元测试
+当前优先级：PR-07 ContextJuice 简版
+上一步完成：PR-06 Context Pack Schema + Builder MVP
+下一步建议：实现 git diff / test log / doc summary / context budget 简版压缩器
 ```
 
 ## 6. 中断恢复步骤

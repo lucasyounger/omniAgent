@@ -2,6 +2,22 @@
 
 Use these packs to assemble focused context with fewer tokens.
 
+## Context Pack Runtime
+
+`src/mastra/runtime/context-pack/**` builds and validates structured context packs.
+The first supported task type is `requirement_e2e`.
+
+A generated pack includes:
+
+- current task type and objective
+- user preferences and profile facts from `memory/USER.md`
+- project goal and memory/knowledge boundaries from `docs/knowledge/PROJECTS.md`
+- relevant document refs for downstream agents
+- token budget with reserved response capacity
+
+Use `buildContextPack` for in-process generation and `writeContextPack` /
+`loadContextPack` when a long-running task needs a persisted artifact.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

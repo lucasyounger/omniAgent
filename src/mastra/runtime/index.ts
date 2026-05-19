@@ -1,3 +1,5 @@
+export { buildContextPack, loadContextPack, writeContextPack } from './context-pack';
+export type { BuildContextPackInput, ContextPack, ContextPackDocumentRef, ContextPackTaskType } from './context-pack';
 export { bootstrapRuntimeCompatibility } from './bootstrap';
 export {
   approveApprovalRequest,
