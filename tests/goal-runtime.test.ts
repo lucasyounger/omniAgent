@@ -243,4 +243,25 @@ describe('goal runtime workspace manager', () => {
     expect(result.shouldExecuteArtifacts).toEqual(['wiki-diff.md']);
     expect(result.missingArtifacts).toEqual(['wiki-diff.md']);
   });
+
+  it('runs topic research goal workflow with evidence and artifacts', async () => {
+    const { createGoal } = await loadGoalRuntime();
+    await createGoal({
+      id: 'topic-workflow-goal',
+      type: 'topic_research',
+      title: 'Topic Workflow Goal',
+      objective: 'AI long memory systems',
+      sources: ['github', 'arxiv', 'blog', 'rss'],
+      artifactPolicy: ['daily_digest', 'wiki_diff', 'memory_proposal'],
+    });
+    const { runTopicResearchGoalWorkflow } = await import('../src/mastra/workflows/topic-research-goal-workflow');
+
+    const result = await runTopicResearchGoalWorkflow({ goalId: 'topic-workflow-goal', runId: 'topic-run-001' });
+
+    expect(result.evidence).toHaveLength(4);
+    await expect(fs.readFile(result.artifacts.dailyDigest, 'utf8')).resolves.toContain('GitHub projects for AI long memory systems');
+    await expect(fs.readFile(result.artifacts.wikiDiff, 'utf8')).resolves.toContain('Wiki Diff Draft');
+    await expect(fs.readFile(result.artifacts.memoryProposal, 'utf8')).resolves.toContain('goal memory candidate');
+    await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated daily digest and wiki diff');
+  });
 });

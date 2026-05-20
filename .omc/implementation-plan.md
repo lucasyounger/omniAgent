@@ -986,7 +986,7 @@ src/mastra/runtime/goal/
 
 ## PR-17：Topic Research Goal MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 

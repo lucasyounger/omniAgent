@@ -1,4 +1,15 @@
 export {
+  createEvidenceItem,
+  dedupEvidence,
+  evidencePath,
+  listEvidence,
+  rankEvidence,
+  saveEvidence,
+  saveEvidenceBatch,
+  scoreEvidence,
+} from './evidence';
+export type { CreateEvidenceInput, EvidenceItem, EvidenceSourceType } from './evidence';
+export {
   appendGoalEvent,
   appendGoalRunEvent,
   assertValidGoalId,

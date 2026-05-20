@@ -79,6 +79,25 @@ PR-16 adds retry/reconcile helpers:
 - `reconcileGoalRun(input)` marks timed-out runs as `interrupted` and returns only missing artifacts from an expected artifact list.
 - `retryGoalRun(goalId, failedRunId, retryRunId)` creates a pending retry run with `parentRunId` and the original plan.
 
-## PR-14 / PR-16 scope
+PR-17 adds the Topic Research MVP:
 
-PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. Research workflows are handled by later M3 slices.
+- `saveEvidenceBatch(goalId, inputs)` persists deduplicated evidence to `evidence/evidence.jsonl`.
+- `rankEvidence(items)` orders evidence by relevance, novelty, and quality scores.
+- `runTopicResearchGoalWorkflow(input)` loads a `topic_research` goal, gathers mock GitHub/arXiv/blog/RSS evidence, writes run artifacts, and completes the run with Proof of Work.
+
+Topic research run artifacts:
+
+```text
+.omni/goals/{goalId}/runs/{runId}/
+  plan.md
+  sources.json
+  evidence.jsonl
+  daily-digest.md
+  wiki-diff.md
+  memory-proposal.md
+  proof-of-work.md
+```
+
+## PR-14 / PR-17 scope
+
+PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. PR-17 adds mock-provider topic research with evidence persistence, ranking, daily digest, wiki diff, memory proposal, and Proof of Work. Real external research providers and push channels are handled by later slices.
