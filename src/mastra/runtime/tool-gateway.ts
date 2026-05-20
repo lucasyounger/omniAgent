@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gatewayRunsRoot } from '../lib/paths';
 import { createApprovalRequest } from './approval-store';
+import { registerToolPolicy } from './policy-center';
 import type { ToolExecutionContext, ToolGatewayPolicy } from './types';
 
 export type GatewayToolDefinition<TTool> = {
@@ -10,6 +11,8 @@ export type GatewayToolDefinition<TTool> = {
 };
 
 export function defineGatewayTool<TTool>(tool: TTool, policy: ToolGatewayPolicy): GatewayToolDefinition<TTool> {
+  const toolId = readToolId(tool);
+  if (toolId) registerToolPolicy(toolId, policy);
   return {
     tool,
     policy,
@@ -228,6 +231,10 @@ function collectStringFields(value: unknown, keyPattern: RegExp): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function readToolId(tool: unknown): string | undefined {
+  return isRecord(tool) && typeof tool.id === 'string' ? tool.id : undefined;
 }
 
 function createRequestId() {

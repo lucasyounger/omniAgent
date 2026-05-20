@@ -1435,7 +1435,9 @@ interface Connector {
 
 ## PR-28：Tool Policy Center
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/tool-policy-center.test.ts tests/tool-gateway.test.ts tests/tool-approval-policy.test.ts` 通过；`npm run typecheck` 通过.
 
 ---
 
