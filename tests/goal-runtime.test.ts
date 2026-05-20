@@ -264,4 +264,29 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(result.artifacts.memoryProposal, 'utf8')).resolves.toContain('goal memory candidate');
     await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated daily digest and wiki diff');
   });
+
+  it('runs module improvement goal workflow with planning artifacts', async () => {
+    const { createGoal } = await loadGoalRuntime();
+    await fs.mkdir(path.join(tempRoot, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(tempRoot, 'docs', 'GOAL_RUNTIME.md'), '# Goal Runtime\n\nDurable goal runtime test context.\n', 'utf8');
+    await createGoal({
+      id: 'module-workflow-goal',
+      type: 'module_improvement',
+      title: 'Memory Module Improvement',
+      objective: 'Improve memory module with external repo patterns',
+      scope: ['docs/GOAL_RUNTIME.md'],
+      artifactPolicy: ['gap_analysis', 'design_4plus1', 'implementation_plan'],
+    });
+    const { runModuleImprovementGoalWorkflow } = await import('../src/mastra/workflows/module-improvement-goal-workflow');
+
+    const result = await runModuleImprovementGoalWorkflow({ goalId: 'module-workflow-goal', runId: 'module-run-001', moduleName: 'memory' });
+
+    expect(result.candidateRepos).toHaveLength(2);
+    await expect(fs.readFile(result.artifacts.candidateRepos, 'utf8')).resolves.toContain('memory-reference-memory');
+    await expect(fs.readFile(result.artifacts.repoAnalysis, 'utf8')).resolves.toContain('feedback-aware iteration');
+    await expect(fs.readFile(result.artifacts.gapAnalysis, 'utf8')).resolves.toContain('## Gaps');
+    await expect(fs.readFile(result.artifacts.design4Plus1, 'utf8')).resolves.toContain('## Logical View');
+    await expect(fs.readFile(result.artifacts.implementationPlan, 'utf8')).resolves.toContain('Convert approved recommendations');
+    await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated gap analysis and implementation artifacts');
+  });
 });
