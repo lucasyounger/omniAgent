@@ -1,4 +1,20 @@
 export {
+  artifactIndexPath,
+  buildWikiDiff,
+  createArtifact,
+  listArtifacts,
+  updateArtifact,
+} from './artifacts';
+export type {
+  Artifact,
+  ArtifactOwnerType,
+  ArtifactStatus,
+  ArtifactType,
+  CreateArtifactInput,
+  UpdateArtifactInput,
+  WikiDiffInput,
+} from './artifacts';
+export {
   createFeedbackEvent,
   feedbackEventsPath,
   latestFeedbackEvent,
