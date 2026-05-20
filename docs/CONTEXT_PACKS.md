@@ -57,6 +57,13 @@ Use `inspectRequirementE2ERun` to detect existing and missing artifacts before
 resuming interrupted work. Existing artifacts are not overwritten; only missing
 files are created.
 
+`writeRequirementPlanningArtifacts` is the first deterministic planner step. It
+writes `requirement-analysis.md` and `dev-plan.md` from the original requirement,
+optional assumptions, and context pack metadata. The generated sections are kept
+stable for downstream agents: objective, original requirement, scope, phases,
+risks, approval points, acceptance criteria, work breakdown, verification plan,
+and stop conditions.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

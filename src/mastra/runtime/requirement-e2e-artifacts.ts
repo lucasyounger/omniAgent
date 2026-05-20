@@ -35,6 +35,21 @@ export type CreateRequirementE2ERunInput = {
   contextPack?: ContextPack;
 };
 
+export type RequirementAnalysisInput = {
+  requirement: string;
+  contextPack?: ContextPack;
+  assumptions?: string[];
+};
+
+export type RequirementPlanningArtifactsInput = RequirementAnalysisInput & {
+  taskId: string;
+};
+
+export type RequirementPlanningArtifacts = {
+  requirementAnalysis: string;
+  devPlan: string;
+};
+
 const artifactDefaults: Record<RequirementE2EArtifactName, string> = {
   'input.md': '',
   'context-pack.json': '{}\n',
@@ -71,6 +86,17 @@ export async function createRequirementE2ERun(input: CreateRequirementE2ERunInpu
   };
 }
 
+export async function writeRequirementPlanningArtifacts(input: RequirementPlanningArtifactsInput): Promise<RequirementPlanningArtifacts> {
+  const run = await inspectRequirementE2ERun(input.taskId);
+  await fs.mkdir(run.runDir, { recursive: true });
+  const artifacts = buildRequirementPlanningArtifacts(input);
+
+  await fs.writeFile(run.artifacts['requirement-analysis.md'], artifacts.requirementAnalysis, 'utf8');
+  await fs.writeFile(run.artifacts['dev-plan.md'], artifacts.devPlan, 'utf8');
+
+  return artifacts;
+}
+
 export async function inspectRequirementE2ERun(taskId: string): Promise<RequirementE2ERunState> {
   const runDir = requirementE2ERunDir(taskId);
   const artifacts = Object.fromEntries(requirementE2EArtifactNames.map(artifact => [artifact, path.join(runDir, artifact)])) as Record<RequirementE2EArtifactName, string>;
@@ -95,6 +121,86 @@ export async function inspectRequirementE2ERun(taskId: string): Promise<Requirem
     resumed: existingArtifacts.length > 0,
   };
 }
+
+export function buildRequirementPlanningArtifacts(input: RequirementAnalysisInput): RequirementPlanningArtifacts {
+  const objective = input.contextPack?.task.objective ?? input.requirement.trim();
+  const requirement = input.requirement.trim();
+  const assumptions = input.assumptions?.length ? input.assumptions : ['No extra assumptions provided.'];
+  const documents = input.contextPack?.documents ?? [];
+  const projectGoal = input.contextPack?.project.goal ?? 'Not provided.';
+
+  return {
+    requirementAnalysis: [
+      '# Requirement Analysis',
+      '',
+      '## Objective',
+      objective,
+      '',
+      '## Original Requirement',
+      requirement,
+      '',
+      '## Scope',
+      '- Generate stable RequirementE2E planning artifacts.',
+      '- Keep artifacts deterministic for downstream agents.',
+      '- Preserve existing run files unless this planning step owns them.',
+      '',
+      '## Phases',
+      '- Requirement analysis',
+      '- 4+1 design',
+      '- Repository impact review',
+      '- Patch proposal',
+      '- Test review and delivery summary',
+      '',
+      '## Risks',
+      '- Ambiguous requirements may need user approval before implementation.',
+      '- HIGH or CRITICAL repository impact must pause before edits.',
+      '- Missing context pack documents can reduce downstream evidence quality.',
+      '',
+      '## Approval Points',
+      '- Approve requirement interpretation before implementation.',
+      '- Approve any dangerous local execution through Tool Gateway policy.',
+      '- Pause on HIGH or CRITICAL GitNexus impact.',
+      '',
+      '## Acceptance Criteria',
+      '- Requirement analysis is written to `requirement-analysis.md`.',
+      '- Development plan is written to `dev-plan.md`.',
+      '- Output sections stay stable for downstream agent consumption.',
+      '',
+      '## Assumptions',
+      ...assumptions.map(assumption => `- ${assumption}`),
+      '',
+    ].join('\n'),
+    devPlan: [
+      '# Development Plan',
+      '',
+      '## Project Goal',
+      projectGoal,
+      '',
+      '## Work Breakdown',
+      '1. Confirm requirement scope and acceptance criteria.',
+      '2. Produce 4+1 design artifact.',
+      '3. Run repository impact analysis for candidate symbols.',
+      '4. Prepare patch proposal and implementation steps.',
+      '5. Produce test plan, delivery doc, final summary, and memory proposal.',
+      '',
+      '## Candidate Inputs For Downstream Agents',
+      `- Requirement: ${requirement}`,
+      `- Related documents: ${documents.length ? documents.map(document => document.path).join(', ') : 'None provided.'}`,
+      '',
+      '## Verification Plan',
+      '- Run focused tests for changed runtime artifacts.',
+      '- Run typecheck before completing the PR slice.',
+      '- Run full verify before marking the milestone complete.',
+      '',
+      '## Stop Conditions',
+      '- Stop on unclear user intent that changes implementation scope.',
+      '- Stop on HIGH or CRITICAL repository impact until explicitly reviewed.',
+      '- Stop if focused or full verification fails and fix before continuing.',
+      '',
+    ].join('\n'),
+  };
+}
+
 
 function requirementE2ERunDir(taskId: string) {
   if (!/^[A-Za-z0-9._-]+$/.test(taskId)) throw new Error(`Invalid requirement_e2e task id: ${taskId}`);

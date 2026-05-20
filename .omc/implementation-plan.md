@@ -587,16 +587,40 @@ npm run verify
 
 ## PR-10：PlannerAgent / Requirement Analyzer MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 将需求拆成阶段、风险、审批点、验收标准。
 
+### 已完成内容
+
+- `src/mastra/runtime/requirement-e2e-artifacts.ts`
+  - 新增 `buildRequirementPlanningArtifacts`，从需求、assumptions、context pack 生成稳定结构的需求分析和开发计划。
+  - 新增 `writeRequirementPlanningArtifacts`，写入 `requirement-analysis.md` 和 `dev-plan.md`。
+- `src/mastra/runtime/index.ts`
+  - 导出 RequirementE2E planning runtime API 和类型。
+- `tests/requirement-e2e-artifacts.test.ts`
+  - 覆盖 requirement analysis / dev plan 写入、稳定章节、context pack document 引用。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 deterministic planner step 和稳定 artifact sections。
+
 ### 验收标准
 
 - 输入一个需求，生成 `requirement-analysis.md` 和 `dev-plan.md`。
 - 输出结构稳定，适合后续 agent 消费。
+
+### 验证结果
+
+```bash
+npm test -- tests/requirement-e2e-artifacts.test.ts
+npm run typecheck
+npm run verify:change-sync
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 4 个 tests 通过；完整验证为 18 个 test files / 74 个 tests 通过，`verify:change-sync` 通过。GitNexus detect_changes：risk low，无 affected processes。
 
 ---
 
@@ -766,9 +790,9 @@ npm run verify
 
 ```text
 当前阶段：M2 需求 E2E MVP 产物链路
-当前优先级：PR-10 PlannerAgent / Requirement Analyzer MVP
-上一步完成：PR-09 RequirementE2E Run 目录与 artifact writer
-下一步建议：输入需求后生成 requirement-analysis.md 和 dev-plan.md
+当前优先级：PR-11 ArchitectAgent 4+1 设计模板
+上一步完成：PR-10 PlannerAgent / Requirement Analyzer MVP
+下一步建议：生成 design-4plus1.md 稳定设计骨架
 ```
 
 ## 6. 中断恢复步骤

@@ -69,9 +69,38 @@ describe('requirement e2e artifacts', () => {
     await expect(fs.readFile(path.join(firstRun.runDir, 'test-plan.md'), 'utf8')).resolves.toBe('# Test Plan\n\n');
   });
 
+  it('writes requirement analysis and development plan artifacts', async () => {
+    const { createRequirementE2ERun, writeRequirementPlanningArtifacts } = await loadRequirementE2ERuntime();
+    const run = await createRequirementE2ERun({ taskId: 'planning-task', input: 'Add approval-aware requirement planning' });
+
+    const artifacts = await writeRequirementPlanningArtifacts({
+      taskId: 'planning-task',
+      requirement: 'Add approval-aware requirement planning',
+      assumptions: ['Planner output must be deterministic.'],
+      contextPack: {
+        schemaVersion: 1,
+        generatedAt: '2026-05-20T00:00:00.000Z',
+        task: { type: 'requirement_e2e', objective: 'Plan requirement artifacts' },
+        user: { preferences: [], profileFacts: [] },
+        project: { goal: 'Build a local AI application engineering assistant.', knowledgeBoundaries: [] },
+        documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
+        tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
+      },
+    });
+
+    expect(artifacts.requirementAnalysis).toContain('## Phases');
+    expect(artifacts.requirementAnalysis).toContain('- Pause on HIGH or CRITICAL GitNexus impact.');
+    expect(artifacts.requirementAnalysis).toContain('- Planner output must be deterministic.');
+    expect(artifacts.devPlan).toContain('## Work Breakdown');
+    expect(artifacts.devPlan).toContain('- Related documents: docs/CONTEXT_PACKS.md');
+    await expect(fs.readFile(path.join(run.runDir, 'requirement-analysis.md'), 'utf8')).resolves.toBe(artifacts.requirementAnalysis);
+    await expect(fs.readFile(path.join(run.runDir, 'dev-plan.md'), 'utf8')).resolves.toBe(artifacts.devPlan);
+  });
+
   it('rejects task ids that would escape the run root', async () => {
     const { createRequirementE2ERun } = await loadRequirementE2ERuntime();
 
     await expect(createRequirementE2ERun({ taskId: '../escape', input: 'bad' })).rejects.toThrow('Invalid requirement_e2e task id');
   });
+
 });
