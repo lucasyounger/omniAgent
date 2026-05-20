@@ -1,4 +1,9 @@
 export {
+  buildGoalCapsule,
+  writeGoalCapsule,
+} from './goal-capsule';
+export type { BuildGoalCapsuleInput, GoalCapsule } from './goal-capsule';
+export {
   reconcileGoalRun,
 } from './goal-reconciler';
 export type { GoalReconcileInput, GoalReconcileResult } from './goal-reconciler';

@@ -21,6 +21,7 @@ export {
 } from './evidence';
 export type { CreateEvidenceInput, EvidenceArtifactRef, EvidenceItem, EvidenceSourceType } from './evidence';
 export {
+  buildGoalCapsule,
   appendGoalEvent,
   appendGoalRunEvent,
   assertValidGoalId,
@@ -53,13 +54,16 @@ export {
   retryGoalRun,
   updateGoalRunStatus,
   updateGoalStatus,
+  writeGoalCapsule,
 } from './goal';
 export type {
+  BuildGoalCapsuleInput,
   CompleteGoalRunInput,
   CreateGoalInput,
   CreateGoalRunInput,
   FailGoalRunInput,
   Goal,
+  GoalCapsule,
   GoalReconcileInput,
   GoalReconcileResult,
   GoalRun,

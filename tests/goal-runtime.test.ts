@@ -290,6 +290,64 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated gap analysis and implementation artifacts');
   });
 
+  it('generates a budgeted goal capsule before each run', async () => {
+    const { buildGoalCapsule, createGoal, createGoalRun, getGoalWorkspace } = await loadGoalRuntime();
+    await createGoal({
+      id: 'capsule-goal',
+      type: 'topic_research',
+      title: 'Capsule Goal',
+      objective: 'Track durable knowledge without loading full history',
+    });
+    const { saveEvidence, referenceEvidenceArtifact } = await import('../src/mastra/runtime/evidence');
+    const { recordRawFeedback } = await import('../src/mastra/runtime/feedback');
+    const evidence = await saveEvidence({
+      goalId: 'capsule-goal',
+      sourceType: 'paper',
+      title: 'Memory paper',
+      contentHash: 'memory-paper-hash',
+      summary: 'Use compact memory state for long-running tasks.',
+      metadata: {},
+    });
+    await referenceEvidenceArtifact('capsule-goal', evidence.id, { artifactId: 'artifact-1', path: 'artifacts/digest.md' });
+    await recordRawFeedback({ goalId: 'capsule-goal', channel: 'cli', rawMessage: '下一步关注 token 成本' });
+
+    const capsule = await buildGoalCapsule({ goalId: 'capsule-goal', tokenBudget: 180, nextActions: ['Review new papers'] });
+    await createGoalRun({ goalId: 'capsule-goal', id: 'capsule-run-001', status: 'running' });
+
+    expect(capsule.markdown).toContain('Track durable knowledge without loading full history');
+    expect(capsule.markdown).toContain('Use compact memory state');
+    expect(capsule.markdown).toContain('Latest feedback: continue (cli)');
+    expect(capsule.evidenceRefs).toEqual([evidence.id]);
+    expect(capsule.artifactRefs).toEqual(['artifacts/digest.md']);
+    await expect(fs.readFile(getGoalWorkspace('capsule-goal').capsulePath, 'utf8')).resolves.toContain('Artifact Index');
+  });
+
+  it('caps budgeted goal capsules without copying full evidence bodies', async () => {
+    const { buildGoalCapsule, createGoal } = await loadGoalRuntime();
+    await createGoal({
+      id: 'capsule-budget-goal',
+      type: 'topic_research',
+      title: 'Capsule Budget Goal',
+      objective: 'Keep capsule small',
+    });
+    const { saveEvidence } = await import('../src/mastra/runtime/evidence');
+    await saveEvidence({
+      goalId: 'capsule-budget-goal',
+      sourceType: 'blog',
+      title: 'Long blog',
+      contentHash: 'long-blog-hash',
+      summary: 'x'.repeat(1000),
+      metadata: { fullBody: 'y'.repeat(5000) },
+    });
+
+    const capsule = await buildGoalCapsule({ goalId: 'capsule-budget-goal', tokenBudget: 30 });
+
+    expect(capsule.truncated).toBe(true);
+    expect(capsule.markdown.length).toBeLessThanOrEqual(140);
+    expect(capsule.markdown).not.toContain('fullBody');
+    expect(capsule.markdown).toContain('[Capsule truncated]');
+  });
+
   it('records feedback events, updates goal state, and adapts QQ messages', async () => {
     const { createGoal, readGoal } = await loadGoalRuntime();
     await createGoal({

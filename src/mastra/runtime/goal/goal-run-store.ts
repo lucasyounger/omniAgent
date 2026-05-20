@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { writeGoalCapsule } from './goal-capsule';
 import { ensureGoalWorkspace, resolveGoalWorkspacePath } from './goal-workspace';
 import {
   assertProofOfWorkComplete,
@@ -20,6 +21,7 @@ export async function createGoalRun(input: CreateGoalRunInput): Promise<GoalRun>
   if (await fileExists(runPath)) throw new Error(`Goal run already exists: ${input.id}`);
 
   const now = new Date().toISOString();
+  await writeGoalCapsule({ goalId: input.goalId, currentStage: input.status ?? 'pending' });
   const run: GoalRun = {
     id: input.id,
     goalId: input.goalId,
