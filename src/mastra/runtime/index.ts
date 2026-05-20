@@ -1,4 +1,12 @@
 export {
+  readRuntimeDashboardData,
+} from './dashboard';
+export type {
+  ReadRuntimeDashboardInput,
+  RuntimeDashboardData,
+  RuntimeDashboardStatusCount,
+} from './dashboard';
+export {
   evalRunPath,
   evalRunsDir,
   listEvalRuns,

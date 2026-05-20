@@ -1423,7 +1423,9 @@ interface Connector {
 
 ## PR-26：Runtime Dashboard Data API
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/runtime-dashboard.test.ts tests/gateway-http-server.test.ts --pool=forks` 通过；`npm run typecheck` 通过.
 
 ## PR-27：Agent / Workflow Registry
 
