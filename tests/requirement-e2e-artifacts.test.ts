@@ -97,6 +97,40 @@ describe('requirement e2e artifacts', () => {
     await expect(fs.readFile(path.join(run.runDir, 'dev-plan.md'), 'utf8')).resolves.toBe(artifacts.devPlan);
   });
 
+  it('writes a stable 4+1 design artifact', async () => {
+    const { createRequirementE2ERun, writeDesign4Plus1Artifact, writeRequirementPlanningArtifacts } = await loadRequirementE2ERuntime();
+    const run = await createRequirementE2ERun({ taskId: 'design-task', input: 'Design requirement e2e architecture output' });
+    const planning = await writeRequirementPlanningArtifacts({
+      taskId: 'design-task',
+      requirement: 'Design requirement e2e architecture output',
+      contextPack: {
+        schemaVersion: 1,
+        generatedAt: '2026-05-20T00:00:00.000Z',
+        task: { type: 'requirement_e2e', objective: 'Produce 4+1 design' },
+        user: { preferences: [], profileFacts: [] },
+        project: { goal: 'Build dependable local artifacts.', knowledgeBoundaries: [] },
+        documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
+        tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
+      },
+    });
+
+    const artifact = await writeDesign4Plus1Artifact({
+      taskId: 'design-task',
+      requirement: 'Design requirement e2e architecture output',
+      requirementAnalysis: planning.requirementAnalysis,
+      devPlan: planning.devPlan,
+      decisions: ['Keep design artifact separate from the development plan.'],
+    });
+
+    expect(artifact.design4Plus1).toContain('## Logical View');
+    expect(artifact.design4Plus1).toContain('## Process View');
+    expect(artifact.design4Plus1).toContain('## Development View');
+    expect(artifact.design4Plus1).toContain('## Physical View');
+    expect(artifact.design4Plus1).toContain('## Scenarios');
+    expect(artifact.design4Plus1).toContain('- Keep design artifact separate from the development plan.');
+    expect(artifact.design4Plus1).toContain('- Requirement analysis: provided');
+    await expect(fs.readFile(path.join(run.runDir, 'design-4plus1.md'), 'utf8')).resolves.toBe(artifact.design4Plus1);
+  });
   it('rejects task ids that would escape the run root', async () => {
     const { createRequirementE2ERun } = await loadRequirementE2ERuntime();
 

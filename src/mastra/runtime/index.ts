@@ -24,14 +24,19 @@ export type {
   TestLogSummary,
 } from './context-pack';
 export {
+  buildDesign4Plus1Artifact,
   buildRequirementPlanningArtifacts,
   createRequirementE2ERun,
   inspectRequirementE2ERun,
   requirementE2EArtifactNames,
+  writeDesign4Plus1Artifact,
   writeRequirementPlanningArtifacts,
 } from './requirement-e2e-artifacts';
 export type {
   CreateRequirementE2ERunInput,
+  Design4Plus1Artifact,
+  Design4Plus1ArtifactInput,
+  Design4Plus1Input,
   RequirementAnalysisInput,
   RequirementE2EArtifactName,
   RequirementE2ERunState,

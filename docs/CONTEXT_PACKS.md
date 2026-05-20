@@ -64,6 +64,11 @@ stable for downstream agents: objective, original requirement, scope, phases,
 risks, approval points, acceptance criteria, work breakdown, verification plan,
 and stop conditions.
 
+`writeDesign4Plus1Artifact` is the deterministic architect step. It writes
+`design-4plus1.md` with logical, process, development, physical, and scenario
+views. The artifact also records whether planner outputs were provided and keeps
+decisions as explicit bullets for downstream impact and test review.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

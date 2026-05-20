@@ -50,6 +50,22 @@ export type RequirementPlanningArtifacts = {
   devPlan: string;
 };
 
+export type Design4Plus1Input = {
+  requirement: string;
+  requirementAnalysis?: string;
+  devPlan?: string;
+  contextPack?: ContextPack;
+  decisions?: string[];
+};
+
+export type Design4Plus1ArtifactInput = Design4Plus1Input & {
+  taskId: string;
+};
+
+export type Design4Plus1Artifact = {
+  design4Plus1: string;
+};
+
 const artifactDefaults: Record<RequirementE2EArtifactName, string> = {
   'input.md': '',
   'context-pack.json': '{}\n',
@@ -95,6 +111,16 @@ export async function writeRequirementPlanningArtifacts(input: RequirementPlanni
   await fs.writeFile(run.artifacts['dev-plan.md'], artifacts.devPlan, 'utf8');
 
   return artifacts;
+}
+
+export async function writeDesign4Plus1Artifact(input: Design4Plus1ArtifactInput): Promise<Design4Plus1Artifact> {
+  const run = await inspectRequirementE2ERun(input.taskId);
+  await fs.mkdir(run.runDir, { recursive: true });
+  const artifact = buildDesign4Plus1Artifact(input);
+
+  await fs.writeFile(run.artifacts['design-4plus1.md'], artifact.design4Plus1, 'utf8');
+
+  return artifact;
 }
 
 export async function inspectRequirementE2ERun(taskId: string): Promise<RequirementE2ERunState> {
@@ -200,7 +226,59 @@ export function buildRequirementPlanningArtifacts(input: RequirementAnalysisInpu
     ].join('\n'),
   };
 }
+export function buildDesign4Plus1Artifact(input: Design4Plus1Input): Design4Plus1Artifact {
+  const requirement = input.requirement.trim();
+  const objective = input.contextPack?.task.objective ?? requirement;
+  const projectGoal = input.contextPack?.project.goal ?? 'Not provided.';
+  const documents = input.contextPack?.documents ?? [];
+  const decisions = input.decisions?.length ? input.decisions : ['No architectural decisions recorded yet.'];
 
+  return {
+    design4Plus1: [
+      '# 4+1 Design',
+      '',
+      '## Scope',
+      `- Objective: ${objective}`,
+      `- Requirement: ${requirement}`,
+      `- Project goal: ${projectGoal}`,
+      '',
+      '## Logical View',
+      '- Identify runtime responsibilities and artifact ownership.',
+      '- Keep RequirementE2E outputs deterministic and file-backed.',
+      '- Preserve clear boundaries between planning, design, impact review, patching, and delivery review.',
+      '',
+      '## Process View',
+      '- Requirement analysis creates `requirement-analysis.md` and `dev-plan.md`.',
+      '- Architect step reads planner outputs and writes `design-4plus1.md`.',
+      '- Repo impact and test review steps consume design decisions before implementation claims.',
+      '',
+      '## Development View',
+      '- Runtime APIs live with RequirementE2E artifact helpers.',
+      '- Tests assert stable section names and artifact writes.',
+      '- Public runtime exports expose builders and writers for downstream orchestration.',
+      '',
+      '## Physical View',
+      '- Artifacts are stored under the task run directory.',
+      '- The design artifact path is `design-4plus1.md`.',
+      '- Context pack document references remain links to local project evidence.',
+      '',
+      '## Scenarios',
+      '1. User submits requirement.',
+      '2. Planner writes analysis and development plan.',
+      '3. Architect writes 4+1 design with stable views.',
+      '4. Downstream agents review impact, patch, tests, and delivery summary.',
+      '',
+      '## Decisions',
+      ...decisions.map(decision => `- ${decision}`),
+      '',
+      '## Inputs',
+      `- Requirement analysis: ${input.requirementAnalysis ? 'provided' : 'not provided'}`,
+      `- Development plan: ${input.devPlan ? 'provided' : 'not provided'}`,
+      `- Related documents: ${documents.length ? documents.map(document => document.path).join(', ') : 'None provided.'}`,
+      '',
+    ].join('\n'),
+  };
+}
 
 function requirementE2ERunDir(taskId: string) {
   if (!/^[A-Za-z0-9._-]+$/.test(taskId)) throw new Error(`Invalid requirement_e2e task id: ${taskId}`);
