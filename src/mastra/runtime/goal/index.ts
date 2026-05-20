@@ -6,6 +6,32 @@ export {
 } from './goal-workspace';
 export type { GoalWorkspace } from './goal-workspace';
 export {
+  appendGoalRunEvent,
+  completeGoalRun,
+  createGoalRun,
+  failGoalRun,
+  getGoalRunDir,
+  getGoalRunEventLogPath,
+  getGoalRunPath,
+  getProofOfWorkPath,
+  readGoalRun,
+  updateGoalRunStatus,
+} from './goal-run-store';
+export {
+  assertValidGoalRunId,
+  emptyProofOfWork,
+  goalRunStatuses,
+} from './goal-run.schema';
+export type {
+  CompleteGoalRunInput,
+  CreateGoalRunInput,
+  FailGoalRunInput,
+  GoalRun,
+  GoalRunStatus,
+  ProofOfWork,
+} from './goal-run.schema';
+export { mergeProofOfWork } from './proof-of-work';
+export {
   appendGoalEvent,
   createGoal,
   pauseGoal,

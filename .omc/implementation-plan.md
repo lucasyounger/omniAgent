@@ -901,7 +901,7 @@ docs/GOAL_RUNTIME.md
 
 ## PR-15：GoalRun Proof of Work 标准化
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
