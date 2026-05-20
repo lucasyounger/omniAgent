@@ -1417,7 +1417,9 @@ interface Connector {
 
 ## PR-25：Eval Harness MVP
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/eval-harness.test.ts` 通过；`npm run typecheck` 通过.
 
 ## PR-26：Runtime Dashboard Data API
 
