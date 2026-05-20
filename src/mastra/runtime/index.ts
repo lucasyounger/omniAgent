@@ -23,6 +23,16 @@ export type {
   GitDiffSummary,
   TestLogSummary,
 } from './context-pack';
+export {
+  createRequirementE2ERun,
+  inspectRequirementE2ERun,
+  requirementE2EArtifactNames,
+} from './requirement-e2e-artifacts';
+export type {
+  CreateRequirementE2ERunInput,
+  RequirementE2EArtifactName,
+  RequirementE2ERunState,
+} from './requirement-e2e-artifacts';
 export { bootstrapRuntimeCompatibility } from './bootstrap';
 export {
   approveApprovalRequest,

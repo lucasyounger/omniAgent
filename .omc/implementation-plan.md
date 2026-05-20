@@ -530,7 +530,7 @@ npm run verify
 
 ## PR-09：RequirementE2E Run 目录与 artifact writer
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
@@ -553,10 +553,35 @@ npm run verify
   final-summary.md
 ```
 
+### 已完成内容
+
+- `src/mastra/runtime/requirement-e2e-artifacts.ts`
+  - 新增 `createRequirementE2ERun`，给定 `taskId` 和输入创建完整 artifact skeleton。
+  - 新增 `inspectRequirementE2ERun`，返回 existing/missing artifacts 用于中断恢复。
+  - 已存在 artifact 不覆盖，只补齐缺失文件。
+  - 限制 taskId 只能使用安全字符，避免路径逃逸。
+- `src/mastra/lib/paths.ts`、`src/mastra/runtime/index.ts`
+  - 增加 RequirementE2E runs root 和 runtime exports。
+- `tests/requirement-e2e-artifacts.test.ts`
+  - 覆盖 skeleton 创建、context-pack 写入、恢复检测、不覆盖已有 artifact、非法 taskId 拒绝。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 RequirementE2E run artifacts 目录和恢复协议。
+
 ### 验收标准
 
 - 给定 taskId 和输入，能创建完整 artifact skeleton。
 - 中断后能检测已有 artifact 并继续。
+
+### 验证结果
+
+```bash
+npm test -- tests/requirement-e2e-artifacts.test.ts
+npm run typecheck
+npm run verify:change-sync
+npm run verify
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 3 个 tests 通过；完整验证为 18 个 test files / 74 个 tests 通过，`verify:change-sync` 通过。
 
 ---
 
@@ -741,9 +766,9 @@ npm run verify
 
 ```text
 当前阶段：M2 需求 E2E MVP 产物链路
-当前优先级：PR-09 RequirementE2E Run 目录与 artifact writer
-上一步完成：PR-08 Memory Proposal MVP
-下一步建议：固化 .omni/runs/requirement-e2e/{taskId}/ artifact skeleton 与中断恢复检测
+当前优先级：PR-10 PlannerAgent / Requirement Analyzer MVP
+上一步完成：PR-09 RequirementE2E Run 目录与 artifact writer
+下一步建议：输入需求后生成 requirement-analysis.md 和 dev-plan.md
 ```
 
 ## 6. 中断恢复步骤

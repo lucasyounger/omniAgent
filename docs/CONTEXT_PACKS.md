@@ -35,6 +35,28 @@ The first compressors are intentionally simple:
 Every summary includes an `evidenceRef` with a kind and source string so later
 artifacts can cite the original diff, log, document, or budget input.
 
+## RequirementE2E Run Artifacts
+
+`createRequirementE2ERun` creates a stable run directory at
+`~/.omni/runs/requirement-e2e/{taskId}/` with the full artifact skeleton for the
+requirement E2E chain:
+
+- `input.md`
+- `context-pack.json`
+- `requirement-analysis.md`
+- `repo-impact-report.md`
+- `design-4plus1.md`
+- `dev-plan.md`
+- `patch-proposal.diff`
+- `test-plan.md`
+- `delivery-doc.md`
+- `memory-proposal.md`
+- `final-summary.md`
+
+Use `inspectRequirementE2ERun` to detect existing and missing artifacts before
+resuming interrupted work. Existing artifacts are not overwritten; only missing
+files are created.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`
