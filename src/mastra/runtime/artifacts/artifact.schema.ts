@@ -43,6 +43,28 @@ export type UpdateArtifactInput = {
   title?: string;
 };
 
+export type ExportArtifactMarkdownInput = {
+  artifactId: string;
+};
+
+export type IngestArtifactMarkdownInput = {
+  artifactId: string;
+  markdown: string;
+};
+
+export type ArtifactMarkdownIngestResult = {
+  artifactId: string;
+  status: 'unchanged' | 'proposal_created';
+  proposalPath?: string;
+  proposedVersion?: number;
+};
+
+export type ArtifactFrontmatter = {
+  artifact_id: string;
+  evidence_ids: string[];
+  version: number;
+};
+
 export type WikiDiffInput = {
   title: string;
   currentContent?: string;

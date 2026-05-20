@@ -1,7 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getGoalWorkspace, goalsRoot } from '../goal/goal-workspace';
-import type { Artifact, CreateArtifactInput, UpdateArtifactInput, WikiDiffInput } from './artifact.schema';
+import type {
+  Artifact,
+  ArtifactFrontmatter,
+  ArtifactMarkdownIngestResult,
+  CreateArtifactInput,
+  IngestArtifactMarkdownInput,
+  UpdateArtifactInput,
+  WikiDiffInput,
+} from './artifact.schema';
 
 export async function createArtifact(input: CreateArtifactInput): Promise<Artifact> {
   const existing = await listArtifacts(input.ownerId);
@@ -44,6 +52,44 @@ export async function updateArtifact(input: UpdateArtifactInput): Promise<Artifa
   await writeArtifactContent(updated.path, input.content);
   await writeArtifactIndex(match.ownerId, ownerArtifacts.map(item => item.id === updated.id ? updated : item));
   return updated;
+}
+
+export async function exportArtifactMarkdown(input: { artifactId: string }): Promise<string> {
+  const artifact = await findArtifact(input.artifactId);
+  const content = await fs.readFile(artifact.path, 'utf8');
+  return withArtifactFrontmatter(artifact, content);
+}
+
+export async function ingestArtifactMarkdown(input: IngestArtifactMarkdownInput): Promise<ArtifactMarkdownIngestResult> {
+  const artifact = await findArtifact(input.artifactId);
+  const { frontmatter, content } = parseArtifactMarkdown(input.markdown);
+  if (frontmatter.artifact_id !== artifact.id) {
+    throw new Error(`Artifact id mismatch: ${frontmatter.artifact_id}`);
+  }
+
+  const currentContent = await fs.readFile(artifact.path, 'utf8');
+  if (normalizeMarkdownContent(currentContent) === normalizeMarkdownContent(content)) {
+    return {
+      artifactId: artifact.id,
+      status: 'unchanged',
+    };
+  }
+
+  const proposedVersion = artifact.version + 1;
+  const proposalPath = artifactProposalPath(artifact.ownerId, artifact.id, proposedVersion);
+  await fs.mkdir(path.dirname(proposalPath), { recursive: true });
+  await fs.writeFile(proposalPath, withArtifactFrontmatter({
+    ...artifact,
+    sourceEvidenceIds: frontmatter.evidence_ids,
+    version: proposedVersion,
+  }, content), 'utf8');
+
+  return {
+    artifactId: artifact.id,
+    status: 'proposal_created',
+    proposalPath,
+    proposedVersion,
+  };
 }
 
 export async function listArtifacts(ownerId: string): Promise<Artifact[]> {
@@ -103,6 +149,78 @@ async function listArtifactsByAnyOwner(): Promise<Artifact[]> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
+}
+
+async function findArtifact(artifactId: string): Promise<Artifact> {
+  const artifacts = await listArtifactsByAnyOwner();
+  const match = artifacts.find(item => item.id === artifactId);
+  if (!match) throw new Error(`Artifact not found: ${artifactId}`);
+  return match;
+}
+
+function artifactProposalPath(ownerId: string, artifactId: string, version: number): string {
+  return path.join(getGoalWorkspace(ownerId).artifactsDir, artifactId, 'proposals', `v${version}.md`);
+}
+
+function withArtifactFrontmatter(artifact: Artifact, content: string): string {
+  const frontmatter = [
+    '---',
+    `artifact_id: ${artifact.id}`,
+    `evidence_ids: [${artifact.sourceEvidenceIds.map(id => JSON.stringify(id)).join(', ')}]`,
+    `version: ${artifact.version}`,
+    '---',
+    '',
+  ].join('\n');
+  return `${frontmatter}${normalizeMarkdownContent(content)}\n`;
+}
+
+function parseArtifactMarkdown(markdown: string): { frontmatter: ArtifactFrontmatter; content: string } {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    throw new Error('Artifact markdown is missing frontmatter.');
+  }
+
+  return {
+    frontmatter: parseArtifactFrontmatter(match[1]),
+    content: normalizeMarkdownContent(match[2]),
+  };
+}
+
+function parseArtifactFrontmatter(raw: string): ArtifactFrontmatter {
+  const values = new Map<string, string>();
+  for (const line of raw.split(/\r?\n/)) {
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) continue;
+    values.set(line.slice(0, separatorIndex).trim(), line.slice(separatorIndex + 1).trim());
+  }
+
+  const artifactId = values.get('artifact_id');
+  const version = Number(values.get('version'));
+  if (!artifactId) throw new Error('Artifact markdown frontmatter is missing artifact_id.');
+  if (!Number.isInteger(version) || version < 1) throw new Error('Artifact markdown frontmatter has invalid version.');
+
+  return {
+    artifact_id: artifactId,
+    evidence_ids: parseEvidenceIds(values.get('evidence_ids') ?? '[]'),
+    version,
+  };
+}
+
+function parseEvidenceIds(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '[]') return [];
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed
+      .slice(1, -1)
+      .split(',')
+      .map(item => item.trim().replace(/^[`'"]|[`'"]$/g, ''))
+      .filter(Boolean);
+  }
+  return trimmed.split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function normalizeMarkdownContent(content: string) {
+  return content.replace(/\s+$/g, '');
 }
 
 function createArtifactId(title: string): string {

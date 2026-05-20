@@ -1379,7 +1379,9 @@ interface Connector {
 
 ## PR-29：Obsidian / Markdown 双向同步
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/artifact-engine.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 

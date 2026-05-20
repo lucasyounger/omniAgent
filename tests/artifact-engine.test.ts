@@ -76,6 +76,44 @@ describe('goal artifact engine', () => {
     await expect(fs.readFile(second.path, 'utf8')).resolves.toBe('v2\n');
   });
 
+
+  it('exports artifact markdown with sync frontmatter and ingests edits as proposals', async () => {
+    const { createArtifact, createGoal, exportArtifactMarkdown, ingestArtifactMarkdown } = await loadArtifactRuntime();
+    await createGoal({ id: 'sync-goal', type: 'topic_research', title: 'Sync Goal', objective: 'Sync artifacts' });
+    const artifact = await createArtifact({
+      id: 'sync-artifact',
+      type: 'wiki',
+      ownerType: 'goal',
+      ownerId: 'sync-goal',
+      title: 'Sync Artifact',
+      content: '# Sync\n\nOriginal.',
+      sourceEvidenceIds: ['e1'],
+    });
+
+    const exported = await exportArtifactMarkdown({ artifactId: artifact.id });
+    expect(exported).toContain('artifact_id: sync-artifact');
+    expect(exported).toContain('evidence_ids: ["e1"]');
+    expect(exported).toContain('version: 1');
+    expect(exported).toContain('# Sync\n\nOriginal.');
+
+    await expect(ingestArtifactMarkdown({ artifactId: artifact.id, markdown: exported })).resolves.toEqual({
+      artifactId: artifact.id,
+      status: 'unchanged',
+    });
+
+    const edited = exported.replace('Original.', 'Edited by user.').replace('["e1"]', '["e1", "e2"]');
+    const result = await ingestArtifactMarkdown({ artifactId: artifact.id, markdown: edited });
+
+    expect(result).toMatchObject({
+      artifactId: artifact.id,
+      status: 'proposal_created',
+      proposedVersion: 2,
+    });
+    await expect(fs.readFile(result.proposalPath!, 'utf8')).resolves.toContain('Edited by user.');
+    await expect(fs.readFile(result.proposalPath!, 'utf8')).resolves.toContain('evidence_ids: ["e1", "e2"]');
+    await expect(fs.readFile(artifact.path, 'utf8')).resolves.toBe('# Sync\n\nOriginal.\n');
+  });
+
   it('generates wiki updates as draft diffs requiring approval', async () => {
     const { buildWikiDiff } = await loadArtifactRuntime();
 
