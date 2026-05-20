@@ -1,4 +1,19 @@
 export {
+  acceptProfileFacet,
+  listProfileFacets,
+  profileFacetsPath,
+  proposePreferenceFromFeedback,
+  proposeProfileFacet,
+  rejectProfileFacet,
+} from './profile';
+export type {
+  CreateProfileFacetInput,
+  FeedbackPreferenceProposalInput,
+  ProfileFacet,
+  ProfileFacetKind,
+  ProfileFacetStatus,
+} from './profile';
+export {
   indexMemory,
   memoryIndexPath,
   readMemoryIndex,
