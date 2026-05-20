@@ -24,6 +24,7 @@ export type GoalRun = {
   id: string;
   goalId: string;
   status: GoalRunStatus;
+  parentRunId?: string;
   plan?: unknown;
   summary?: string;
   proofOfWork?: ProofOfWork;
@@ -36,6 +37,7 @@ export type CreateGoalRunInput = {
   id: string;
   goalId: string;
   status?: GoalRunStatus;
+  parentRunId?: string;
   plan?: unknown;
 };
 

@@ -1,4 +1,16 @@
 export {
+  reconcileGoalRun,
+} from './goal-reconciler';
+export type { GoalReconcileInput, GoalReconcileResult } from './goal-reconciler';
+export {
+  failGoalRunForRetry,
+  retryGoalRun,
+} from './goal-retry';
+export {
+  isGoalRunTimedOut,
+} from './goal-timeout-policy';
+export type { GoalTimeoutPolicy } from './goal-timeout-policy';
+export {
   ensureGoalWorkspace,
   getGoalWorkspace,
   goalsRoot,

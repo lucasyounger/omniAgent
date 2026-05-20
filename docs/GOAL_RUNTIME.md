@@ -73,6 +73,12 @@ Use `src/mastra/runtime/goal` or the aggregate runtime export:
 - `failGoalRun(input)` marks a run failed and records the failure reason.
 - `mergeProofOfWork(base, patch)` combines proof sections without duplicates.
 
-## PR-14 / PR-15 scope
+PR-16 adds retry/reconcile helpers:
 
-PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. Retry/reconcile and research workflows are handled by later M3 slices.
+- `isGoalRunTimedOut(run, policy)` detects stale `running` runs.
+- `reconcileGoalRun(input)` marks timed-out runs as `interrupted` and returns only missing artifacts from an expected artifact list.
+- `retryGoalRun(goalId, failedRunId, retryRunId)` creates a pending retry run with `parentRunId` and the original plan.
+
+## PR-14 / PR-16 scope
+
+PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. Research workflows are handled by later M3 slices.

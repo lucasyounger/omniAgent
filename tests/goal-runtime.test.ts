@@ -171,4 +171,76 @@ describe('goal runtime workspace manager', () => {
       testsRun: ['npm test'],
     });
   });
+
+  it('marks timed-out running runs as interrupted during reconcile', async () => {
+    const { createGoal, createGoalRun, reconcileGoalRun } = await loadGoalRuntime();
+    await createGoal({
+      id: 'timeout-goal',
+      type: 'topic_research',
+      title: 'Timeout Goal',
+      objective: 'Handle interrupted runs',
+    });
+    await createGoalRun({ goalId: 'timeout-goal', id: 'run-timeout', status: 'running' });
+
+    const result = await reconcileGoalRun({
+      goalId: 'timeout-goal',
+      runId: 'run-timeout',
+      timeoutPolicy: { now: new Date(Date.now() + 10_000), runningTimeoutMs: 1 },
+    });
+
+    expect(result.interrupted).toBe(true);
+    expect(result.run.status).toBe('interrupted');
+  });
+
+  it('retries failed runs with parentRunId and original plan', async () => {
+    const { createGoal, createGoalRun, failGoalRun, retryGoalRun } = await loadGoalRuntime();
+    await createGoal({
+      id: 'retry-goal',
+      type: 'module_improvement',
+      title: 'Retry Goal',
+      objective: 'Retry failed work',
+    });
+    await createGoalRun({ goalId: 'retry-goal', id: 'run-original', status: 'running', plan: { step: 'search' } });
+    await failGoalRun({ goalId: 'retry-goal', runId: 'run-original', failureReason: 'network error' });
+
+    const retry = await retryGoalRun('retry-goal', 'run-original', 'run-retry');
+
+    expect(retry.status).toBe('pending');
+    expect(retry.parentRunId).toBe('run-original');
+    expect(retry.plan).toEqual({ step: 'search' });
+  });
+
+  it('reconciles missing artifacts without repeating completed artifacts', async () => {
+    const { createGoal, createGoalRun, completeGoalRun, reconcileGoalRun } = await loadGoalRuntime();
+    await createGoal({
+      id: 'artifact-goal',
+      type: 'topic_research',
+      title: 'Artifact Goal',
+      objective: 'Avoid duplicate artifacts',
+    });
+    await createGoalRun({ goalId: 'artifact-goal', id: 'run-artifacts', status: 'running' });
+    await completeGoalRun({
+      goalId: 'artifact-goal',
+      runId: 'run-artifacts',
+      summary: 'Wrote digest.',
+      proofOfWork: {
+        did: ['Wrote digest'],
+        sourcesRead: [],
+        artifactsCreated: ['daily-digest.md'],
+        memoryProposals: [],
+        testsRun: [],
+        risks: [],
+        nextActions: [],
+      },
+    });
+
+    const result = await reconcileGoalRun({
+      goalId: 'artifact-goal',
+      runId: 'run-artifacts',
+      expectedArtifacts: ['daily-digest.md', 'wiki-diff.md'],
+    });
+
+    expect(result.shouldExecuteArtifacts).toEqual(['wiki-diff.md']);
+    expect(result.missingArtifacts).toEqual(['wiki-diff.md']);
+  });
 });

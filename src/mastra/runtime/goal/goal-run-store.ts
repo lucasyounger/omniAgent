@@ -24,6 +24,7 @@ export async function createGoalRun(input: CreateGoalRunInput): Promise<GoalRun>
     id: input.id,
     goalId: input.goalId,
     status: input.status ?? 'pending',
+    parentRunId: input.parentRunId,
     plan: input.plan,
     startedAt: now,
   };
