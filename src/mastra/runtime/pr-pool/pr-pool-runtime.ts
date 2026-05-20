@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { cleanupWorktree } from './worktree-manager';
 import {
   appendPrPoolEvent,
   archivePrPoolItem,
@@ -110,8 +111,13 @@ export const prPoolRuntime = {
     return this.transition(id, 'ready', 'Retry requested');
   },
 
-  archive(id: string, reason: PRArchiveEntry['archiveReason']): Promise<PRArchiveEntry> {
-    return archivePrPoolItem(id, reason);
+  async archive(id: string, reason: PRArchiveEntry['archiveReason']): Promise<PRArchiveEntry> {
+    const item = await getPrPoolItem(id);
+    const entry = await archivePrPoolItem(id, reason);
+    if (item?.workspace.worktreePath) {
+      await cleanupWorktree(item, { keepBranch: true });
+    }
+    return entry;
   },
 
   async transition(id: string, to: PRItemStatus, detail?: string): Promise<PRItem> {

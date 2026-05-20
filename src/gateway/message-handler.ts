@@ -261,7 +261,7 @@ async function handlePrCommand(raw: string): Promise<string> {
       if (!arg) return '用法: /pr develop <id>';
       return developPrItem(arg);
     default:
-      return '用法: /pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id]';
+      return '用法: /pr <list|show|confirm|confirm-all|delete|pause|retry|archive|develop> [id]';
   }
 }
 

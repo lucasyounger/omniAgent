@@ -280,12 +280,17 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
       scenarios: [],
     },
     codeTaskId: item.run.codeTaskId || '',
-    codeRunSummary: '',
-    artifacts: ['item.json'],
+    codeRunSummary: buildCodeRunSummary(item),
+    artifacts: ['item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-run-summary.md', 'final-summary.md'],
     archivedAt,
     archiveReason: reason,
   };
   await fs.writeFile(path.join(archiveDir, 'item.json'), JSON.stringify(item, null, 2), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'objective.md'), buildObjectiveMarkdown(item), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'context-brief.md'), buildContextBriefMarkdown(item), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'design-4plus1.md'), buildDesignMarkdown(archiveEntry.design4Plus1), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'code-run-summary.md'), archiveEntry.codeRunSummary, 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'final-summary.md'), buildFinalSummaryMarkdown(item, archiveEntry), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'archive-entry.json'), JSON.stringify(archiveEntry, null, 2), 'utf8');
   await writeItems(items.filter(entry => entry.id !== id));
   await appendPrPoolEvent({ prItemId: id, type: 'archived', from: item.status, to: 'archived' });
@@ -305,6 +310,70 @@ export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
     }
   }
   return archived;
+}
+
+function buildCodeRunSummary(item: PRItem): string {
+  return [
+    `# Code Run Summary`,
+    '',
+    `- PR Item: ${item.id}`,
+    `- Code Task: ${item.run.codeTaskId || 'n/a'}`,
+    `- Runtime Task: ${item.run.runtimeTaskId || 'n/a'}`,
+    `- Status: ${item.status}`,
+  ].join('\n');
+}
+
+function buildObjectiveMarkdown(item: PRItem): string {
+  return [`# Objective`, '', item.objective, '', '## Acceptance Criteria', ...item.acceptanceCriteria.map(criterion => `- ${criterion}`)].join('\n');
+}
+
+function buildContextBriefMarkdown(item: PRItem): string {
+  return [
+    `# Context Brief`,
+    '',
+    `- Priority: ${item.priority}`,
+    `- Source: ${item.source}`,
+    `- Impact: ${item.impact.risk}`,
+    `- Modules: ${item.impact.modules.join(', ')}`,
+    item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
+    item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
+function buildDesignMarkdown(design: NonNullable<PRItem['design4Plus1']>): string {
+  return [
+    `# 4+1 Design`,
+    '',
+    `## Logical`,
+    design.logical,
+    '',
+    `## Process`,
+    design.process,
+    '',
+    `## Development`,
+    design.development,
+    '',
+    `## Physical`,
+    design.physical,
+    '',
+    `## Scenarios`,
+    ...design.scenarios.map(scenario => `- ${scenario}`),
+  ].join('\n');
+}
+
+function buildFinalSummaryMarkdown(item: PRItem, archiveEntry: PRArchiveEntry): string {
+  return [
+    `# Final Summary`,
+    '',
+    `- PR Item: ${item.id}`,
+    `- Title: ${item.title}`,
+    `- Archive Reason: ${archiveEntry.archiveReason}`,
+    `- Code Task: ${archiveEntry.codeTaskId || 'n/a'}`,
+    `- Test Command: ${item.testCommand || 'n/a'}`,
+    `- Merge Recommendation: review archived artifacts before merge`,
+  ].join('\n');
 }
 
 export async function appendPrPoolEvent(event: Omit<PRPoolEvent, 'id' | 'timestamp'>): Promise<PRPoolEvent> {
