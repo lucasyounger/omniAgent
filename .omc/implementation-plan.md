@@ -469,11 +469,26 @@ npm run verify
 
 ## PR-08：Memory Proposal MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 任务完成后生成 memory proposal，而不是直接写长期记忆。
+
+### 已完成内容
+
+- `src/mastra/lib/docs-memory.ts`
+  - `DocUpdateProposal` 增加 `proposalType`，类型为 `user` / `project` / `lesson` / `reference`。
+  - `writeDocUpdateProposal` 生成 `memory-proposal-*` id，并继续追加写入 `~/.omni/memory/doc-update-proposals.jsonl`。
+  - 未显式传入 `proposalType` 时，根据目标文件推断 proposal 类型。
+- `src/mastra/tools/memory-tools.ts`
+  - `propose-doc-update` tool input/output schema 支持 typed memory proposal。
+- `src/mastra/workflows/memory-maintenance-workflow.ts`
+  - workflow proposal input 支持 typed memory proposal。
+- `tests/docs-memory.test.ts`
+  - 覆盖 proposal 文件生成、JSONL 持久化、类型区分，以及未确认内容不进入 `USER.md`。
+- `docs/agents/KNOWLEDGE_AGENT.md`、`docs/knowledge/PROJECTS.md`
+  - 记录 typed reviewable proposal 约定。
 
 ### 验收标准
 
@@ -481,6 +496,17 @@ npm run verify
 - proposal 区分 user/project/lesson/reference 类型。
 - 未确认内容不进入长期记忆。
 - 有测试覆盖。
+
+### 验证结果
+
+```bash
+npm test -- tests/docs-memory.test.ts
+npm run typecheck
+npm run verify:change-sync
+npm run verify
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 3 个 tests 通过；完整验证为 17 个 test files / 71 个 tests 通过，`verify:change-sync` 通过。
 
 ---
 
@@ -714,10 +740,10 @@ npm run verify
 ## 5. 当前执行状态
 
 ```text
-当前阶段：M1 最小记忆与上下文骨架
-当前优先级：PR-08 Memory Proposal MVP
-上一步完成：PR-07 ContextJuice 简版
-下一步建议：生成 reviewable memory proposal 文件，区分 user/project/lesson/reference 类型
+当前阶段：M2 需求 E2E MVP 产物链路
+当前优先级：PR-09 RequirementE2E Run 目录与 artifact writer
+上一步完成：PR-08 Memory Proposal MVP
+下一步建议：固化 .omni/runs/requirement-e2e/{taskId}/ artifact skeleton 与中断恢复检测
 ```
 
 ## 6. 中断恢复步骤

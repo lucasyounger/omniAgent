@@ -70,6 +70,7 @@ export const proposeDocUpdateTool = createTool({
   id: 'propose-doc-update',
   description: 'Record a memory update proposal for review or later automatic application.',
   inputSchema: z.object({
+    proposalType: z.enum(['user', 'project', 'lesson', 'reference']).optional(),
     reason: z.string(),
     targetFiles: z.array(z.string()),
     risk: z.enum(['low', 'medium', 'high']),
@@ -85,6 +86,7 @@ export const proposeDocUpdateTool = createTool({
   }),
   outputSchema: z.object({
     id: z.string(),
+    proposalType: z.enum(['user', 'project', 'lesson', 'reference']),
     reason: z.string(),
     targetFiles: z.array(z.string()),
     risk: z.string(),

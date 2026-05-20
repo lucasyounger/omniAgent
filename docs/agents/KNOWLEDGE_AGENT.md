@@ -16,7 +16,8 @@ knowledge, decisions, and procedures synchronized with code behavior.
 
 - Lists and reads docs memory files.
 - Appends low-risk summaries to `~/.omni/memory/EPISODIC_LOG.md`.
-- Writes reviewable proposals to `~/.omni/memory/doc-update-proposals.jsonl`.
+- Writes typed reviewable proposals to `~/.omni/memory/doc-update-proposals.jsonl`.
+  Proposal types are `user`, `project`, `lesson`, and `reference`.
 - Refreshes `~/.omni/memory/MEMORY_INDEX.json`.
 - Persists explicit user-provided profile facts with `upsert-user-profile-fact`.
 

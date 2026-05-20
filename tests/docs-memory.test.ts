@@ -50,4 +50,66 @@ describe('docs memory', () => {
     expect(content).toContain('- name: Lucas Younger');
     expect(content).not.toContain('- name: Lucas\n');
   });
+
+  it('writes reviewable memory proposals without changing long-term user memory', async () => {
+    const { writeDocUpdateProposal } = await loadDocsMemory();
+
+    const proposal = await writeDocUpdateProposal({
+      proposalType: 'user',
+      reason: 'Capture inferred user preference for review.',
+      targetFiles: ['memory/USER.md'],
+      risk: 'medium',
+      changes: [
+        {
+          file: 'memory/USER.md',
+          operation: 'append',
+          summary: 'Suggest adding a reviewed preference.',
+          content: '- prefers concise updates',
+        },
+      ],
+    });
+
+    const proposalFile = path.join(tempRoot, '.omni', 'memory', 'doc-update-proposals.jsonl');
+    const proposalLines = (await fs.readFile(proposalFile, 'utf8')).trim().split('\n');
+    const persistedProposal = JSON.parse(proposalLines[0]);
+    const userMemory = await fs.readFile(path.join(tempRoot, '.omni', 'memory', 'USER.md'), 'utf8');
+
+    expect(proposal.id).toMatch(/^memory-proposal-/);
+    expect(persistedProposal).toMatchObject({
+      id: proposal.id,
+      proposalType: 'user',
+      reason: 'Capture inferred user preference for review.',
+      targetFiles: ['memory/USER.md'],
+      risk: 'medium',
+    });
+    expect(persistedProposal.proposedAt).toEqual(expect.any(String));
+    expect(userMemory).not.toContain('prefers concise updates');
+  });
+
+  it('infers proposal types for project, lesson, and reference targets', async () => {
+    const { writeDocUpdateProposal } = await loadDocsMemory();
+
+    const projectProposal = await writeDocUpdateProposal({
+      reason: 'Project knowledge update.',
+      targetFiles: ['knowledge/PROJECTS.md'],
+      risk: 'low',
+      changes: [{ file: 'knowledge/PROJECTS.md', operation: 'append', summary: 'Project note.', content: 'Project note.' }],
+    });
+    const lessonProposal = await writeDocUpdateProposal({
+      reason: 'Lesson update.',
+      targetFiles: ['memory/EPISODIC_LOG.md'],
+      risk: 'low',
+      changes: [{ file: 'memory/EPISODIC_LOG.md', operation: 'append', summary: 'Lesson note.', content: 'Lesson note.' }],
+    });
+    const referenceProposal = await writeDocUpdateProposal({
+      reason: 'Reference update.',
+      targetFiles: ['memory/REFERENCE.md'],
+      risk: 'low',
+      changes: [{ file: 'memory/REFERENCE.md', operation: 'append', summary: 'Reference note.', content: 'Reference note.' }],
+    });
+
+    expect(projectProposal.proposalType).toBe('project');
+    expect(lessonProposal.proposalType).toBe('lesson');
+    expect(referenceProposal.proposalType).toBe('reference');
+  });
 });

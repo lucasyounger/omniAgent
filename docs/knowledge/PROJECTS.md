@@ -20,6 +20,6 @@ OmniAgent keeps memory-like data in several stores. Treat each store as a differ
 
 - Direct writes to `~/.omni/memory/USER.md` are only for explicit user-provided stable facts such as name or stated preferences.
 - Low-risk summaries may append to `~/.omni/memory/EPISODIC_LOG.md`.
-- Medium/high-risk documentation or memory changes must create entries in `~/.omni/memory/doc-update-proposals.jsonl` for review before they affect stable memory or project docs.
+- Medium/high-risk documentation or memory changes must create typed entries in `~/.omni/memory/doc-update-proposals.jsonl` for review before they affect stable memory or project docs. Proposal types are `user`, `project`, `lesson`, and `reference`.
 - Code behavior changes should update `docs/agents/**` or `docs/knowledge/**` in the same PR slice and refresh `MEMORY_INDEX.json` through the memory workflow/tooling.
 - Runtime artifacts under `~/.omni/runs/**` can be referenced as evidence, but durable lessons must be promoted intentionally into docs or proposals.

@@ -16,6 +16,7 @@ const memoryMaintenanceInputSchema = z.object({
   sourceRunId: z.string().optional(),
   proposal: z
     .object({
+      proposalType: z.enum(['user', 'project', 'lesson', 'reference']).optional(),
       reason: z.string(),
       targetFiles: z.array(z.string()),
       risk: z.enum(['low', 'medium', 'high']),

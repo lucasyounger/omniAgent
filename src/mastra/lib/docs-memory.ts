@@ -3,9 +3,11 @@ import path from 'node:path';
 import { docsRoot, memoryRoot, normalizeInside } from './paths';
 
 export type DocUpdateRisk = 'low' | 'medium' | 'high';
+export type MemoryProposalType = 'user' | 'project' | 'lesson' | 'reference';
 
 export type DocUpdateProposal = {
   id: string;
+  proposalType: MemoryProposalType;
   reason: string;
   targetFiles: string[];
   risk: DocUpdateRisk;
@@ -124,11 +126,12 @@ export async function upsertUserProfileFact(input: {
   };
 }
 
-export async function writeDocUpdateProposal(proposal: Omit<DocUpdateProposal, 'id' | 'proposedAt'>) {
+export async function writeDocUpdateProposal(proposal: Omit<DocUpdateProposal, 'id' | 'proposedAt' | 'proposalType'> & { proposalType?: MemoryProposalType }) {
   await ensureMemoryStore();
-  const id = `doc-update-${Date.now()}`;
+  const id = `memory-proposal-${Date.now()}`;
   const fullProposal: DocUpdateProposal = {
     ...proposal,
+    proposalType: proposal.proposalType ?? inferProposalType(proposal.targetFiles),
     id,
     proposedAt: new Date().toISOString(),
   };
@@ -194,6 +197,13 @@ async function ensureMemoryStore() {
 
   await fs.writeFile(userFile, '# User Memory\n\n', 'utf8');
   await fs.writeFile(path.join(memoryRoot, 'EPISODIC_LOG.md'), '# Episodic Log\n\n', 'utf8');
+}
+
+function inferProposalType(targetFiles: string[]): MemoryProposalType {
+  if (targetFiles.some(file => file === 'memory/USER.md' || file.endsWith('/USER.md'))) return 'user';
+  if (targetFiles.some(file => file.toLowerCase().includes('reference'))) return 'reference';
+  if (targetFiles.some(file => file === 'memory/EPISODIC_LOG.md' || file.toLowerCase().includes('lesson'))) return 'lesson';
+  return 'project';
 }
 
 async function readDocTitle(filePath: string) {
