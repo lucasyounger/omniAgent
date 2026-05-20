@@ -1,3 +1,5 @@
+import { prPoolRuntime } from '../mastra/runtime/pr-pool/pr-pool-runtime';
+import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
 import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
@@ -33,6 +35,10 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
 
   if (text.startsWith('/task ')) {
     return [reply(message, await handleTaskCommand(message, text.slice('/task '.length)))];
+  }
+
+  if (text.startsWith('/pr ')) {
+    return [reply(message, await handlePrCommand(text.slice('/pr '.length)))];
   }
 
   const orchestratorDecision = orchestrateChannelMessage(message);
@@ -227,6 +233,77 @@ async function handleTaskCommand(message: ChannelMessage, raw: string) {
     .join('\n');
 }
 
+async function handlePrCommand(raw: string): Promise<string> {
+  const parts = raw.trim().split(/\s+/).filter(Boolean);
+  const subCommand = parts[0]?.toLowerCase();
+  const arg = parts.slice(1).join(' ');
+
+  switch (subCommand) {
+    case 'list':
+      return formatPrList(await prPoolRuntime.list());
+    case 'show':
+      return formatPrDetail(await prPoolRuntime.get(arg));
+    case 'confirm':
+      if (!arg) return '用法: /pr confirm <id>';
+      await prPoolRuntime.confirm(arg);
+      return `PR ${arg} 已确认 (draft → ready)`;
+    case 'confirm-all': {
+      const items = await prPoolRuntime.confirmAll();
+      return `${items.length} 个 PR 已确认 (draft → ready)`;
+    }
+    case 'delete':
+      if (!arg) return '用法: /pr delete <id>';
+      await prPoolRuntime.delete(arg);
+      return `PR ${arg} 已删除`;
+    case 'pause':
+      if (!arg) return '用法: /pr pause <id>';
+      await prPoolRuntime.pause(arg);
+      return `PR ${arg} 已暂停 (ready → cancelled)`;
+    case 'retry':
+      if (!arg) return '用法: /pr retry <id>';
+      await prPoolRuntime.retry(arg);
+      return `PR ${arg} 已重试 (failed → ready)`;
+    case 'archive':
+      if (!arg) return '用法: /pr archive <id>';
+      await prPoolRuntime.archive(arg, 'completed');
+      return `PR ${arg} 已归档`;
+    case 'develop':
+      return '开发功能将在第二阶段启用';
+    default:
+      return '用法: /pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id]';
+  }
+}
+
+function formatPrList(items: PRItem[]): string {
+  if (!items.length) {
+    return 'PR 池暂无条目。';
+  }
+
+  return [
+    'PR 池条目：',
+    ...items.map(item => `${item.id} | ${item.status} | ${item.priority} | ${item.title}`),
+  ].join('\n');
+}
+
+function formatPrDetail(item: PRItem | undefined): string {
+  if (!item) {
+    return 'PR 条目不存在。';
+  }
+
+  return [
+    `ID: ${item.id}`,
+    `Title: ${item.title}`,
+    `Status: ${item.status}`,
+    `Priority: ${item.priority}`,
+    `Objective: ${item.objective}`,
+    `Impact: ${item.impact.risk} | ${item.impact.modules.join(', ')}`,
+    item.dependencies.length ? `Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    item.acceptanceCriteria.length ? `Acceptance:\n${item.acceptanceCriteria.map((criterion, index) => `${index + 1}. ${criterion}`).join('\n')}` : undefined,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
 async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {
   const body = {
     messages: [
@@ -269,6 +346,7 @@ function helpText() {
     '/help \u67e5\u770b\u5e2e\u52a9',
     '/status \u67e5\u770b\u72b6\u6001',
     '/task <workspacePath> :: <objective> \u521b\u5efa\u5f02\u6b65 CodeAgent \u4efb\u52a1',
+    '/pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id] \u7ba1\u7406 PR \u6c60',
     '/pair <token> \u914d\u5bf9\u5f53\u524d\u4f1a\u8bdd',
     '',
     '\u81ea\u7136\u8bed\u8a00\u53ef\u521b\u5efa\u5b9a\u65f6\u63d0\u9192\u3001AI \u65e5\u62a5\u548c\u901a\u77e5\uff1b\u5176\u4ed6\u6d88\u606f\u4f1a\u8f6c\u53d1\u7ed9 OmniRouterAgent \u5e76\u540c\u6b65\u56de\u590d\u3002',

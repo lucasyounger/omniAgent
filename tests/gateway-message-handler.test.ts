@@ -213,4 +213,40 @@ describe('Gateway message handler', () => {
 
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
+
+  it('handles explicit PR pool commands', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Gateway PR command',
+      objective: 'Expose PR pool command handling',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['commands work'],
+      codeAgentPrompt: 'Implement gateway commands',
+    });
+
+    const list = await handleChannelMessage(message('/pr list', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const show = await handleChannelMessage(message(`/pr show ${item.id}`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const confirm = await handleChannelMessage(message(`/pr confirm ${item.id}`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const develop = await handleChannelMessage(message(`/pr develop ${item.id}`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(list[0].text).toContain(item.id);
+    expect(show[0].text).toContain('Gateway PR command');
+    expect(confirm[0].text).toContain('已确认');
+    expect(develop[0].text).toBe('开发功能将在第二阶段启用');
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
+  });
 });
