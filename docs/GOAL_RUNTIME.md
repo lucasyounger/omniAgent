@@ -110,6 +110,13 @@ Module improvement run artifacts:
   proof-of-work.md
 ```
 
-## PR-14 / PR-18 scope
+PR-19 adds feedback loop support:
 
-PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. PR-17 adds mock-provider topic research with evidence persistence, ranking, daily digest, wiki diff, memory proposal, and Proof of Work. PR-18 adds mock module improvement with local module context, candidate repo analysis, gap analysis, 4+1 design draft, and implementation plan. Real external research providers and push channels are handled by later slices.
+- `recordRawFeedback(input)` parses feedback into structured intent and appends `feedback.jsonl`.
+- `pause` / `resume` feedback updates goal state.
+- `adaptQQMessageToFeedback(message)` maps mock QQ messages into FeedbackEvent.
+- `pushGoalDigestToQQ(message)` provides a mock delivered push result.
+
+## PR-14 / PR-19 scope
+
+PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. PR-17 adds mock-provider topic research with evidence persistence, ranking, daily digest, wiki diff, memory proposal, and Proof of Work. PR-18 adds mock module improvement with local module context, candidate repo analysis, gap analysis, 4+1 design draft, and implementation plan. PR-19 adds structured feedback events, pause/resume feedback state changes, and mock QQ push/message adapters. Real external research providers and production push channels are handled by later slices.

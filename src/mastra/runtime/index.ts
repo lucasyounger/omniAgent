@@ -1,4 +1,14 @@
 export {
+  createFeedbackEvent,
+  feedbackEventsPath,
+  latestFeedbackEvent,
+  listFeedbackEvents,
+  parseFeedbackMessage,
+  recordFeedbackEvent,
+  recordRawFeedback,
+} from './feedback';
+export type { CreateFeedbackEventInput, FeedbackChannel, FeedbackEvent, FeedbackIntent, ParsedFeedback } from './feedback';
+export {
   createEvidenceItem,
   dedupEvidence,
   evidencePath,

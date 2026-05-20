@@ -289,4 +289,34 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(result.artifacts.implementationPlan, 'utf8')).resolves.toContain('Convert approved recommendations');
     await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated gap analysis and implementation artifacts');
   });
+
+  it('records feedback events, updates goal state, and adapts QQ messages', async () => {
+    const { createGoal, readGoal } = await loadGoalRuntime();
+    await createGoal({
+      id: 'feedback-goal',
+      type: 'topic_research',
+      title: 'Feedback Goal',
+      objective: 'React to user feedback',
+    });
+
+    const { latestFeedbackEvent, listFeedbackEvents, recordRawFeedback } = await import('../src/mastra/runtime/feedback');
+
+    const deepDive = await recordRawFeedback({
+      goalId: 'feedback-goal',
+      channel: 'cli',
+      rawMessage: '下一步重点分析 mem0 memory 写入策略',
+    });
+    const paused = await recordRawFeedback({ goalId: 'feedback-goal', channel: 'cli', rawMessage: '暂停' });
+    const { adaptQQMessageToFeedback, pushGoalDigestToQQ } = await import('../src/gateway/qq');
+    const resumed = await adaptQQMessageToFeedback({ goalId: 'feedback-goal', text: '恢复继续运行' });
+    const push = await pushGoalDigestToQQ({ goalId: 'feedback-goal', title: 'Digest', body: 'Ready for feedback' });
+
+    expect(deepDive.parsedIntent).toBe('deep_dive');
+    expect(paused.parsedIntent).toBe('pause');
+    expect(resumed.parsedIntent).toBe('resume');
+    expect(push.delivered).toBe(true);
+    await expect(readGoal('feedback-goal')).resolves.toMatchObject({ status: 'active' });
+    await expect(latestFeedbackEvent('feedback-goal')).resolves.toMatchObject({ channel: 'qq', parsedIntent: 'resume' });
+    await expect(listFeedbackEvents('feedback-goal')).resolves.toHaveLength(3);
+  });
 });
