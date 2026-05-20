@@ -93,6 +93,29 @@ export type RepoImpactReportArtifact = {
   highestRisk: RepoImpactRisk;
 };
 
+export type TestCommandResult = {
+  command: string;
+  status: 'passed' | 'failed' | 'not_run';
+  summary: string;
+};
+
+export type TestReviewArtifactsInput = {
+  requirement: string;
+  testCommands: TestCommandResult[];
+  repoImpactRequiresApproval?: boolean;
+  notes?: string[];
+};
+
+export type TestReviewArtifactsWriteInput = TestReviewArtifactsInput & {
+  taskId: string;
+};
+
+export type TestReviewArtifacts = {
+  testPlan: string;
+  deliveryDoc: string;
+  finalSummary: string;
+};
+
 const artifactDefaults: Record<RequirementE2EArtifactName, string> = {
   'input.md': '',
   'context-pack.json': '{}\n',
@@ -158,6 +181,18 @@ export async function writeRepoImpactReportArtifact(input: RepoImpactReportArtif
   await fs.writeFile(run.artifacts['repo-impact-report.md'], artifact.repoImpactReport, 'utf8');
 
   return artifact;
+}
+
+export async function writeTestReviewArtifacts(input: TestReviewArtifactsWriteInput): Promise<TestReviewArtifacts> {
+  const run = await inspectRequirementE2ERun(input.taskId);
+  await fs.mkdir(run.runDir, { recursive: true });
+  const artifacts = buildTestReviewArtifacts(input);
+
+  await fs.writeFile(run.artifacts['test-plan.md'], artifacts.testPlan, 'utf8');
+  await fs.writeFile(run.artifacts['delivery-doc.md'], artifacts.deliveryDoc, 'utf8');
+  await fs.writeFile(run.artifacts['final-summary.md'], artifacts.finalSummary, 'utf8');
+
+  return artifacts;
 }
 
 export async function inspectRequirementE2ERun(taskId: string): Promise<RequirementE2ERunState> {
@@ -351,6 +386,72 @@ export function buildRepoImpactReportArtifact(input: RepoImpactReportInput): Rep
       '',
     ].join('\n'),
   };
+}
+
+export function buildTestReviewArtifacts(input: TestReviewArtifactsInput): TestReviewArtifacts {
+  const requirement = input.requirement.trim();
+  const commands = input.testCommands.length ? input.testCommands : [{ command: 'Not specified', status: 'not_run' as const, summary: 'No test command provided.' }];
+  const notes = input.notes?.length ? input.notes : ['No additional delivery notes.'];
+  const failedCommands = commands.filter(command => command.status === 'failed');
+  const notRunCommands = commands.filter(command => command.status === 'not_run');
+  const readyForDelivery = failedCommands.length === 0 && !input.repoImpactRequiresApproval;
+
+  return {
+    testPlan: [
+      '# Test Plan',
+      '',
+      '## Requirement',
+      requirement,
+      '',
+      '## Commands',
+      ...commands.map(command => `- ${command.command} — ${command.status}`),
+      '',
+      '## Review Focus',
+      '- Confirm all deterministic RequirementE2E artifacts are written to the run directory.',
+      '- Confirm test summaries match executed commands.',
+      '- Confirm HIGH or CRITICAL repo impact is approved before delivery.',
+      '',
+    ].join('\n'),
+    deliveryDoc: [
+      '# Delivery Doc',
+      '',
+      '## Requirement',
+      requirement,
+      '',
+      '## Test Results',
+      ...commands.map(command => `- ${command.command}: ${command.status} — ${command.summary}`),
+      '',
+      '## Delivery Readiness',
+      `- Ready for delivery: ${readyForDelivery ? 'yes' : 'no'}`,
+      `- Failed commands: ${failedCommands.length}`,
+      `- Not-run commands: ${notRunCommands.length}`,
+      `- Repo impact approval pending: ${input.repoImpactRequiresApproval ? 'yes' : 'no'}`,
+      '',
+      '## Notes',
+      ...notes.map(note => `- ${note}`),
+      '',
+    ].join('\n'),
+    finalSummary: [
+      '# Final Summary',
+      '',
+      '## Outcome',
+      readyForDelivery ? 'RequirementE2E artifacts are ready for delivery.' : 'RequirementE2E artifacts are not ready for delivery.',
+      '',
+      '## Verification Summary',
+      ...commands.map(command => `- ${command.command}: ${command.summary}`),
+      '',
+      '## Remaining Actions',
+      ...(readyForDelivery ? ['- None.'] : buildRemainingTestReviewActions(failedCommands, notRunCommands, input.repoImpactRequiresApproval ?? false)),
+      '',
+    ].join('\n'),
+  };
+}
+function buildRemainingTestReviewActions(failedCommands: TestCommandResult[], notRunCommands: TestCommandResult[], repoImpactRequiresApproval: boolean) {
+  const actions: string[] = [];
+  if (failedCommands.length > 0) actions.push('- Fix failed test commands before delivery.');
+  if (notRunCommands.length > 0) actions.push('- Run missing test commands before delivery.');
+  if (repoImpactRequiresApproval) actions.push('- Resolve repo impact approval before delivery.');
+  return actions;
 }
 
 function formatRepoImpactSymbols(symbols: RepoImpactSymbolResult[]) {

@@ -74,6 +74,11 @@ writes `repo-impact-report.md` from candidate symbol impact results, records the
 highest risk, and marks HIGH or CRITICAL impact as an explicit stop condition
 requiring review before edits.
 
+`writeTestReviewArtifacts` is the deterministic test-review step. It writes
+`test-plan.md`, `delivery-doc.md`, and `final-summary.md` from test command
+summaries plus repo-impact approval state. Failed, not-run, or approval-blocked
+runs are reflected as remaining actions in the final summary.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

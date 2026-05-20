@@ -27,12 +27,14 @@ export {
   buildDesign4Plus1Artifact,
   buildRepoImpactReportArtifact,
   buildRequirementPlanningArtifacts,
+  buildTestReviewArtifacts,
   createRequirementE2ERun,
   inspectRequirementE2ERun,
   requirementE2EArtifactNames,
   writeDesign4Plus1Artifact,
   writeRepoImpactReportArtifact,
   writeRequirementPlanningArtifacts,
+  writeTestReviewArtifacts,
 } from './requirement-e2e-artifacts';
 export type {
   CreateRequirementE2ERunInput,
@@ -49,6 +51,10 @@ export type {
   RequirementE2ERunState,
   RequirementPlanningArtifacts,
   RequirementPlanningArtifactsInput,
+  TestCommandResult,
+  TestReviewArtifacts,
+  TestReviewArtifactsInput,
+  TestReviewArtifactsWriteInput,
 } from './requirement-e2e-artifacts';
 export { bootstrapRuntimeCompatibility } from './bootstrap';
 export {

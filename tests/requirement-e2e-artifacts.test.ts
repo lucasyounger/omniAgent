@@ -166,6 +166,46 @@ describe('requirement e2e artifacts', () => {
     await expect(fs.readFile(path.join(run.runDir, 'repo-impact-report.md'), 'utf8')).resolves.toBe(artifact.repoImpactReport);
   });
 
+  it('writes test review and delivery summary artifacts', async () => {
+    const { createRequirementE2ERun, writeTestReviewArtifacts } = await loadRequirementE2ERuntime();
+    const run = await createRequirementE2ERun({ taskId: 'test-review-task', input: 'Review requirement e2e delivery' });
+
+    const artifacts = await writeTestReviewArtifacts({
+      taskId: 'test-review-task',
+      requirement: 'Review requirement e2e delivery',
+      repoImpactRequiresApproval: false,
+      testCommands: [
+        { command: 'npm test -- tests/requirement-e2e-artifacts.test.ts', status: 'passed', summary: '1 file passed.' },
+        { command: 'npm run verify', status: 'passed', summary: 'Full verification passed.' },
+      ],
+      notes: ['Ready after all verification commands pass.'],
+    });
+
+    expect(artifacts.testPlan).toContain('## Commands');
+    expect(artifacts.deliveryDoc).toContain('- Ready for delivery: yes');
+    expect(artifacts.deliveryDoc).toContain('- npm run verify: passed — Full verification passed.');
+    expect(artifacts.finalSummary).toContain('RequirementE2E artifacts are ready for delivery.');
+    expect(artifacts.finalSummary).toContain('- None.');
+    await expect(fs.readFile(path.join(run.runDir, 'test-plan.md'), 'utf8')).resolves.toBe(artifacts.testPlan);
+    await expect(fs.readFile(path.join(run.runDir, 'delivery-doc.md'), 'utf8')).resolves.toBe(artifacts.deliveryDoc);
+    await expect(fs.readFile(path.join(run.runDir, 'final-summary.md'), 'utf8')).resolves.toBe(artifacts.finalSummary);
+  });
+
+  it('keeps final summary blocked when test review has failures or approvals', async () => {
+    const { buildTestReviewArtifacts } = await loadRequirementE2ERuntime();
+
+    const artifacts = buildTestReviewArtifacts({
+      requirement: 'Review blocked delivery',
+      repoImpactRequiresApproval: true,
+      testCommands: [{ command: 'npm run verify', status: 'failed', summary: 'Typecheck failed.' }],
+    });
+
+    expect(artifacts.deliveryDoc).toContain('- Ready for delivery: no');
+    expect(artifacts.finalSummary).toContain('RequirementE2E artifacts are not ready for delivery.');
+    expect(artifacts.finalSummary).toContain('- Fix failed test commands before delivery.');
+    expect(artifacts.finalSummary).toContain('- Resolve repo impact approval before delivery.');
+  });
+
   it('rejects task ids that would escape the run root', async () => {
     const { createRequirementE2ERun } = await loadRequirementE2ERuntime();
 
