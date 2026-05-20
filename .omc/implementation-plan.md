@@ -1191,7 +1191,7 @@ omni goal feedback ai-memory-research "下一步重点分析 mem0 和 letta 的 
 
 ## PR-20：Evidence Store + Dedup / Rank
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 

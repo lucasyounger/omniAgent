@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveGoalWorkspacePath } from '../goal';
 import { dedupEvidence } from './dedup';
-import { createEvidenceItem, type CreateEvidenceInput, type EvidenceItem } from './evidence.schema';
+import { createEvidenceItem, type CreateEvidenceInput, type EvidenceArtifactRef, type EvidenceItem } from './evidence.schema';
 
 export async function saveEvidence(input: CreateEvidenceInput): Promise<EvidenceItem> {
   const item = createEvidenceItem(input);
@@ -29,6 +29,16 @@ export async function listEvidence(goalId: string): Promise<EvidenceItem[]> {
   }
 }
 
+export async function referenceEvidenceArtifact(goalId: string, evidenceId: string, artifactRef: EvidenceArtifactRef): Promise<EvidenceItem> {
+  const items = await listEvidence(goalId);
+  const item = items.find(existing => existing.id === evidenceId);
+  if (!item) throw new Error(`Evidence not found: ${evidenceId}`);
+
+  item.artifactRefs = dedupArtifactRefs([...item.artifactRefs, artifactRef]);
+  await writeEvidenceItems(goalId, items);
+  return item;
+}
+
 export function evidencePath(goalId: string): string {
   return resolveGoalWorkspacePath(goalId, path.join('evidence', 'evidence.jsonl'));
 }
@@ -37,4 +47,17 @@ async function writeEvidenceItems(goalId: string, items: EvidenceItem[]): Promis
   const filePath = evidencePath(goalId);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, items.map(item => JSON.stringify(item)).join('\n') + (items.length ? '\n' : ''), 'utf8');
+}
+
+function dedupArtifactRefs(refs: EvidenceArtifactRef[]): EvidenceArtifactRef[] {
+  const seen = new Set<string>();
+  const deduped: EvidenceArtifactRef[] = [];
+
+  for (const ref of refs) {
+    if (seen.has(ref.artifactId)) continue;
+    seen.add(ref.artifactId);
+    deduped.push(ref);
+  }
+
+  return deduped;
 }

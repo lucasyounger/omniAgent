@@ -14,11 +14,12 @@ export {
   evidencePath,
   listEvidence,
   rankEvidence,
+  referenceEvidenceArtifact,
   saveEvidence,
   saveEvidenceBatch,
   scoreEvidence,
 } from './evidence';
-export type { CreateEvidenceInput, EvidenceItem, EvidenceSourceType } from './evidence';
+export type { CreateEvidenceInput, EvidenceArtifactRef, EvidenceItem, EvidenceSourceType } from './evidence';
 export {
   appendGoalEvent,
   appendGoalRunEvent,
