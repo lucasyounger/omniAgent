@@ -468,7 +468,15 @@ describe('Task Dispatcher', () => {
       codeAgentPrompt: 'Ignore draft item',
     });
     await prPoolRuntime.confirm(ready.id);
-    await prPoolRuntime.update(ready.id, { approval: { developApprovalToken: 'approved' } });
+    await prPoolRuntime.update(ready.id, {
+      approval: {
+        developApprovalId: 'develop-approved',
+        developApprovalToken: 'approved',
+        developApprovalIssuedAt: new Date().toISOString(),
+        developApprovalExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        developApprovalIssuedBy: 'test',
+      },
+    });
     const task = await taskRuntime.createTask({
       sourceAgentId: 'test',
       targetAgentId: 'pr-pool-runtime',
@@ -555,6 +563,8 @@ describe('Task Dispatcher', () => {
       approval: { developApprovalToken: 'approved' },
       run: { runtimeTaskId: task.id },
     });
+    expect(updated?.approval.developApprovalId).toEqual(expect.stringMatching(/^develop-/));
+    expect(new Date(updated?.approval.developApprovalExpiresAt || 0).getTime()).toBeGreaterThan(Date.now());
     expect(codeTask).toMatchObject({
       targetAgentId: 'code-agent',
       status: 'pending',
@@ -569,6 +579,43 @@ describe('Task Dispatcher', () => {
         },
       },
     });
+  });
+
+  it('requires fresh develop approval when a stored token is expired', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Expired approval item',
+      objective: 'Reject stale develop token',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['stale token ignored'],
+      codeAgentPrompt: 'Do not run with stale token',
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.update(item.id, {
+      approval: {
+        developApprovalId: 'develop-expired',
+        developApprovalToken: 'expired',
+        developApprovalIssuedAt: new Date(Date.now() - 172_800_000).toISOString(),
+        developApprovalExpiresAt: new Date(Date.now() - 86_400_000).toISOString(),
+        developApprovalIssuedBy: 'test',
+      },
+    });
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'develop PR pool item',
+      metadata: {
+        taskType: 'pr_pool.develop',
+        payload: { prItemId: item.id },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({ status: 'waiting_user_confirm' });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
   });
 
   it('moves PR pool develop tasks without approval into waiting_user_confirm', async () => {

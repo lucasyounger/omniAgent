@@ -1,6 +1,6 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-runtime-store';
 import { runPrPoolCronScan } from './pr-pool-scheduler';
-import { prPoolRuntime } from './pr-pool-runtime';
+import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from './pr-pool-runtime';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
@@ -76,7 +76,8 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     return failPrPoolTask(task, `PR pool item not found: ${prItemId}`);
   }
 
-  const approvalToken = stringValue(payload.approvalToken) || item.approval.developApprovalToken;
+  const payloadToken = stringValue(payload.approvalToken);
+  const approvalToken = payloadToken || (validateDevelopApprovalToken(item) ? item.approval.developApprovalToken : undefined);
   if (!approvalToken) {
     await taskRuntime.transition({
       taskId: task.id,
@@ -93,14 +94,23 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
   }
 
   return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, async () => {
-    const approvedItem = item.approval.developApprovalToken
-      ? item
-      : await prPoolRuntime.update(prItemId, {
+    const developApproval = validateDevelopApprovalToken(item, payloadToken)
+      ? undefined
+      : generateDevelopApprovalToken(prItemId, stringValue(payload.approvedBy) || task.sourceAgentId || 'pr-pool-runtime');
+    const approvedItem = developApproval
+      ? await prPoolRuntime.update(prItemId, {
           approval: {
             ...item.approval,
+            developApprovalId: developApproval.id,
             developApprovalToken: approvalToken,
+            developApprovalIssuedAt: developApproval.issuedAt,
+            developApprovalExpiresAt: developApproval.expiresAt,
+            developApprovalIssuedBy: developApproval.issuedBy,
+            approvedBy: developApproval.issuedBy,
+            approvedAt: developApproval.issuedAt,
           },
-        });
+        })
+      : item;
     const scheduledItem = approvedItem.status === 'ready' ? await prPoolRuntime.transition(prItemId, 'scheduled', 'Dispatched for development') : approvedItem;
     const developingItem = scheduledItem.status === 'scheduled' ? await prPoolRuntime.transition(prItemId, 'developing', 'CodeAgent task created') : scheduledItem;
     if (developingItem.status !== 'developing') {

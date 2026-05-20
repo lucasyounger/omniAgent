@@ -1,4 +1,4 @@
-import { prPoolRuntime } from '../mastra/runtime/pr-pool/pr-pool-runtime';
+import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from '../mastra/runtime/pr-pool/pr-pool-runtime';
 import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
 import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
@@ -77,20 +77,10 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
   const dispatch = await dispatchRuntimeTask(task.id);
 
   if (decision.taskType === runtimeTaskTypes.scheduleCreate) {
-    const scheduleId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.scheduleId) : undefined;
-    const scheduledTaskType = stringValue(decision.payload.taskType);
-    const scheduledPayload = objectValue(decision.payload.payload);
-    const scheduledText = stringValue(scheduledPayload?.text) || stringValue(decision.payload.task);
-    return [
-      '\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f\u3002',
-      `Runtime Task: ${task.id}`,
-      scheduleId ? `Cron Job: ${scheduleId}` : `Dispatch: ${dispatch.status}`,
-      `\u6267\u884c\u65f6\u95f4: ${decision.payload.schedule}`,
-      scheduledTaskType ? `\u4efb\u52a1\u7c7b\u578b: ${scheduledTaskType}` : undefined,
-      scheduledText ? `\u56de\u590d\u5185\u5bb9: ${scheduledText}` : undefined,
-    ]
-      .filter((item): item is string => Boolean(item))
-      .join('\n');
+    const schedule = stringValue(decision.payload.schedule);
+    return dispatch.status === 'dispatched'
+      ? `已设置，状态：已启用，执行时间：${schedule ?? '待定'}。`
+      : `设置失败：${dispatch.reason ?? dispatch.status}`;
   }
 
   if (decision.taskType === runtimeTaskTypes.scheduleList) {
@@ -268,10 +258,50 @@ async function handlePrCommand(raw: string): Promise<string> {
       await prPoolRuntime.archive(arg, 'completed');
       return `PR ${arg} 已归档`;
     case 'develop':
-      return '开发功能将在第二阶段启用';
+      if (!arg) return '用法: /pr develop <id>';
+      return developPrItem(arg);
     default:
       return '用法: /pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id]';
   }
+}
+
+async function developPrItem(prItemId: string): Promise<string> {
+  const item = await prPoolRuntime.get(prItemId);
+  if (!item) {
+    return `PR ${prItemId} 不存在`;
+  }
+
+  const token = validateDevelopApprovalToken(item) ? item.approval.developApprovalToken : undefined;
+  const approval = token ? undefined : generateDevelopApprovalToken(prItemId, 'channel-gateway');
+  if (approval) {
+    await prPoolRuntime.update(prItemId, {
+      approval: {
+        ...item.approval,
+        developApprovalId: approval.id,
+        developApprovalToken: approval.id,
+        developApprovalIssuedAt: approval.issuedAt,
+        developApprovalExpiresAt: approval.expiresAt,
+        developApprovalIssuedBy: approval.issuedBy,
+        approvedBy: approval.issuedBy,
+        approvedAt: approval.issuedAt,
+      },
+    });
+  }
+
+  const task = await taskRuntime.createTask({
+    sourceAgentId: 'channel-gateway',
+    targetAgentId: 'pr-pool-runtime',
+    objective: `Develop PR ${item.id}: ${item.title}`,
+    metadata: {
+      taskType: runtimeTaskTypes.prPoolDevelop,
+      payload: { prItemId, approvalToken: token || approval?.id, approvedBy: 'channel-gateway' },
+    },
+  });
+  const dispatch = await dispatchRuntimeTask(task.id);
+  if (dispatch.status === 'dispatched') {
+    return `PR ${prItemId} 已开始开发，CodeTask: ${String(dispatch.result?.codeTaskId || '')}`;
+  }
+  return `PR ${prItemId} 等待开发确认: ${dispatch.reason}`;
 }
 
 function formatPrList(items: PRItem[]): string {

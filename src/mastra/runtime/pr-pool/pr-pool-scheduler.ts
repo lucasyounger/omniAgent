@@ -48,7 +48,7 @@ export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
         objective: `Develop PR ${item.id}: ${item.title}`,
         metadata: {
           taskType: runtimeTaskTypes.prPoolDevelop,
-          payload: { prItemId: item.id, approvalToken: item.approval.developApprovalToken },
+          payload: { prItemId: item.id },
         },
       });
       const dispatch = await dispatchRuntimeTask(task.id);

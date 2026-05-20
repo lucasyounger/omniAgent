@@ -135,6 +135,9 @@ describe('Gateway message handler', () => {
     const { handleChannelMessage } = await loadHandler();
     const { listCronJobs } = await import('../src/mastra/lib/cron-store');
     const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+    const { listAgentInbox } = await import('../src/mastra/lib/team-runtime-store');
+    const { deliverPendingInbox } = await import('../src/gateway/delivery');
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
     const input = message(
       '\u5e2e\u6211\u5b9a\u4e00\u4e2a\u5b9a\u65f6\u4efb\u52a1\uff0c\u4eca\u592921\u70b908\u5206\uff0cOmniAgent\u7ed9\u6211\u56de\u590d\u4e00\u53e5\uff1a\u4f60\u597d',
       'trusted',
@@ -148,8 +151,8 @@ describe('Gateway message handler', () => {
     const jobs = await listCronJobs();
     const tasks = await listTeamTasks();
 
-    expect(replies[0].text).toContain('\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f');
-    expect(replies[0].text).toContain('Runtime Task:');
+    expect(replies).toHaveLength(1);
+    expect(replies[0].text).toBe('已设置，状态：已启用，执行时间：2026-05-12 21:08。');
     expect(jobs).toHaveLength(1);
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
@@ -175,6 +178,11 @@ describe('Gateway message handler', () => {
         messageType: 'dm',
       },
     });
+    await expect(listAgentInbox({ recipientAgentId: 'channel-gateway' })).resolves.toHaveLength(1);
+    await deliverPendingInbox({ ...baseConfig(), allowSenders: ['trusted'] });
+    await expect(listDeliveries()).resolves.toEqual([]);
+    const inbox = await listAgentInbox({ recipientAgentId: 'channel-gateway' });
+    expect(inbox[0].status).toBe('read');
   });
 
   it('creates scheduled AI digest jobs from natural language', async () => {
@@ -187,8 +195,7 @@ describe('Gateway message handler', () => {
     });
     const jobs = await listCronJobs();
 
-    expect(replies[0].text).toContain('\u5b9a\u65f6\u4efb\u52a1\u521b\u5efa\u6210\u529f');
-    expect(replies[0].text).toContain('research.ai_daily_digest');
+    expect(replies[0].text).toBe('已设置，状态：已启用，执行时间：daily 09:00。');
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
       schedule: 'daily 09:00',
@@ -246,7 +253,7 @@ describe('Gateway message handler', () => {
     expect(list[0].text).toContain(item.id);
     expect(show[0].text).toContain('Gateway PR command');
     expect(confirm[0].text).toContain('已确认');
-    expect(develop[0].text).toBe('开发功能将在第二阶段启用');
-    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
+    expect(develop[0].text).toContain('已开始开发');
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
 });

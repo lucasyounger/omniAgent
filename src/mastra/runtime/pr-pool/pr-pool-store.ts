@@ -25,6 +25,9 @@ export type PRItemApproval = {
   reviewApprovalId?: string;
   developApprovalId?: string;
   developApprovalToken?: string;
+  developApprovalIssuedAt?: string;
+  developApprovalExpiresAt?: string;
+  developApprovalIssuedBy?: string;
   approvedBy?: string;
   approvedAt?: string;
 };

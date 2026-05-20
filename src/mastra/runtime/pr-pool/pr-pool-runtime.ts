@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import {
   appendPrPoolEvent,
   archivePrPoolItem,
@@ -25,6 +26,36 @@ const VALID_TRANSITIONS: Record<PRItemStatus, PRItemStatus[]> = {
   cancelled: [],
   deleted: [],
 };
+
+export type DevelopApprovalToken = {
+  id: string;
+  prItemId: string;
+  issuedAt: string;
+  expiresAt: string;
+  issuedBy: string;
+};
+
+export function generateDevelopApprovalToken(prItemId: string, issuedBy: string): DevelopApprovalToken {
+  const issuedAt = new Date();
+  const ttlMs = Number(process.env.OMNI_PR_POOL_DEVELOP_TOKEN_TTL_MS || 86_400_000);
+  return {
+    id: `develop-${Date.now().toString(36)}-${randomBytes(8).toString('hex')}`,
+    prItemId,
+    issuedAt: issuedAt.toISOString(),
+    expiresAt: new Date(issuedAt.getTime() + ttlMs).toISOString(),
+    issuedBy,
+  };
+}
+
+export function validateDevelopApprovalToken(item: PRItem, token = item.approval.developApprovalToken): boolean {
+  return Boolean(
+    token &&
+      item.approval.developApprovalToken === token &&
+      item.approval.developApprovalId &&
+      item.approval.developApprovalExpiresAt &&
+      new Date(item.approval.developApprovalExpiresAt).getTime() > Date.now(),
+  );
+}
 
 export class PrPoolStatusError extends Error {
   constructor(
