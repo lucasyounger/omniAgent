@@ -16,6 +16,16 @@ export type ConnectorKind =
 
 export type ConnectorRole = 'tool' | 'memory_source' | 'trigger_source' | 'profile_signal';
 
+export type ConnectorScope = {
+  id: string;
+  description: string;
+};
+
+export type ConnectorCredentialRef = {
+  id: string;
+  envVar?: string;
+};
+
 export type ConnectorCapability = {
   role: ConnectorRole;
   description: string;
@@ -26,6 +36,8 @@ export type ConnectorDescriptor = {
   kind: ConnectorKind;
   displayName: string;
   capabilities: ConnectorCapability[];
+  scopes: ConnectorScope[];
+  credentialRefs?: ConnectorCredentialRef[];
 };
 
 export type MemorySourceQuery = {
@@ -97,6 +109,8 @@ export function describeConnector(connector: Connector): ConnectorDescriptor {
     capabilities: declaredCapabilities.length > 0
       ? declaredCapabilities
       : [...roles].map(role => ({ role, description: `${connector.descriptor.displayName} ${role}` })),
+    scopes: connector.descriptor.scopes,
+    credentialRefs: connector.descriptor.credentialRefs,
   };
 }
 

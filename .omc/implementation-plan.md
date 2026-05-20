@@ -1401,7 +1401,9 @@ interface Connector {
 
 ## PR-31：权限、安全与凭据管理增强
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/connectors.test.ts tests/tool-gateway.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 

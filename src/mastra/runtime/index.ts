@@ -15,18 +15,25 @@ export type {
   ModelUsage,
 } from './model-router';
 export {
+  appendConnectorAudit,
+  connectorAuditPath,
   createConnectorRegistry,
   createConnectorTool,
   describeConnector,
   listConnectorRoles,
+  readConnectorAudit,
 } from './connectors';
 export type {
   Connector,
+  ConnectorAuditAction,
+  ConnectorAuditEvent,
   ConnectorCapability,
+  ConnectorCredentialRef,
   ConnectorDescriptor,
   ConnectorKind,
   ConnectorRegistry,
   ConnectorRole,
+  ConnectorScope,
   ConnectorToolDefinition,
   MemorySource,
   MemorySourceQuery,

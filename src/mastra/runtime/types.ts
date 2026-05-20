@@ -30,6 +30,7 @@ export type ToolGatewayPolicy = {
   sandboxRequired?: boolean;
   allowedPaths?: string[];
   deniedCommands?: string[];
+  scopes?: string[];
 };
 
 export type ToolExecutionContext = {

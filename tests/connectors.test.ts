@@ -1,14 +1,34 @@
-import { describe, expect, it } from 'vitest';
-import {
-  createConnectorRegistry,
-  createConnectorTool,
-  describeConnector,
-  listConnectorRoles,
-  type Connector,
-} from '../src/mastra/runtime/connectors';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { Connector } from '../src/mastra/runtime/connectors';
+
+let tempRoot: string;
+
+async function loadConnectorRuntime() {
+  vi.resetModules();
+  process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+  return import('../src/mastra/runtime/connectors');
+}
+
+beforeEach(async () => {
+  tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-connector-test-'));
+  await fs.writeFile(path.join(tempRoot, 'package.json'), JSON.stringify({ name: 'omni-agent' }), 'utf8');
+});
+
+afterEach(async () => {
+  delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
+  await fs.rm(tempRoot, { recursive: true, force: true });
+  vi.restoreAllMocks();
+});
 
 describe('connector four-quadrant model', () => {
   it('describes implemented connector roles across tool, memory, trigger, and profile quadrants', async () => {
+    const { createConnectorTool, describeConnector, listConnectorRoles } = await loadConnectorRuntime();
     const connector: Connector = {
       descriptor: {
         id: 'github-main',
@@ -20,6 +40,8 @@ describe('connector four-quadrant model', () => {
           { role: 'trigger_source', description: 'Receive webhook events' },
           { role: 'profile_signal', description: 'Extract coding preferences' },
         ],
+        scopes: [{ id: 'github:read', description: 'Read GitHub data' }],
+        credentialRefs: [{ id: 'github-token', envVar: 'GITHUB_TOKEN' }],
       },
       asTool: () => [
         createConnectorTool({
@@ -72,7 +94,8 @@ describe('connector four-quadrant model', () => {
     await expect(connector.asProfileSignal?.().extract({})).resolves.toMatchObject([{ key: 'prefers-small-prs' }]);
   });
 
-  it('registers first-batch connector kinds and filters descriptors', () => {
+  it('registers first-batch connector kinds and filters descriptors', async () => {
+    const { createConnectorRegistry } = await loadConnectorRuntime();
     const connectors: Connector[] = [
       'github',
       'local_repo',
@@ -88,6 +111,7 @@ describe('connector four-quadrant model', () => {
         kind: kind as Connector['descriptor']['kind'],
         displayName: kind,
         capabilities: [{ role: 'memory_source', description: `${kind} memory source` }],
+        scopes: [{ id: `${kind}:read`, description: `${kind} read scope` }],
       },
       asMemorySource: () => ({
         id: `${kind}-memory`,
@@ -101,5 +125,29 @@ describe('connector four-quadrant model', () => {
     expect(registry.list()).toHaveLength(8);
     expect(registry.get('github-connector')?.descriptor.kind).toBe('github');
     expect(registry.descriptors('rss')).toEqual([expect.objectContaining({ id: 'rss-connector' })]);
+    expect(registry.revoke('github-connector')).toBe(true);
+    expect(registry.get('github-connector')).toBeUndefined();
+  });
+
+  it('writes connector audit records with redacted credential metadata', async () => {
+    const { appendConnectorAudit, readConnectorAudit } = await loadConnectorRuntime();
+
+    await appendConnectorAudit({
+      connectorId: 'github-main',
+      action: 'credential_ref_used',
+      scope: 'github:read',
+      actorId: 'user-1',
+      createdAt: '2026-05-20T00:00:00.000Z',
+      metadata: { credentialToken: 'secret', note: 'visible' },
+    });
+
+    await expect(readConnectorAudit()).resolves.toEqual([
+      expect.objectContaining({
+        connectorId: 'github-main',
+        action: 'credential_ref_used',
+        scope: 'github:read',
+        metadata: { credentialToken: '[redacted]', note: 'visible' },
+      }),
+    ]);
   });
 });
