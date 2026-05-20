@@ -1391,7 +1391,9 @@ interface Connector {
 
 ## PR-30：Mobile / QQ / Feishu Notification Channel
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/notification-channel.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 
