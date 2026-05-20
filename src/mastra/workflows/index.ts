@@ -1,3 +1,5 @@
+export { getRegistryCatalog, getRegistryEntry, listRegistryEntries, searchRegistryEntries } from '../registry';
+export type { RegistryCatalog, RegistryEntry, RegistryEntryKind } from '../registry';
 export { runCodeTaskWorkflow } from './code-task-workflow';
 export { memoryMaintenanceWorkflow } from './memory-maintenance-workflow';
 export { taskOrchestrationWorkflow } from './task-orchestration-workflow';
