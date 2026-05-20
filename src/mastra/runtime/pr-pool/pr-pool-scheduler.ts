@@ -2,9 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createCronJob, listCronJobs, type CronJob } from '../../lib/cron-store';
 import { prPoolRunsRoot, projectRoot } from '../../lib/paths';
-import { dispatchRuntimeTask } from '../task-dispatcher';
-import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
+import { buildDispatchPlan } from './dependency-planner';
+import { executeDispatchPlan } from './parallel-scheduler';
 import { prPoolRuntime } from './pr-pool-runtime';
 
 export type PRPoolCronScanResult = {
@@ -32,45 +32,25 @@ export async function ensurePrPoolCronJob(): Promise<CronJob> {
 }
 
 export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
-  const result: PRPoolCronScanResult = { scanned: 0, dispatched: 0, skipped: 0, failed: 0 };
   const readyItems = await prPoolRuntime.list({ status: 'ready' });
-  result.scanned = readyItems.length;
+  const runningItems = await prPoolRuntime.list({ status: 'developing' });
+  const plan = buildDispatchPlan(readyItems, runningItems, {
+    maxConcurrent: Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT || 3),
+    maxConcurrentPerRepo: Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT_PER_REPO || 2),
+  });
+  const scheduleResult = await executeDispatchPlan(plan);
+  const result: PRPoolCronScanResult = {
+    scanned: readyItems.length,
+    dispatched: scheduleResult.dispatched.length,
+    skipped: scheduleResult.skipped.length,
+    failed: scheduleResult.failed.length,
+  };
 
-  const maxConcurrent = Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT || 3);
-  const developingCount = (await prPoolRuntime.list({ status: 'developing' })).length;
-  const slots = Math.max(0, maxConcurrent - developingCount);
-
-  for (const item of readyItems.slice(0, slots)) {
-    try {
-      const task = await taskRuntime.createTask({
-        sourceAgentId: 'pr-pool-scheduler',
-        targetAgentId: 'pr-pool-runtime',
-        objective: `Develop PR ${item.id}: ${item.title}`,
-        metadata: {
-          taskType: runtimeTaskTypes.prPoolDevelop,
-          payload: { prItemId: item.id },
-        },
-      });
-      const dispatch = await dispatchRuntimeTask(task.id);
-      if (dispatch.status === 'dispatched') {
-        result.dispatched += 1;
-      } else {
-        result.skipped += 1;
-      }
-    } catch {
-      result.failed += 1;
-    }
-  }
-
-  if (readyItems.length > slots) {
-    result.skipped += readyItems.length - slots;
-  }
-
-  await writeScanSummary(result);
+  await writeScanSummary({ ...result, conflicts: scheduleResult.conflicts, cycles: plan.cycles });
   return result;
 }
 
-async function writeScanSummary(result: PRPoolCronScanResult): Promise<void> {
+async function writeScanSummary(result: Record<string, unknown>): Promise<void> {
   const runId = `scan-${Date.now().toString(36)}`;
   const runDir = path.join(prPoolRunsRoot, runId);
   await fs.mkdir(runDir, { recursive: true });
