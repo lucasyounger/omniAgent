@@ -5,6 +5,7 @@ import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, s
 import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
+import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes } from './task-types';
@@ -101,6 +102,10 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
   if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
     return dispatchResearchAiDailyDigestTask(leased);
+  }
+
+  if (taskType?.startsWith('pr_pool.')) {
+    return dispatchPrPoolTask(leased);
   }
 
   if (leased.targetAgentId === 'code-agent') {

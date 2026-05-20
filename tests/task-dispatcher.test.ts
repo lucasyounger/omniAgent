@@ -402,4 +402,49 @@ describe('Task Dispatcher', () => {
       status: 'succeeded',
     });
   });
+
+  it('dispatches PR pool runtime tasks through the pr-pool handler', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { defaultTargetAgentIdForTaskType, isRuntimeTaskType } = await import('../src/mastra/runtime/task-types');
+    expect(isRuntimeTaskType('pr_pool.develop')).toBe(true);
+    expect(defaultTargetAgentIdForTaskType('pr_pool.develop')).toBe('pr-pool-runtime');
+
+    const createTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'create PR pool item',
+      metadata: {
+        taskType: 'pr_pool.create',
+        payload: {
+          title: 'Dispatcher PR item',
+          objective: 'Create through dispatcher',
+          workspaceRepoPath: tempRoot,
+          impact: { modules: ['runtime'], risk: 'low' },
+          acceptanceCriteria: ['created'],
+          codeAgentPrompt: 'Create through dispatcher',
+        },
+      },
+    });
+
+    const createResult = await dispatchRuntimeTask(createTask.id);
+    const prItemId = createResult.status === 'dispatched' ? createResult.result?.prItemId : undefined;
+    expect(createResult).toMatchObject({ status: 'dispatched', handler: 'pr-pool-handler' });
+    expect(prItemId).toEqual(expect.stringMatching(/^pr-/));
+
+    const confirmTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'confirm PR pool item',
+      metadata: {
+        taskType: 'pr_pool.confirm',
+        payload: { prItemId },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(confirmTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      handler: 'pr-pool-handler',
+      result: { prItemId, status: 'ready' },
+    });
+  });
 });

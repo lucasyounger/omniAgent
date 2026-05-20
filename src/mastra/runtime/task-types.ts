@@ -13,6 +13,12 @@ export const runtimeTaskTypes = {
   scheduleRunNow: 'schedule.run_now',
   researchAiDailyDigest: 'research.ai_daily_digest',
   notifySendChannelMessage: 'notify.send_channel_message',
+  prPoolCreate: 'pr_pool.create',
+  prPoolList: 'pr_pool.list',
+  prPoolConfirm: 'pr_pool.confirm',
+  prPoolDevelop: 'pr_pool.develop',
+  prPoolArchive: 'pr_pool.archive',
+  prPoolCronScan: 'pr_pool.cron_scan',
 } as const;
 
 export type RuntimeTaskType = (typeof runtimeTaskTypes)[keyof typeof runtimeTaskTypes];
@@ -108,6 +114,42 @@ export const runtimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDef
     defaultTargetAgentId: 'notify-agent',
     handler: 'notify-handler',
     description: 'Send a channel notification through Gateway Delivery.',
+  },
+  [runtimeTaskTypes.prPoolCreate]: {
+    taskType: runtimeTaskTypes.prPoolCreate,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Create a PR pool item from a runtime task.',
+  },
+  [runtimeTaskTypes.prPoolList]: {
+    taskType: runtimeTaskTypes.prPoolList,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'List PR pool items.',
+  },
+  [runtimeTaskTypes.prPoolConfirm]: {
+    taskType: runtimeTaskTypes.prPoolConfirm,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Confirm a PR pool item (draft → ready).',
+  },
+  [runtimeTaskTypes.prPoolDevelop]: {
+    taskType: runtimeTaskTypes.prPoolDevelop,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Start development on a PR pool item via CodeAgent.',
+  },
+  [runtimeTaskTypes.prPoolArchive]: {
+    taskType: runtimeTaskTypes.prPoolArchive,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Archive a completed PR pool item.',
+  },
+  [runtimeTaskTypes.prPoolCronScan]: {
+    taskType: runtimeTaskTypes.prPoolCronScan,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Cron-triggered scan of ready PR items for scheduled development.',
   },
 };
 
