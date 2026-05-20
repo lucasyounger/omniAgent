@@ -233,6 +233,14 @@ describe('Gateway message handler', () => {
       codeAgentPrompt: 'Implement gateway commands',
     });
 
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
     const list = await handleChannelMessage(message('/pr list', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],

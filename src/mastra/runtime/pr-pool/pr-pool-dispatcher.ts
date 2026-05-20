@@ -1,6 +1,7 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-runtime-store';
 import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from './pr-pool-runtime';
+import { ensureWorktree } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
@@ -116,18 +117,19 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     if (developingItem.status !== 'developing') {
       throw new Error(`Cannot develop PR pool item in status ${developingItem.status}: ${prItemId}`);
     }
+    const worktreeItem = await ensureWorktree(developingItem);
 
     const codeTask = await taskRuntime.createTask({
       sourceAgentId: 'pr-pool-runtime',
       targetAgentId: 'code-agent',
       parentTaskId: task.id,
-      objective: buildCodeAgentPrompt(developingItem),
+      objective: buildCodeAgentPrompt(worktreeItem),
       metadata: {
         taskType: runtimeTaskTypes.codeClaudeCodeTask,
         payload: {
-          workspacePath: developingItem.workspace.worktreePath || developingItem.workspace.repoPath,
-          objective: developingItem.codeAgentPrompt,
-          contextBrief: formatPrItemContext(developingItem),
+          workspacePath: worktreeItem.workspace.worktreePath || worktreeItem.workspace.repoPath,
+          objective: worktreeItem.codeAgentPrompt,
+          contextBrief: formatPrItemContext(worktreeItem),
           executionMode: process.env.OMNI_CODE_EXECUTION_MODE === 'direct' ? 'direct' : 'patch_proposal',
           approvalToken,
           prItemId,
@@ -137,7 +139,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
 
     await prPoolRuntime.update(prItemId, {
       run: {
-        ...developingItem.run,
+        ...worktreeItem.run,
         runtimeTaskId: task.id,
         codeTaskId: codeTask.id,
       },

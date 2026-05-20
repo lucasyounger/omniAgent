@@ -469,6 +469,11 @@ describe('Task Dispatcher', () => {
     });
     await prPoolRuntime.confirm(ready.id);
     await prPoolRuntime.update(ready.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${ready.id}`,
+      },
       approval: {
         developApprovalId: 'develop-approved',
         developApprovalToken: 'approved',
@@ -538,6 +543,13 @@ describe('Task Dispatcher', () => {
       },
     });
     await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
     const task = await taskRuntime.createTask({
       sourceAgentId: 'test',
       targetAgentId: 'pr-pool-runtime',
