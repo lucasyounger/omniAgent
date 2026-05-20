@@ -1225,7 +1225,9 @@ interface EvidenceItem {
 
 ## PR-21：Goal Capsule
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/goal-runtime.test.ts` 通过；`npm run typecheck` 通过.
 
 ### 目标
 
