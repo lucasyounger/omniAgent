@@ -1355,7 +1355,9 @@ interface Connector {
 
 ## PR-27：Tool Output Compression Gateway
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/context-pack.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 

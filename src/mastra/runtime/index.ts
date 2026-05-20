@@ -142,6 +142,8 @@ export type {
 export {
   buildContextPack,
   calculateContextBudget,
+  compressToolOutput,
+  createToolOutputCompressionGateway,
   loadContextPack,
   summarizeDoc,
   summarizeGitDiff,
@@ -163,6 +165,10 @@ export type {
   GitDiffFileSummary,
   GitDiffSummary,
   TestLogSummary,
+  ToolOutputCompressionGateway,
+  ToolOutputCompressionInput,
+  ToolOutputCompressionKind,
+  ToolOutputCompressionResult,
 } from './context-pack';
 export {
   buildDesign4Plus1Artifact,

@@ -2,6 +2,8 @@ export { buildContextPack } from './context-pack-builder';
 export type { BuildContextPackInput } from './context-pack-builder';
 export {
   calculateContextBudget,
+  compressToolOutput,
+  createToolOutputCompressionGateway,
   summarizeDoc,
   summarizeGitDiff,
   summarizeTestLog,
@@ -16,6 +18,10 @@ export type {
   EvidenceRef,
   GitDiffFileSummary,
   GitDiffSummary,
+  ToolOutputCompressionGateway,
+  ToolOutputCompressionInput,
+  ToolOutputCompressionKind,
+  ToolOutputCompressionResult,
   TestLogSummary,
 } from './context-juice';
 export { loadContextPack, writeContextPack } from './context-pack-loader';

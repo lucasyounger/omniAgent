@@ -1,4 +1,12 @@
-export type EvidenceKind = 'git_diff' | 'test_log' | 'doc_summary' | 'context_budget';
+export type EvidenceKind =
+  | 'git_diff'
+  | 'test_log'
+  | 'doc_summary'
+  | 'context_budget'
+  | 'repo_tree'
+  | 'search_result'
+  | 'abstract'
+  | 'html';
 
 export type EvidenceRef = {
   id: string;
@@ -32,6 +40,35 @@ export type DocSummary = ContextJuiceResult<'doc_summary'> & {
   bullets: string[];
 };
 
+export type ToolOutputCompressionKind =
+  | 'git_diff'
+  | 'test_log'
+  | 'repo_tree'
+  | 'grep'
+  | 'github_search_result'
+  | 'readme'
+  | 'paper_abstract'
+  | 'blog_html';
+
+export type ToolOutputCompressionInput = {
+  kind: ToolOutputCompressionKind;
+  content: string;
+  source?: string;
+  title?: string;
+  maxItems?: number;
+};
+
+export type ToolOutputCompressionResult = ContextJuiceResult<EvidenceKind> & {
+  originalKind: ToolOutputCompressionKind;
+  retainedItems: string[];
+  originalTokens: number;
+  compressedTokens: number;
+};
+
+export type ToolOutputCompressionGateway = {
+  compress(input: ToolOutputCompressionInput): ToolOutputCompressionResult;
+};
+
 export type ContextBudgetSectionInput = {
   name: string;
   content?: string;
@@ -52,6 +89,41 @@ export type ContextBudgetSummary = ContextJuiceResult<'context_budget'> & {
   sections: ContextBudgetSection[];
 };
 
+export function createToolOutputCompressionGateway(): ToolOutputCompressionGateway {
+  return {
+    compress: compressToolOutput,
+  };
+}
+
+export function compressToolOutput(input: ToolOutputCompressionInput): ToolOutputCompressionResult {
+  switch (input.kind) {
+    case 'git_diff': {
+      const summary = summarizeGitDiff({ diff: input.content, source: input.source });
+      return toCompressionResult(input, summary.kind, summary.summary, [
+        ...summary.changedFiles.map(file => `${file.status}: ${file.path}`),
+        ...summary.riskHints,
+      ]);
+    }
+    case 'test_log': {
+      const summary = summarizeTestLog({ log: input.content, source: input.source, maxFailureReasons: input.maxItems });
+      return toCompressionResult(input, summary.kind, summary.summary, summary.failureReasons);
+    }
+    case 'repo_tree':
+      return compressLineOrientedOutput(input, 'repo_tree', /(^|\/)(src|tests|docs|scripts|package\.json|tsconfig\.json|README)/i);
+    case 'grep':
+      return compressLineOrientedOutput(input, 'search_result', /^.+:\d+:/);
+    case 'github_search_result':
+      return compressLineOrientedOutput(input, 'search_result', /(repo|title|url|path|score|stars)/i);
+    case 'readme': {
+      const summary = summarizeDoc({ content: input.content, source: input.source, title: input.title, maxBullets: input.maxItems });
+      return toCompressionResult(input, summary.kind, summary.summary, summary.bullets);
+    }
+    case 'paper_abstract':
+      return compressParagraphOutput(input, 'abstract');
+    case 'blog_html':
+      return compressParagraphOutput({ ...input, content: stripHtml(input.content) }, 'html');
+  }
+}
 export function summarizeGitDiff(input: { diff: string; source?: string }): GitDiffSummary {
   const changedFiles = parseChangedFiles(input.diff);
   const riskHints = buildDiffRiskHints(changedFiles);
@@ -200,6 +272,79 @@ function extractDocBullets(content: string, maxBullets: number) {
     .filter(Boolean)
     .filter(line => !line.startsWith('#'))
     .slice(0, maxBullets);
+}
+
+function compressLineOrientedOutput(
+  input: ToolOutputCompressionInput,
+  kind: EvidenceKind,
+  preferredPattern: RegExp,
+): ToolOutputCompressionResult {
+  const maxItems = input.maxItems ?? 12;
+  const lines = input.content
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const preferred = lines.filter(line => preferredPattern.test(line));
+  const retainedItems = uniqueStrings([...preferred, ...lines], maxItems);
+  const summary = retainedItems.length > 0
+    ? `${input.kind} compressed to ${retainedItems.length} retained lines: ${retainedItems.join(' | ')}`
+    : `${input.kind} had no retained lines.`;
+
+  return toCompressionResult(input, kind, summary, retainedItems);
+}
+
+function compressParagraphOutput(input: ToolOutputCompressionInput, kind: EvidenceKind): ToolOutputCompressionResult {
+  const maxItems = input.maxItems ?? 6;
+  const retainedItems = uniqueStrings(
+    input.content
+      .split(/(?:\r?\n){2,}|(?<=[.!?])\s+/)
+      .map(paragraph => paragraph.trim())
+      .filter(Boolean),
+    maxItems,
+  );
+  const summary = retainedItems.length > 0
+    ? `${input.title ?? input.source ?? input.kind}: ${retainedItems.join(' ')}`
+    : `${input.kind} had no retained text.`;
+
+  return toCompressionResult(input, kind, summary, retainedItems);
+}
+
+function toCompressionResult(
+  input: ToolOutputCompressionInput,
+  kind: EvidenceKind,
+  summary: string,
+  retainedItems: string[],
+): ToolOutputCompressionResult {
+  return {
+    kind,
+    originalKind: input.kind,
+    summary,
+    retainedItems,
+    originalTokens: estimateTokens(input.content),
+    compressedTokens: estimateTokens(summary),
+    evidenceRef: createEvidenceRef(kind, input.source ?? input.kind),
+  };
+}
+
+function uniqueStrings(values: string[], limit: number) {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    unique.push(value);
+    if (unique.length >= limit) break;
+  }
+  return unique;
+}
+
+function stripHtml(content: string) {
+  return content
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function estimateTokens(content: string) {

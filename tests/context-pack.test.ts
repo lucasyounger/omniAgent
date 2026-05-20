@@ -163,6 +163,53 @@ describe('context juice summaries', () => {
     expect(summary.evidenceRef).toMatchObject({ kind: 'git_diff', source: 'git diff --cached' });
   });
 
+  it('compresses high-token tool outputs through the gateway', async () => {
+    const { compressToolOutput, createToolOutputCompressionGateway } = await loadContextPackRuntime();
+
+    const diffSummary = compressToolOutput({
+      kind: 'git_diff',
+      source: 'git diff',
+      content: [
+        'diff --git a/src/feature.ts b/src/feature.ts',
+        'new file mode 100644',
+        '+'.repeat(1000),
+      ].join('\n'),
+    });
+    const repoTreeSummary = createToolOutputCompressionGateway().compress({
+      kind: 'repo_tree',
+      content: ['node_modules/pkg/index.js', 'src/mastra/runtime/index.ts', 'tests/context-pack.test.ts'].join('\n'),
+    });
+    const grepSummary = compressToolOutput({
+      kind: 'grep',
+      content: ['src/a.ts:10:match one', 'unstructured line', 'src/b.ts:20:match two'].join('\n'),
+    });
+    const githubSummary = compressToolOutput({
+      kind: 'github_search_result',
+      content: ['repo: owner/project', 'stars: 100', 'irrelevant body'].join('\n'),
+    });
+    const readmeSummary = compressToolOutput({
+      kind: 'readme',
+      content: ['# Project', '', '- Install', '- Run'].join('\n'),
+    });
+    const abstractSummary = compressToolOutput({
+      kind: 'paper_abstract',
+      content: 'This paper studies long-context memory. It proposes sparse retrieval.',
+    });
+    const htmlSummary = compressToolOutput({
+      kind: 'blog_html',
+      content: '<html><style>.x{}</style><body><h1>Memory</h1><p>Use compression before prompts.</p></body></html>',
+    });
+
+    expect(diffSummary).toMatchObject({ kind: 'git_diff', originalKind: 'git_diff' });
+    expect(diffSummary.retainedItems).toContain('added: src/feature.ts');
+    expect(repoTreeSummary.retainedItems).toEqual(['src/mastra/runtime/index.ts', 'tests/context-pack.test.ts', 'node_modules/pkg/index.js']);
+    expect(grepSummary.retainedItems.slice(0, 2)).toEqual(['src/a.ts:10:match one', 'src/b.ts:20:match two']);
+    expect(githubSummary.retainedItems).toEqual(['repo: owner/project', 'stars: 100', 'irrelevant body']);
+    expect(readmeSummary.retainedItems).toEqual(['Install', 'Run']);
+    expect(abstractSummary.kind).toBe('abstract');
+    expect(htmlSummary.summary).toContain('Use compression before prompts');
+    expect(htmlSummary.summary).not.toContain('<p>');
+  });
   it('summarizes docs and calculates context budget with evidence refs', async () => {
     const { calculateContextBudget, summarizeDoc } = await loadContextPackRuntime();
 
