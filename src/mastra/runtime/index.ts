@@ -1,4 +1,21 @@
 export {
+  appendGoalEvent,
+  assertValidGoalId,
+  createGoal,
+  createGoalRecord,
+  ensureGoalWorkspace,
+  getGoalWorkspace,
+  goalsRoot,
+  goalStatuses,
+  goalTypes,
+  pauseGoal,
+  readGoal,
+  resolveGoalWorkspacePath,
+  resumeGoal,
+  updateGoalStatus,
+} from './goal';
+export type { CreateGoalInput, Goal, GoalStatus, GoalType, GoalWorkspace } from './goal';
+export {
   buildContextPack,
   calculateContextBudget,
   loadContextPack,

@@ -25,15 +25,83 @@ OmniAgent 的最终目标是：基于 Mastra 框架，构建一个本地端侧 A
 M0：安全边界闭环
 → M1：最小记忆与上下文骨架
 → M2：需求 E2E MVP 产物链路
-→ M3：长任务与工作编排增强
-→ M4：记忆系统增强与知识自更新
-→ M5：内部系统 / MCP / A2A / 手机端接入
+→ M3：Goal Runtime 与长任务工作编排增强
+→ M4：Memory / Knowledge Platform 增强
+→ M5：OpenHuman-like Core 扩展
 → M6：产品化、评估与持续演进
 ```
 
-当前优先级：**安全闭环优先**。
+当前优先级：**M2 已完成，进入 M3 Goal Runtime MVP**。
 
-原因：OmniAgent 最终会执行本地代码、读取记忆、连接外部系统和长期运行任务。如果安全边界、审批、审计和任务状态先不统一，后续记忆/E2E/长任务能力越强，风险越高。
+原因：OmniAgent 最终会执行本地代码、读取记忆、连接外部系统和长期运行任务。如果安全边界、审批、审计和任务状态先不统一，后续记忆/E2E/长任务能力越强，风险越高。当前 M0-M2 已把安全闭环、最小上下文、需求 E2E artifact 链路打稳，下一步应把长期目标推进抽象为统一 Goal Runtime，而不是为每个长期任务单独写 scheduler / memory / push / feedback。
+
+## 2.1 Goal Runtime 补充原则
+
+本轮路线补充的核心结论：两个急迫场景——主题型长期研究任务、模块型改进任务——本质上应共享同一个 `Persistent Goal Runtime`。
+
+错误方向：
+
+```text
+AI 长记忆研究任务一套 scheduler / memory / push / feedback
+OmniAgent 模块改进任务另一套 scheduler / memory / push / feedback
+```
+
+正确方向：
+
+```text
+OmniAgent Core Platform
+  ├─ Goal Engine
+  ├─ Workflow Engine
+  ├─ Connector Engine
+  ├─ Memory Engine
+  ├─ Artifact Engine
+  ├─ Feedback Engine
+  ├─ Notification Engine
+  ├─ Model Router
+  └─ Tool Gateway
+
+Scenarios
+  ├─ Topic Research Goal
+  └─ Module Improvement Goal
+```
+
+落地架构采用：
+
+```text
+Workflow-first + Few-Agent + Skill-based + Memory-driven
+```
+
+推荐运行形态：
+
+```text
+GoalOrchestratorAgent
+  负责目标状态、阶段判断、预算控制、下一步决策
+
+ResearchAnalysisAgent
+  负责研究、代码仓分析、论文/博客/项目对比、洞察提炼
+
+WriterAgent
+  负责日报、wiki、博客、4+1 设计文档、落地计划生成
+
+EvaluatorNode
+  非常驻 Agent，只在 run 结束、阶段切换、正式文档生成前触发
+
+Skills / Nodes
+  GitHubSearchSkill
+  ArxivSearchSkill
+  BlogSearchSkill
+  RepoReadSkill
+  DedupNode
+  RankNode
+  WikiUpdateSkill
+  DesignDocSkill
+  QQPushSkill
+  FeedbackParseSkill
+```
+
+Agent 不按“职责名词”拆，而按“是否需要独立推理主体”拆。
+
+长期方向上，OmniAgent 从长期目标和研发作业流出发，逐步补齐全域个人上下文摄取、Connector 四象限模型、Memory Tree、Obsidian / Markdown 双向记忆、Tool Output Compression Gateway、Model Router、本地权限与安全边界、桌面端 / 手机端 / 语音 / 会议能力，演进为本地个人 AI 操作系统。
 
 ## 3. 执行协议
 
@@ -626,11 +694,23 @@ gitnexus_detect_changes(scope=all)
 
 ## PR-11：ArchitectAgent 4+1 设计模板
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 生成 4+1 设计文档骨架。
+
+### 已完成内容
+
+- `src/mastra/runtime/requirement-e2e-artifacts.ts`
+  - 新增 `buildDesign4Plus1Artifact`，生成 Logical / Process / Development / Physical / Scenarios 稳定 4+1 设计视图。
+  - 新增 `writeDesign4Plus1Artifact`，写入 `design-4plus1.md`。
+- `src/mastra/runtime/index.ts`
+  - 导出 4+1 design runtime API 和类型。
+- `tests/requirement-e2e-artifacts.test.ts`
+  - 覆盖 4+1 artifact 写入、稳定章节、planner output 标记和 decisions。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 deterministic architect step。
 
 ### 验收标准
 
@@ -638,15 +718,39 @@ gitnexus_detect_changes(scope=all)
 - 明确模块边界、接口、风险。
 - 不需要自动保证方案最优，但结构必须稳定。
 
+### 验证结果
+
+```bash
+npm test -- tests/requirement-e2e-artifacts.test.ts
+npm run typecheck
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 5 个 tests 通过；完整验证为 18 个 test files / 76 个 tests 通过，`verify:change-sync` 通过。GitNexus detect_changes：risk low，无 affected processes。
+
 ---
 
 ## PR-12：RepoImpact MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 把 GitNexus impact/query/context 结果落到 `repo-impact-report.md`。
+
+### 已完成内容
+
+- `src/mastra/runtime/requirement-e2e-artifacts.ts`
+  - 新增 `buildRepoImpactReportArtifact`，从候选 symbol impact 结果生成稳定 repo impact report。
+  - 新增 `writeRepoImpactReportArtifact`，写入 `repo-impact-report.md`。
+  - 支持 LOW/MEDIUM/HIGH/CRITICAL 风险排序，HIGH/CRITICAL 标记 `requiresApproval` 并写入 STOP 条件。
+- `src/mastra/runtime/index.ts`
+  - 导出 RepoImpact runtime API 和类型。
+- `tests/requirement-e2e-artifacts.test.ts`
+  - 覆盖 repo impact report 写入、highest risk、requiresApproval、affected processes 和 STOP 条件。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 deterministic repository-impact step。
 
 ### 验收标准
 
@@ -654,115 +758,646 @@ gitnexus_detect_changes(scope=all)
 - HIGH/CRITICAL 风险有明确停顿点。
 - 测试覆盖报告格式。
 
+### 验证结果
+
+```bash
+npm test -- tests/requirement-e2e-artifacts.test.ts
+npm run typecheck
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 6 个 tests 通过；完整验证为 18 个 test files / 77 个 tests 通过，`verify:change-sync` 通过。GitNexus detect_changes：risk low，无 affected processes。
+
 ---
 
 ## PR-13：TestReview MVP
 
-状态：待执行。
+状态：已完成。
 
 ### 目标
 
 生成测试计划、测试结果摘要、提测材料。
+
+### 已完成内容
+
+- `src/mastra/runtime/requirement-e2e-artifacts.ts`
+  - 新增 `buildTestReviewArtifacts`，从测试命令摘要和 repo-impact approval 状态生成 test plan、delivery doc、final summary。
+  - 新增 `writeTestReviewArtifacts`，写入 `test-plan.md`、`delivery-doc.md`、`final-summary.md`。
+  - 支持 failed / not_run / repo impact approval pending 的 remaining actions。
+- `src/mastra/runtime/index.ts`
+  - 导出 TestReview runtime API 和类型。
+- `tests/requirement-e2e-artifacts.test.ts`
+  - 覆盖 test review artifact 写入、ready / blocked delivery 状态、final summary remaining actions。
+- `docs/CONTEXT_PACKS.md`
+  - 记录 deterministic test-review step。
 
 ### 验收标准
 
 - 能读取测试命令输出摘要。
 - 生成 `test-plan.md`、`delivery-doc.md`、`final-summary.md`。
 
+### 验证结果
+
+```bash
+npm test -- tests/requirement-e2e-artifacts.test.ts
+npm run typecheck
+npm run verify
+gitnexus_detect_changes(scope=all)
+```
+
+结果：全部通过。Focused test 为 1 个 test file / 8 个 tests 通过；完整验证为 18 个 test files / 79 个 tests 通过，`verify:change-sync` 通过。GitNexus detect_changes：risk low，无 affected processes。
+
 ---
 
-# M3：长任务与工作编排增强
+# M3：Goal Runtime 与长任务工作编排增强
 
 ## 目标
 
-让任务可长期运行、失败可恢复、过程可审计。
+把 OmniAgent 从“单次任务执行器”升级为“长期目标推进系统”：让任务可长期运行、失败可恢复、过程可审计，并支持围绕长期目标持续探索、沉淀知识、生成 artifact、接收用户反馈后继续推进。
 
-## PR-14：WorkspaceManager MVP
+两个第一批高价值场景：
 
-状态：待执行。
-
-### 验收标准
-
-- 每个长任务有 workspace。
-- workspace 记录 context pack、plan、event log、artifacts、proof-of-work。
+1. 主题型长期研究任务：围绕主题定时探索 GitHub / 论文 / 博客 / 新闻 / RSS，去重、排序、分析、知识沉淀，逐步生成 wiki / 博客 / 改进方案，并通过 QQbot 或 mock channel 推送反馈。
+2. 模块型改进任务：围绕 OmniAgent 某个模块主动探索外部仓库和资料，对比当前实现 gap，生成 4+1 设计文档、落地计划和任务拆解，经用户确认后进入开发闭环。
 
 ---
 
-## PR-15：Proof of Work 标准化
+## PR-14：Goal WorkspaceManager MVP
 
-状态：待执行。
+状态：已完成。
+
+### 目标
+
+为长期目标建立统一数据模型和 workspace，避免为不同长期任务分别实现独立调度、记忆、推送和反馈链路。
+
+### 建议模型
+
+```ts
+type GoalType =
+  | "topic_research"
+  | "module_improvement"
+  | "personal_assistant"
+  | "workflow_automation";
+
+type GoalStatus =
+  | "active"
+  | "paused"
+  | "waiting_feedback"
+  | "completed"
+  | "failed";
+
+interface Goal {
+  id: string;
+  type: GoalType;
+  title: string;
+  objective: string;
+  scope: string[];
+  status: GoalStatus;
+  cadence?: string;
+  sources: string[];
+  artifactPolicy: string[];
+  feedbackPolicy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### 目录
+
+```text
+.omni/goals/{goalId}/
+  goal.json
+  capsule.md
+  runs/
+  evidence/
+  artifacts/
+  feedback.jsonl
+  event-log.jsonl
+```
+
+### 预期交付
+
+```text
+src/mastra/runtime/goal/
+  goal.schema.ts
+  goal-store.ts
+  goal-workspace.ts
+
+tests/goal-runtime.test.ts
+docs/GOAL_RUNTIME.md
+```
 
 ### 验收标准
 
-每个完成任务输出：
-
-- 做了什么
-- 改了哪些文件
-- 生成了哪些产物
-- 跑了哪些测试
-- 通过/失败情况
-- 剩余风险
-- 下一步建议
+- 可以创建 Goal。
+- 可以读取 Goal。
+- 可以暂停 / 恢复 Goal。
+- 每个 Goal 有独立 workspace。
+- workspace 不允许路径逃逸。
+- 有单元测试。
 
 ---
 
-## PR-16：Retry / Reconcile 增强
+## PR-15：GoalRun Proof of Work 标准化
 
 状态：待执行。
 
+### 目标
+
+每次长期目标执行都必须有可审计的 GoalRun 和 Proof of Work。
+
+### 建议模型
+
+```ts
+interface GoalRun {
+  id: string;
+  goalId: string;
+  status:
+    | "pending"
+    | "running"
+    | "waiting_feedback"
+    | "succeeded"
+    | "failed"
+    | "interrupted"
+    | "cancelled";
+  plan?: unknown;
+  summary?: string;
+  proofOfWork?: ProofOfWork;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+interface ProofOfWork {
+  did: string[];
+  sourcesRead: string[];
+  artifactsCreated: string[];
+  memoryProposals: string[];
+  testsRun: string[];
+  risks: string[];
+  nextActions: string[];
+}
+```
+
+### 预期交付
+
+```text
+src/mastra/runtime/goal/
+  goal-run.schema.ts
+  goal-run-store.ts
+  proof-of-work.ts
+```
+
 ### 验收标准
 
-- 中断任务可识别。
-- running 超时可转 interrupted/timed_out。
-- retry 有明确来源和新任务关系。
+- 每次 run 都有状态。
+- 每次 run 都有 event log。
+- 成功 run 必须有 proof-of-work。
+- 失败 run 必须记录失败原因。
+- 中断后可恢复。
 
 ---
 
-# M4：记忆系统增强与知识自更新
+## PR-16：Goal Retry / Reconcile 增强
 
-## PR-17：SQLite Memory Index MVP
+状态：待执行。
+
+### 目标
+
+让长期目标可中断、可恢复、可重试。
+
+### 预期交付
+
+```text
+src/mastra/runtime/goal/
+  goal-reconciler.ts
+  goal-retry.ts
+  goal-timeout-policy.ts
+```
+
+### 验收标准
+
+- running 超时后可转 interrupted。
+- failed run 可 retry。
+- retry run 记录 parentRunId。
+- reconcile 不重复执行已完成 artifact。
+
+---
+
+## PR-17：Topic Research Goal MVP
+
+状态：待执行。
+
+### 目标
+
+跑通第一类长任务：主题型长期研究。
+
+### 示例目标
+
+```text
+AI 工程中如何构建好的长记忆系统
+```
+
+### Workflow
+
+```text
+Load Goal
+→ Build Goal Capsule
+→ Search GitHub / arXiv / Blog / RSS
+→ Dedup
+→ Rank
+→ Analyze Top Sources
+→ Generate Daily Digest
+→ Update Wiki Draft
+→ Generate Memory Proposal
+→ Push to QQ 或 mock channel
+→ Wait Feedback
+```
+
+### 预期交付
+
+```text
+src/mastra/workflows/topic-research-goal-workflow.ts
+
+src/mastra/skills/research/
+  github-search-skill.ts
+  arxiv-search-skill.ts
+  blog-search-skill.ts
+  rss-search-skill.ts
+
+src/mastra/runtime/evidence/
+  evidence.schema.ts
+  evidence-store.ts
+  dedup.ts
+  rank.ts
+```
+
+### 产物目录
+
+```text
+.omni/goals/{goalId}/runs/{runId}/
+  plan.md
+  sources.json
+  evidence.jsonl
+  daily-digest.md
+  wiki-diff.md
+  memory-proposal.md
+  proof-of-work.md
+```
+
+### 验收标准
+
+- 输入一个 `topic_research` goal。
+- 可以生成一次 daily digest。
+- 可以保存 evidence。
+- 可以去重。
+- 可以生成 wiki-diff。
+- 可以生成 proof-of-work。
+- 第一版可先 mock push，不要求接真实 QQbot。
+
+---
+
+## PR-18：Module Improvement Goal MVP
+
+状态：待执行。
+
+### 目标
+
+跑通第二类长任务：OmniAgent 模块改进任务。
+
+### 示例目标
+
+```text
+针对 OmniAgent memory 模块，探索 GitHub 热点仓库，输出改进设计文档和落地计划。
+```
+
+### Workflow
+
+```text
+Load Goal
+→ Load Local Module Context
+→ Search Related GitHub Repos
+→ Read README / docs / key source files
+→ Compare with OmniAgent current module
+→ Generate Gap Analysis
+→ Generate 4+1 Design Draft
+→ Generate Implementation Plan
+→ Push Summary
+→ Wait Feedback
+```
+
+### 预期交付
+
+```text
+src/mastra/workflows/module-improvement-goal-workflow.ts
+
+src/mastra/skills/repo/
+  github-repo-search-skill.ts
+  repo-read-skill.ts
+  repo-compare-skill.ts
+
+src/mastra/runtime/module-analysis/
+  module-context-builder.ts
+  gap-analysis-builder.ts
+```
+
+### 产物目录
+
+```text
+.omni/goals/{goalId}/runs/{runId}/
+  candidate-repos.json
+  repo-analysis.md
+  gap-analysis.md
+  design-4plus1.md
+  implementation-plan.md
+  proof-of-work.md
+```
+
+### 验收标准
+
+- 输入 `module_improvement` goal。
+- 能读取本地模块上下文。
+- 能生成候选 GitHub repo 列表。
+- 能生成 `gap-analysis.md`。
+- 能生成 `design-4plus1.md`。
+- 能生成 `implementation-plan.md`。
+
+---
+
+## PR-19：QQbot Feedback Loop MVP
+
+状态：待执行。
+
+### 目标
+
+把每日推送和用户反馈闭环打通。第一版可以先不接真实 QQbot，支持 CLI/mock feedback。
+
+### 建议模型
+
+```ts
+interface FeedbackEvent {
+  id: string;
+  goalId: string;
+  runId?: string;
+  channel: "qq" | "feishu" | "cli" | "web";
+  rawMessage: string;
+  parsedIntent:
+    | "continue"
+    | "deep_dive"
+    | "compare"
+    | "revise"
+    | "pause"
+    | "resume"
+    | "generate_doc"
+    | "create_task";
+  actionPayload: unknown;
+  createdAt: string;
+}
+```
+
+### 预期交付
+
+```text
+src/mastra/runtime/feedback/
+  feedback.schema.ts
+  feedback-store.ts
+  feedback-parser.ts
+
+src/gateway/qq/
+  qq-message-adapter.ts
+  qq-push-provider.ts
+```
+
+CLI/mock 示例：
+
+```bash
+omni goal feedback ai-memory-research "下一步重点分析 mem0 和 letta 的 memory 写入策略"
+```
+
+### 验收标准
+
+- 用户反馈可以关联 goal。
+- 反馈可以解析成结构化 action。
+- Goal 下一次 run 能读取上次反馈。
+- 支持 pause / resume / deep_dive / generate_doc。
+
+---
+
+# M4：Memory / Knowledge Platform 增强
+
+## 目标
+
+把 Goal Runtime 的过程数据沉淀为可持续增长的知识系统。
+
+## PR-20：Evidence Store + Dedup / Rank
+
+状态：待执行。
+
+### 目标
+
+为 GitHub / 论文 / 博客 / RSS / 本地仓库资料建立统一证据层。
+
+### 建议模型
+
+```ts
+interface EvidenceItem {
+  id: string;
+  goalId: string;
+  sourceType: "github" | "paper" | "blog" | "rss" | "local_repo" | "doc";
+  sourceUrl?: string;
+  title: string;
+  contentHash: string;
+  summary?: string;
+  relevanceScore?: number;
+  noveltyScore?: number;
+  qualityScore?: number;
+  metadata: unknown;
+  createdAt: string;
+}
+```
+
+### 验收标准
+
+- 同 URL 不重复入库。
+- 同 contentHash 不重复入库。
+- 能按 relevance / novelty / quality 排序。
+- Evidence 可被 artifact 引用。
+
+## PR-21：Goal Capsule
+
+状态：待执行。
+
+### 目标
+
+避免每次长期任务加载全部历史，降低 token 消耗。
+
+### Capsule 内容
+
+```text
+goal objective
+current stage
+known findings
+open questions
+rejected directions
+user preferences
+last run summary
+next actions
+artifact index
+```
+
+### 预期交付
+
+```text
+src/mastra/runtime/goal/goal-capsule.ts
+```
+
+### 验收标准
+
+- 每次 run 前生成 capsule。
+- capsule 控制在预算内。
+- capsule 引用 artifact/evidence，而不是复制全部内容。
+
+## PR-22：Goal Wiki / Artifact Engine
+
+状态：待执行。
+
+### 目标
+
+把日报、wiki、设计文档、博客、落地计划统一为 Artifact。
+
+### 建议模型
+
+```ts
+interface Artifact {
+  id: string;
+  type:
+    | "daily_digest"
+    | "wiki"
+    | "blog"
+    | "gap_analysis"
+    | "design_doc"
+    | "implementation_plan"
+    | "summary";
+  ownerType: "goal" | "task" | "user" | "project";
+  ownerId: string;
+  title: string;
+  path: string;
+  sourceEvidenceIds: string[];
+  version: number;
+  status: "draft" | "reviewing" | "approved" | "published";
+}
+```
+
+### 验收标准
+
+- artifact 有统一 metadata。
+- artifact 可引用 evidence。
+- artifact 可版本化。
+- wiki 更新以 diff 形式生成。
+- 正式写入需要用户确认或明确策略。
+
+## PR-23：SQLite Memory Index MVP
 
 状态：待执行。
 
 目标：Markdown Vault + SQLite FTS/BM25，不做向量库优先。
 
-## PR-18：Profile Facets MVP
+补充验收标准：
+
+- Markdown 文档可索引。
+- Artifact 可索引。
+- Evidence summary 可索引。
+- 支持 keyword / BM25 检索。
+- 检索结果带 source path。
+
+## PR-24：Profile Facets MVP
 
 状态：待执行。
 
 目标：用户偏好具备 confidence、source、updated_at。
 
-## PR-19：Memory Consolidation Report
+补充要求：Goal feedback 可以沉淀为偏好 proposal，例如用户更关注本地化方案、token 成本、4+1 设计文档、先 MVP 后扩展等偏好。
+
+## PR-25：Memory Consolidation Report
 
 状态：待执行。
 
 目标：定期整理候选记忆，但不自动污染核心记忆。
 
-## PR-20：OmniResearch Loop Skeleton
-
-状态：待执行。
-
-目标：围绕长期目标定时研究，输出 evidence、gap analysis、proposal、blog draft、memory proposal。
+补充要求：每周生成新增事实、新增偏好、可沉淀经验、可废弃旧知识、冲突记忆、建议写入项。
 
 ---
 
-# M5：内部系统 / MCP / A2A / 手机端接入
+# M5：OpenHuman-like Core 扩展
 
-## PR-21：MCP Gateway Skeleton
+M5 不建议马上做，但现在要预留接口。
 
-状态：待执行。
-
-## PR-22：Internal Demand Adapter MVP
+## PR-26：Connector 四象限模型
 
 状态：待执行。
 
-## PR-23：CI/Test Adapter MVP
+### 目标
+
+每个外部连接器不只是工具，而是可以承担 tool、memory source、trigger source、profile signal 四种角色。
+
+```ts
+interface Connector {
+  asTool?(): ToolDefinition[];
+  asMemorySource?(): MemorySource;
+  asTriggerSource?(): TriggerSource;
+  asProfileSignal?(): ProfileSignalExtractor;
+}
+```
+
+第一批 Connector：GitHub、LocalRepo、RSS、arXiv、Blog、QQbot、Feishu、Obsidian / Markdown。
+
+## PR-27：Tool Output Compression Gateway
 
 状态：待执行。
 
-## PR-24：Mobile Approval / Notification Channel
+### 目标
+
+从现有 ContextJuice 演进，让所有高 token 工具输出进入 LLM 前先经过压缩网关。
+
+第一批支持：git diff、test log、repo tree、grep / ripgrep、GitHub search result、README、论文 abstract、blog html。
+
+## PR-28：Model Router
 
 状态：待执行。
+
+### 目标
+
+根据任务 hint 自动选择模型，并记录 cost / token。
+
+示例 hint：`fast`、`summarize`、`reasoning`、`code`、`long-context`。
+
+## PR-29：Obsidian / Markdown 双向同步
+
+状态：待执行。
+
+### 目标
+
+让 Agent 产出的 wiki / memory / design docs 可被用户编辑，并能重新摄取。
+
+验收标准：artifact 可导出 Markdown；frontmatter 带 artifact id / evidence id / version；用户修改后可重新 ingest；冲突不自动覆盖，生成 proposal。
+
+## PR-30：Mobile / QQ / Feishu Notification Channel
+
+状态：待执行。
+
+### 目标
+
+统一主动推送与反馈入口。同一条 Goal digest 可推送到 QQ / 飞书 / CLI mock，反馈事件统一进入 FeedbackEvent。
+
+## PR-31：权限、安全与凭据管理增强
+
+状态：待执行。
+
+### 目标
+
+随着 Connector 增多，补齐本地安全边界。
+
+验收标准：每个 connector 有 scope；每个 tool 有 risk level；危险操作走 Tool Gateway / Approval；凭据不明文落盘；有 audit log；支持 revoke connector；支持 forget / delete memory。
 
 ---
 
@@ -789,10 +1424,94 @@ gitnexus_detect_changes(scope=all)
 ## 5. 当前执行状态
 
 ```text
-当前阶段：M2 需求 E2E MVP 产物链路
-当前优先级：PR-11 ArchitectAgent 4+1 设计模板
-上一步完成：PR-10 PlannerAgent / Requirement Analyzer MVP
-下一步建议：生成 design-4plus1.md 稳定设计骨架
+当前阶段：M3 Goal Runtime 与长任务工作编排增强
+当前优先级：PR-14 Goal WorkspaceManager MVP
+上一步完成：PR-13 TestReview MVP
+下一步建议：进入 PR-14，先建立 Goal 数据模型、Goal workspace 与路径安全测试
+```
+
+## 5.1 两个急迫场景的 MVP 验收路径
+
+### 场景 A：AI 长记忆系统主题研究
+
+创建目标示例：
+
+```bash
+omni goal create \
+  --type topic_research \
+  --title "AI工程长记忆系统研究" \
+  --sources "github,arxiv,blogs,rss" \
+  --cadence "daily 09:30" \
+  --artifacts "daily_digest,wiki,blog,memory_proposal" \
+  --feedback "qq"
+```
+
+MVP 验收：
+
+```text
+第 1 天：
+- 搜索并保存 evidence
+- 生成 daily-digest.md
+- 生成 wiki-diff.md
+- mock 推送
+
+第 2 天：
+- 能读取第 1 天 capsule
+- 去重旧资料
+- 根据用户反馈调整搜索方向
+
+第 3-5 天：
+- 形成 topic wiki v1
+- 形成可落地改进建议
+```
+
+### 场景 B：OmniAgent memory 模块改进
+
+创建目标示例：
+
+```bash
+omni goal create \
+  --type module_improvement \
+  --title "OmniAgent Memory模块改进" \
+  --scope "src/mastra/runtime/context-pack,docs/knowledge" \
+  --sources "local_repo,github,blogs" \
+  --artifacts "gap_analysis,design_4plus1,implementation_plan" \
+  --feedback "qq"
+```
+
+MVP 验收：
+
+```text
+第 1 天：
+- 搜索候选 GitHub 仓库
+- 生成 candidate-repos.json
+- 生成 repo-analysis.md
+
+第 2 天：
+- 深挖 Top 3 仓库
+- 生成 gap-analysis.md
+
+第 3 天：
+- 生成 design-4plus1.md
+- 生成 implementation-plan.md
+- 推送给用户确认
+
+第 4 天：
+- 根据反馈修订方案
+- 可进入 requirement-e2e / code task 流程
+```
+
+## 5.2 架构决策待确认
+
+```text
+ADR-001：采用 Workflow-first + Few-Agent + Skill-based 架构
+ADR-002：长期任务统一抽象为 Goal，而不是独立定时脚本
+ADR-003：当前两个长任务作为 Scenario，不作为架构中心
+ADR-004：Memory 分为 Goal Memory 与 User Memory
+ADR-005：Artifact 成为一等公民
+ADR-006：Feedback 事件化，QQbot 只是第一种 channel
+ADR-007：Connector 预留 asTool / asMemorySource / asTriggerSource / asProfileSignal 四象限
+ADR-008：先完成 M2 产物链路，再进入 M3 Goal Runtime
 ```
 
 ## 6. 中断恢复步骤
