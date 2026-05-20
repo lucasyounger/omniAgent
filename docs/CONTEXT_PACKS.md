@@ -69,6 +69,11 @@ and stop conditions.
 views. The artifact also records whether planner outputs were provided and keeps
 decisions as explicit bullets for downstream impact and test review.
 
+`writeRepoImpactReportArtifact` is the deterministic repository-impact step. It
+writes `repo-impact-report.md` from candidate symbol impact results, records the
+highest risk, and marks HIGH or CRITICAL impact as an explicit stop condition
+requiring review before edits.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`

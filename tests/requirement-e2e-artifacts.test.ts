@@ -131,6 +131,41 @@ describe('requirement e2e artifacts', () => {
     expect(artifact.design4Plus1).toContain('- Requirement analysis: provided');
     await expect(fs.readFile(path.join(run.runDir, 'design-4plus1.md'), 'utf8')).resolves.toBe(artifact.design4Plus1);
   });
+  it('writes a repo impact report with explicit stop conditions', async () => {
+    const { createRequirementE2ERun, writeRepoImpactReportArtifact } = await loadRequirementE2ERuntime();
+    const run = await createRequirementE2ERun({ taskId: 'impact-task', input: 'Change runtime artifact writer' });
+
+    const artifact = await writeRepoImpactReportArtifact({
+      taskId: 'impact-task',
+      requirement: 'Change runtime artifact writer',
+      candidateSymbols: [
+        {
+          symbol: 'writeDesign4Plus1Artifact',
+          risk: 'LOW',
+          directCallers: 0,
+          affectedProcesses: [],
+          affectedModules: ['Runtime'],
+        },
+        {
+          symbol: 'dispatchRuntimeTask',
+          risk: 'HIGH',
+          directCallers: 4,
+          affectedProcesses: ['DispatchRuntimeTask'],
+          affectedModules: ['Runtime', 'Tasks'],
+          notes: ['Review before editing dispatcher flow.'],
+        },
+      ],
+    });
+
+    expect(artifact.highestRisk).toBe('HIGH');
+    expect(artifact.requiresApproval).toBe(true);
+    expect(artifact.repoImpactReport).toContain('- Highest risk: HIGH');
+    expect(artifact.repoImpactReport).toContain('- STOP: HIGH or CRITICAL GitNexus impact requires explicit review before edits.');
+    expect(artifact.repoImpactReport).toContain('### dispatchRuntimeTask');
+    expect(artifact.repoImpactReport).toContain('- Affected processes: DispatchRuntimeTask');
+    await expect(fs.readFile(path.join(run.runDir, 'repo-impact-report.md'), 'utf8')).resolves.toBe(artifact.repoImpactReport);
+  });
+
   it('rejects task ids that would escape the run root', async () => {
     const { createRequirementE2ERun } = await loadRequirementE2ERuntime();
 

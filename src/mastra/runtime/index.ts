@@ -25,11 +25,13 @@ export type {
 } from './context-pack';
 export {
   buildDesign4Plus1Artifact,
+  buildRepoImpactReportArtifact,
   buildRequirementPlanningArtifacts,
   createRequirementE2ERun,
   inspectRequirementE2ERun,
   requirementE2EArtifactNames,
   writeDesign4Plus1Artifact,
+  writeRepoImpactReportArtifact,
   writeRequirementPlanningArtifacts,
 } from './requirement-e2e-artifacts';
 export type {
@@ -37,6 +39,11 @@ export type {
   Design4Plus1Artifact,
   Design4Plus1ArtifactInput,
   Design4Plus1Input,
+  RepoImpactReportArtifact,
+  RepoImpactReportArtifactInput,
+  RepoImpactReportInput,
+  RepoImpactRisk,
+  RepoImpactSymbolResult,
   RequirementAnalysisInput,
   RequirementE2EArtifactName,
   RequirementE2ERunState,

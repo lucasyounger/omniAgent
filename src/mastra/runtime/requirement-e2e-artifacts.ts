@@ -66,6 +66,33 @@ export type Design4Plus1Artifact = {
   design4Plus1: string;
 };
 
+export type RepoImpactRisk = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type RepoImpactSymbolResult = {
+  symbol: string;
+  risk: RepoImpactRisk;
+  directCallers: number;
+  affectedProcesses: string[];
+  affectedModules: string[];
+  notes?: string[];
+};
+
+export type RepoImpactReportInput = {
+  requirement: string;
+  candidateSymbols: RepoImpactSymbolResult[];
+  contextPack?: ContextPack;
+};
+
+export type RepoImpactReportArtifactInput = RepoImpactReportInput & {
+  taskId: string;
+};
+
+export type RepoImpactReportArtifact = {
+  repoImpactReport: string;
+  requiresApproval: boolean;
+  highestRisk: RepoImpactRisk;
+};
+
 const artifactDefaults: Record<RequirementE2EArtifactName, string> = {
   'input.md': '',
   'context-pack.json': '{}\n',
@@ -119,6 +146,16 @@ export async function writeDesign4Plus1Artifact(input: Design4Plus1ArtifactInput
   const artifact = buildDesign4Plus1Artifact(input);
 
   await fs.writeFile(run.artifacts['design-4plus1.md'], artifact.design4Plus1, 'utf8');
+
+  return artifact;
+}
+
+export async function writeRepoImpactReportArtifact(input: RepoImpactReportArtifactInput): Promise<RepoImpactReportArtifact> {
+  const run = await inspectRequirementE2ERun(input.taskId);
+  await fs.mkdir(run.runDir, { recursive: true });
+  const artifact = buildRepoImpactReportArtifact(input);
+
+  await fs.writeFile(run.artifacts['repo-impact-report.md'], artifact.repoImpactReport, 'utf8');
 
   return artifact;
 }
@@ -278,6 +315,63 @@ export function buildDesign4Plus1Artifact(input: Design4Plus1Input): Design4Plus
       '',
     ].join('\n'),
   };
+}
+export function buildRepoImpactReportArtifact(input: RepoImpactReportInput): RepoImpactReportArtifact {
+  const requirement = input.requirement.trim();
+  const highestRisk = highestRepoImpactRisk(input.candidateSymbols.map(symbol => symbol.risk));
+  const requiresApproval = highestRisk === 'HIGH' || highestRisk === 'CRITICAL';
+  const candidateSymbols = input.candidateSymbols.length ? input.candidateSymbols : [];
+
+  return {
+    highestRisk,
+    requiresApproval,
+    repoImpactReport: [
+      '# Repo Impact Report',
+      '',
+      '## Requirement',
+      requirement,
+      '',
+      '## Summary',
+      `- Candidate symbols: ${candidateSymbols.length}`,
+      `- Highest risk: ${highestRisk}`,
+      `- Requires approval: ${requiresApproval ? 'yes' : 'no'}`,
+      '',
+      '## Stop Conditions',
+      requiresApproval
+        ? '- STOP: HIGH or CRITICAL GitNexus impact requires explicit review before edits.'
+        : '- No HIGH or CRITICAL impact reported.',
+      '',
+      '## Candidate Symbol Impact',
+      ...formatRepoImpactSymbols(candidateSymbols),
+      '',
+      '## Evidence Requirements',
+      '- Run GitNexus impact before editing each candidate symbol.',
+      '- Record direct callers, affected processes, affected modules, and risk level.',
+      '- Re-run GitNexus detect_changes before committing.',
+      '',
+    ].join('\n'),
+  };
+}
+
+function formatRepoImpactSymbols(symbols: RepoImpactSymbolResult[]) {
+  if (symbols.length === 0) return ['- No candidate symbols provided.'];
+
+  return symbols.flatMap(symbol => [
+    `### ${symbol.symbol}`,
+    `- Risk: ${symbol.risk}`,
+    `- Direct callers: ${symbol.directCallers}`,
+    `- Affected processes: ${symbol.affectedProcesses.length ? symbol.affectedProcesses.join(', ') : 'None'}`,
+    `- Affected modules: ${symbol.affectedModules.length ? symbol.affectedModules.join(', ') : 'None'}`,
+    ...((symbol.notes ?? []).map(note => `- Note: ${note}`)),
+    '',
+  ]);
+}
+
+function highestRepoImpactRisk(risks: RepoImpactRisk[]) {
+  const orderedRisks: RepoImpactRisk[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  return risks.reduce<RepoImpactRisk>((highest, risk) => {
+    return orderedRisks.indexOf(risk) > orderedRisks.indexOf(highest) ? risk : highest;
+  }, 'LOW');
 }
 
 function requirementE2ERunDir(taskId: string) {
