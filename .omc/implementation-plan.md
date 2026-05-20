@@ -1367,7 +1367,9 @@ interface Connector {
 
 ## PR-28：Model Router
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/model-router.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 
