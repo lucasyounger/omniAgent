@@ -32,6 +32,9 @@ export type CodeTask = {
   logFile: string;
   executionMode?: 'direct' | 'patch_proposal';
   patchFile?: string;
+  command?: string;
+  args?: string[];
+  promptArg?: string;
 };
 
 const tasks = new Map<string, CodeTask>();
@@ -79,6 +82,9 @@ async function persistTaskSnapshot(task: CodeTask) {
     logFile: task.logFile,
     executionMode: task.executionMode,
     patchFile: task.patchFile,
+    command: task.command,
+    args: task.args,
+    promptArg: task.promptArg,
   };
   const existingIndex = items.findIndex(item => item.taskId === task.taskId);
   if (existingIndex === -1) {
@@ -106,6 +112,9 @@ export async function startClaudeCodeTask(input: {
   requestedBy?: string;
   parentTaskId?: string;
   executionMode?: 'direct' | 'patch_proposal';
+  command?: string;
+  args?: string[];
+  promptArg?: string;
 }) {
   const workspacePath = assertAllowedWorkspace(input.workspacePath);
   const taskId = createTaskId();
@@ -133,6 +142,9 @@ export async function startClaudeCodeTask(input: {
   });
   const logFile = path.join(codeRunsRoot, `${taskId}.jsonl`);
   const executionMode = input.executionMode || (process.env.OMNI_CODE_EXECUTION_MODE === 'patch_proposal' ? 'patch_proposal' : 'direct');
+  const command = input.command || process.env.OMNI_CODE_AGENT_COMMAND || process.env.OMNI_CLAUDE_COMMAND || 'claude';
+  const args = input.args || splitArgs(process.env.OMNI_CODE_AGENT_ARGS);
+  const promptArg = input.promptArg || process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p';
   const task: CodeTask = {
     taskId,
     teamTaskId: teamTask.taskId,
@@ -144,6 +156,9 @@ export async function startClaudeCodeTask(input: {
     events: [],
     logFile,
     executionMode,
+    command,
+    args,
+    promptArg,
   };
 
   tasks.set(taskId, task);
@@ -228,40 +243,40 @@ export async function startClaudeCodeTask(input: {
       summary: 'Dry run completed.',
       output: 'Dry run completed. Claude Code was not started.',
       artifacts: [task.logFile],
-      metadata: { codeTaskId: task.taskId, workspacePath, executionMode },
+      metadata: { codeTaskId: task.taskId, workspacePath, executionMode, command, args, promptArg },
     });
     return summarizeTask(task);
   }
 
-  const command = process.env.OMNI_CLAUDE_COMMAND || 'claude';
   const prompt = [input.objective, input.contextBrief ? `\nContext brief:\n${input.contextBrief}` : ''].join('\n');
   await fs.mkdir(codeRunsRoot, { recursive: true });
   const promptFile = path.join(codeRunsRoot, `${taskId}.prompt.txt`);
   await fs.writeFile(promptFile, prompt, 'utf8');
 
-  const child =
-    process.platform === 'win32'
-      ? spawn(
-          'powershell.exe',
-          [
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-Command',
-            '& { param($PromptFile,$ClaudeCommand) $prompt = Get-Content -Raw -LiteralPath $PromptFile; & $ClaudeCommand -p $prompt }',
-            promptFile,
-            command,
-          ],
-          {
-            cwd: workspacePath,
-            windowsHide: true,
-          },
-        )
-      : spawn(command, ['-p', prompt], {
+  const child = process.platform === 'win32'
+    ? spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          '& { param($PromptFile,$Command,$PromptArg,$ToolArgsJson) $prompt = Get-Content -Raw -LiteralPath $PromptFile; $toolArgs = ConvertFrom-Json -InputObject $ToolArgsJson; & $Command @toolArgs $PromptArg $prompt }',
+          promptFile,
+          command,
+          promptArg,
+          JSON.stringify(args),
+        ],
+        {
           cwd: workspacePath,
-          shell: false,
           windowsHide: true,
-        });
+        },
+      )
+    : spawn(command, [...args, promptArg, prompt], {
+        cwd: workspacePath,
+        shell: false,
+        windowsHide: true,
+      });
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
@@ -329,8 +344,8 @@ export async function startClaudeCodeTask(input: {
         executorAgentId: 'code-agent',
         summary: output.trim().slice(0, 500) || `Claude Code task ${task.taskId} completed.`,
         output,
-    artifacts: [task.logFile],
-        metadata: { codeTaskId: task.taskId, workspacePath, stderr: errorOutput, executionMode },
+        artifacts: [task.logFile],
+        metadata: { codeTaskId: task.taskId, workspacePath, stderr: errorOutput, executionMode, command, args, promptArg },
       });
     } else {
       void failTeamRun({
@@ -340,7 +355,7 @@ export async function startClaudeCodeTask(input: {
         error: errorOutput.trim().slice(0, 500) || `Claude Code exited with code ${code}.`,
         output,
         artifacts: [task.logFile],
-        metadata: { codeTaskId: task.taskId, workspacePath, exitCode: code, executionMode },
+        metadata: { codeTaskId: task.taskId, workspacePath, exitCode: code, executionMode, command, args, promptArg },
       });
     }
   });
@@ -361,11 +376,15 @@ export async function startClaudeCodeTask(input: {
       executorAgentId: 'code-agent',
       error: error.message,
       artifacts: [task.logFile],
-      metadata: { codeTaskId: task.taskId, workspacePath, executionMode },
+      metadata: { codeTaskId: task.taskId, workspacePath, executionMode, command, args, promptArg },
     });
   });
 
   return summarizeTask(task);
+}
+
+function splitArgs(value: string | undefined): string[] {
+  return value?.split(' ').map(item => item.trim()).filter(Boolean) || [];
 }
 
 export async function getCodeTask(taskId: string) {
@@ -430,6 +449,9 @@ function summarizeTask(task: CodeTask) {
     logFile: task.logFile,
     executionMode: task.executionMode,
     patchFile: task.patchFile,
+    command: task.command,
+    args: task.args,
+    promptArg: task.promptArg,
     recentEvents,
   };
 }

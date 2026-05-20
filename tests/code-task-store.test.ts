@@ -61,6 +61,9 @@ describe('Code task store', () => {
           teamTaskId: started.teamTaskId,
           teamRunId: started.teamRunId,
           status: 'completed',
+          command: 'claude',
+          args: [],
+          promptArg: '-p',
         }),
       ]),
     );
@@ -80,5 +83,28 @@ describe('Code task store', () => {
     });
     expect(started.patchFile).toBeTruthy();
     await expect(fs.readFile(started.patchFile!, 'utf8')).resolves.toContain('No filesystem changes were applied');
+  });
+
+  it('records configurable CodeAgent command arguments', async () => {
+    process.env.OMNI_CODE_AGENT_COMMAND = 'cc';
+    process.env.OMNI_CODE_AGENT_ARGS = '--dangerously-skip-permissions --fast';
+    process.env.OMNI_CODE_AGENT_PROMPT_ARG = '--prompt';
+    const store = await loadCodeTaskStore();
+    const started = await store.startClaudeCodeTask({
+      workspacePath: tempRoot,
+      objective: 'create safe patch',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(started).toMatchObject({
+      command: 'cc',
+      args: ['--dangerously-skip-permissions', '--fast'],
+      promptArg: '--prompt',
+    });
+    await expect(store.getCodeTask(started.taskId)).resolves.toMatchObject({
+      command: 'cc',
+      args: ['--dangerously-skip-permissions', '--fast'],
+      promptArg: '--prompt',
+    });
   });
 });

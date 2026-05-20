@@ -1027,6 +1027,9 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
   const approvalToken = stringValue(payload.approvalToken);
   const dryRun = booleanValue(payload.dryRun);
   const executionMode = payload.executionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
+  const command = stringValue(payload.command);
+  const args = stringArrayValue(payload.args);
+  const promptArg = stringValue(payload.promptArg);
 
   if (!workspacePath) {
     await taskRuntime.transition({
@@ -1057,6 +1060,9 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
           sourceAgentId: 'task-dispatcher',
           requestedBy: `runtime-task:${task.id}`,
           approvalToken,
+          command,
+          args,
+          promptArg,
         },
         async () => ({ skipped: true }),
       );
@@ -1100,6 +1106,9 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
         sourceAgentId: 'task-dispatcher',
         requestedBy: `runtime-task:${task.id}`,
         approvalToken,
+        command,
+        args,
+        promptArg,
       },
       () =>
         startClaudeCodeTask({
@@ -1111,6 +1120,9 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
           teamTaskId: task.id,
           sourceAgentId: 'task-dispatcher',
           requestedBy: `runtime-task:${task.id}`,
+          command,
+          args,
+          promptArg,
         }),
     );
 
