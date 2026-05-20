@@ -1,4 +1,25 @@
 export {
+  createConnectorRegistry,
+  createConnectorTool,
+  describeConnector,
+  listConnectorRoles,
+} from './connectors';
+export type {
+  Connector,
+  ConnectorCapability,
+  ConnectorDescriptor,
+  ConnectorKind,
+  ConnectorRegistry,
+  ConnectorRole,
+  ConnectorToolDefinition,
+  MemorySource,
+  MemorySourceQuery,
+  ProfileSignalExtractor,
+  ProfileSignalInput,
+  TriggerEvent,
+  TriggerSource,
+} from './connectors';
+export {
   buildMemoryConsolidationReport,
   memoryConsolidationReportPath,
   writeMemoryConsolidationReport,

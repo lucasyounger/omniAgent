@@ -1334,7 +1334,9 @@ M5 不建议马上做，但现在要预留接口。
 
 ## PR-26：Connector 四象限模型
 
-状态：待执行。
+状态：已完成。
+
+验证：`npm test -- --run tests/connectors.test.ts` 通过；`npm run typecheck` 通过。
 
 ### 目标
 
