@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { projectRoot } from '../lib/paths';
 import { buildGapAnalysis, buildModuleContext } from '../runtime/module-analysis';
+import { prPoolRuntime } from '../runtime/pr-pool/pr-pool-runtime';
 import {
   completeGoalRun,
   createGoalRun,
@@ -27,6 +29,7 @@ export type ModuleImprovementGoalWorkflowResult = {
     design4Plus1: string;
     implementationPlan: string;
     proofOfWork: string;
+    prItems?: string[];
   };
 };
 
@@ -46,7 +49,7 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
 
   const runDir = getGoalRunDir(goal.id, input.runId);
   await fs.mkdir(runDir, { recursive: true });
-  const artifacts = {
+  const artifacts: ModuleImprovementGoalWorkflowResult['artifacts'] = {
     candidateRepos: path.join(runDir, 'candidate-repos.json'),
     repoAnalysis: path.join(runDir, 'repo-analysis.md'),
     gapAnalysis: path.join(runDir, 'gap-analysis.md'),
@@ -60,6 +63,35 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   await fs.writeFile(artifacts.gapAnalysis, gapAnalysis, 'utf8');
   await fs.writeFile(artifacts.design4Plus1, renderDesign4Plus1(goal, gapAnalysis), 'utf8');
   await fs.writeFile(artifacts.implementationPlan, renderImplementationPlan(goal, comparison.recommendations), 'utf8');
+
+  const prItems = [];
+  for (const recommendation of comparison.recommendations) {
+    const item = await prPoolRuntime.create({
+      title: recommendation,
+      objective: recommendation,
+      priority: 'normal',
+      source: 'goal_driven',
+      goalId: input.goalId,
+      workspaceRepoPath: projectRoot,
+      impact: {
+        modules: [moduleName || 'unknown'],
+        files: goal.scope,
+        risk: 'medium',
+      },
+      acceptanceCriteria: [recommendation],
+      codeAgentPrompt: recommendation,
+      design4Plus1: {
+        logical: `Goal ${goal.id} improves ${moduleName}.`,
+        process: 'Load context -> compare repos -> implement approved recommendation.',
+        development: 'Keep changes scoped to the module improvement plan.',
+        physical: 'Use the current project workspace.',
+        scenarios: ['User confirms PR draft before development.'],
+      },
+      tags: ['goal', moduleName || 'unknown'].filter(Boolean),
+    });
+    prItems.push(item.id);
+  }
+  artifacts.prItems = prItems;
 
   const proofOfWork: ProofOfWork = {
     did: ['Loaded module context', 'Generated candidate repo list', 'Compared repos to local module', 'Generated gap analysis and implementation artifacts'],

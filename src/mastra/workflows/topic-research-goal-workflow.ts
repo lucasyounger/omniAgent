@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { projectRoot } from '../lib/paths';
 import { rankEvidence, saveEvidenceBatch, type EvidenceItem } from '../runtime/evidence';
+import { prPoolRuntime } from '../runtime/pr-pool/pr-pool-runtime';
 import {
   completeGoalRun,
   createGoalRun,
@@ -33,6 +35,7 @@ export type TopicResearchGoalWorkflowResult = {
     wikiDiff: string;
     memoryProposal: string;
     proofOfWork: string;
+    prItems?: string[];
   };
 };
 
@@ -54,7 +57,7 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
   const runDir = getGoalRunDir(goal.id, input.runId);
   await fs.mkdir(runDir, { recursive: true });
 
-  const artifacts = {
+  const artifacts: TopicResearchGoalWorkflowResult['artifacts'] = {
     plan: path.join(runDir, 'plan.md'),
     sources: path.join(runDir, 'sources.json'),
     evidence: path.join(runDir, 'evidence.jsonl'),
@@ -82,6 +85,26 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
   await fs.writeFile(artifacts.dailyDigest, digest, 'utf8');
   await fs.writeFile(artifacts.wikiDiff, wikiDiff, 'utf8');
   await fs.writeFile(artifacts.memoryProposal, memoryProposal, 'utf8');
+  if (goal.artifactPolicy.includes('pr_pool_draft')) {
+    const prItems = [];
+    for (const item of evidence.slice(0, 3)) {
+      const prItem = await prPoolRuntime.create({
+        title: `Follow up: ${item.title}`,
+        objective: item.summary ?? `Evaluate implementation opportunity from ${item.title}`,
+        source: 'goal_driven',
+        goalId: input.goalId,
+        workspaceRepoPath: projectRoot,
+        impact: { modules: ['topic-research'], risk: 'medium' },
+        acceptanceCriteria: [`Evidence from ${item.title} has been reviewed and converted into a scoped implementation decision.`],
+        codeAgentPrompt: item.summary ?? `Review ${item.title} and propose a scoped implementation change.`,
+        tags: ['goal', 'topic-research'],
+        metadata: { evidenceId: item.id, sourceUrl: item.sourceUrl },
+      });
+      prItems.push(prItem.id);
+    }
+    artifacts.prItems = prItems;
+  }
+
   await completeGoalRun({ goalId: goal.id, runId: input.runId, summary: `Generated topic digest for ${topic}.`, proofOfWork });
 
   return { goal, evidence, artifacts };

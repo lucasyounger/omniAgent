@@ -263,6 +263,28 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(result.artifacts.wikiDiff, 'utf8')).resolves.toContain('Wiki Diff Draft');
     await expect(fs.readFile(result.artifacts.memoryProposal, 'utf8')).resolves.toContain('goal memory candidate');
     await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated daily digest and wiki diff');
+    expect(result.artifacts.prItems).toBeUndefined();
+  });
+
+  it('creates topic research PR drafts only when requested by artifact policy', async () => {
+    const { createGoal } = await loadGoalRuntime();
+    await createGoal({
+      id: 'topic-pr-pool-goal',
+      type: 'topic_research',
+      title: 'Topic PR Pool Goal',
+      objective: 'AI long memory systems',
+      sources: ['github', 'arxiv'],
+      artifactPolicy: ['daily_digest', 'pr_pool_draft'],
+    });
+    const { runTopicResearchGoalWorkflow } = await import('../src/mastra/workflows/topic-research-goal-workflow');
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+
+    const result = await runTopicResearchGoalWorkflow({ goalId: 'topic-pr-pool-goal', runId: 'topic-pr-run-001' });
+
+    expect(result.artifacts.prItems).toHaveLength(3);
+    const items = await prPoolRuntime.list({ goalId: 'topic-pr-pool-goal' });
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatchObject({ status: 'draft', source: 'goal_driven' });
   });
 
   it('runs module improvement goal workflow with planning artifacts', async () => {
@@ -288,6 +310,11 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(result.artifacts.design4Plus1, 'utf8')).resolves.toContain('## Logical View');
     await expect(fs.readFile(result.artifacts.implementationPlan, 'utf8')).resolves.toContain('Convert approved recommendations');
     await expect(fs.readFile(result.artifacts.proofOfWork, 'utf8')).resolves.toContain('Generated gap analysis and implementation artifacts');
+    expect(result.artifacts.prItems).toHaveLength(1);
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const items = await prPoolRuntime.list({ goalId: 'module-workflow-goal' });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ status: 'draft', source: 'goal_driven' });
   });
 
   it('generates a budgeted goal capsule before each run', async () => {
