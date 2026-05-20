@@ -64,15 +64,76 @@ async function dispatchPrPoolConfirmTask(task: RuntimeTask): Promise<DispatchRes
 }
 
 async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchResult> {
-  const prItemId = stringValue(readPayload(task).prItemId);
+  const payload = readPayload(task);
+  const prItemId = stringValue(payload.prItemId);
   if (!prItemId) {
     return failPrPoolTask(task, 'pr_pool.develop requires payload.prItemId.');
   }
 
-  return runPrPoolHandler(task, `PR pool development is not enabled yet: ${prItemId}`, async () => ({
-    prItemId,
-    status: 'pending_second_stage',
-  }));
+  const item = await prPoolRuntime.get(prItemId);
+  if (!item) {
+    return failPrPoolTask(task, `PR pool item not found: ${prItemId}`);
+  }
+
+  const approvalToken = stringValue(payload.approvalToken) || item.approval.developApprovalToken;
+  if (!approvalToken) {
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'waiting_user_confirm',
+      reason: 'pr_pool.develop requires develop approval.',
+      sourceAgentId: 'pr-pool-handler',
+    });
+    return {
+      taskId: task.id,
+      status: 'waiting_user_confirm',
+      targetAgentId: task.targetAgentId,
+      reason: 'pr_pool.develop requires develop approval.',
+    };
+  }
+
+  return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, async () => {
+    const approvedItem = item.approval.developApprovalToken
+      ? item
+      : await prPoolRuntime.update(prItemId, {
+          approval: {
+            ...item.approval,
+            developApprovalToken: approvalToken,
+          },
+        });
+    const scheduledItem = approvedItem.status === 'ready' ? await prPoolRuntime.transition(prItemId, 'scheduled', 'Dispatched for development') : approvedItem;
+    const developingItem = scheduledItem.status === 'scheduled' ? await prPoolRuntime.transition(prItemId, 'developing', 'CodeAgent task created') : scheduledItem;
+    if (developingItem.status !== 'developing') {
+      throw new Error(`Cannot develop PR pool item in status ${developingItem.status}: ${prItemId}`);
+    }
+
+    const codeTask = await taskRuntime.createTask({
+      sourceAgentId: 'pr-pool-runtime',
+      targetAgentId: 'code-agent',
+      parentTaskId: task.id,
+      objective: buildCodeAgentPrompt(developingItem),
+      metadata: {
+        taskType: runtimeTaskTypes.codeClaudeCodeTask,
+        payload: {
+          workspacePath: developingItem.workspace.worktreePath || developingItem.workspace.repoPath,
+          objective: developingItem.codeAgentPrompt,
+          contextBrief: formatPrItemContext(developingItem),
+          executionMode: process.env.OMNI_CODE_EXECUTION_MODE === 'direct' ? 'direct' : 'patch_proposal',
+          approvalToken,
+          prItemId,
+        },
+      },
+    });
+
+    await prPoolRuntime.update(prItemId, {
+      run: {
+        ...developingItem.run,
+        runtimeTaskId: task.id,
+        codeTaskId: codeTask.id,
+      },
+    });
+
+    return { prItemId, status: 'developing', codeTaskId: codeTask.id };
+  });
 }
 
 async function dispatchPrPoolArchiveTask(task: RuntimeTask): Promise<DispatchResult> {
@@ -156,6 +217,53 @@ async function failPrPoolTask(task: RuntimeTask, reason: string): Promise<Dispat
     sourceAgentId: 'pr-pool-handler',
   });
   return { taskId: task.id, status: 'failed', targetAgentId: task.targetAgentId, reason };
+}
+
+function buildCodeAgentPrompt(item: PRItem): string {
+  return [
+    `PR Pool Item: ${item.id}`,
+    `Title: ${item.title}`,
+    '',
+    'Objective:',
+    item.objective,
+    '',
+    'Implementation Prompt:',
+    item.codeAgentPrompt,
+    '',
+    'Acceptance Criteria:',
+    ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+  ].join('\n');
+}
+
+function formatPrItemContext(item: PRItem): string {
+  const sections = [
+    `PR Item: ${item.id}`,
+    `Priority: ${item.priority}`,
+    `Source: ${item.source}`,
+    `Impact: ${item.impact.modules.join(', ')} (${item.impact.risk})`,
+  ];
+
+  if (item.impact.files?.length) {
+    sections.push(`Files: ${item.impact.files.join(', ')}`);
+  }
+
+  if (item.dependencies.length) {
+    sections.push(`Dependencies: ${item.dependencies.join(', ')}`);
+  }
+
+  if (item.design4Plus1) {
+    sections.push(
+      '',
+      '4+1 Design Context:',
+      `Logical: ${item.design4Plus1.logical}`,
+      `Process: ${item.design4Plus1.process}`,
+      `Development: ${item.design4Plus1.development}`,
+      `Physical: ${item.design4Plus1.physical}`,
+      `Scenarios: ${item.design4Plus1.scenarios.join('; ')}`,
+    );
+  }
+
+  return sections.join('\n');
 }
 
 function readPayload(task: RuntimeTask): Record<string, unknown> {

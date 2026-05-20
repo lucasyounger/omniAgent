@@ -447,4 +447,96 @@ describe('Task Dispatcher', () => {
       result: { prItemId, status: 'ready' },
     });
   });
+
+  it('dispatches approved PR pool develop tasks into code-agent runtime tasks', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Develop dispatcher PR item',
+      objective: 'Create a code task from PR pool development',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['code task created'],
+      codeAgentPrompt: 'Create the implementation',
+      design4Plus1: {
+        logical: 'Logical context',
+        process: 'Process context',
+        development: 'Development context',
+        physical: 'Physical context',
+        scenarios: ['Scenario context'],
+      },
+    });
+    await prPoolRuntime.confirm(item.id);
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'develop PR pool item',
+      metadata: {
+        taskType: 'pr_pool.develop',
+        payload: { prItemId: item.id, approvalToken: 'approved' },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const updated = await prPoolRuntime.get(item.id);
+    const tasks = await taskRuntime.listTasks();
+    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeTaskId);
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      handler: 'pr-pool-handler',
+      result: { prItemId: item.id, status: 'developing' },
+    });
+    expect(updated).toMatchObject({
+      status: 'developing',
+      approval: { developApprovalToken: 'approved' },
+      run: { runtimeTaskId: task.id },
+    });
+    expect(codeTask).toMatchObject({
+      targetAgentId: 'code-agent',
+      status: 'pending',
+      metadata: {
+        taskType: 'code.claude_code_task',
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'Create the implementation',
+          executionMode: 'patch_proposal',
+          approvalToken: 'approved',
+          prItemId: item.id,
+        },
+      },
+    });
+  });
+
+  it('moves PR pool develop tasks without approval into waiting_user_confirm', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Needs develop approval',
+      objective: 'Wait for explicit approval',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['approval requested'],
+      codeAgentPrompt: 'Do not run yet',
+    });
+    await prPoolRuntime.confirm(item.id);
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'develop PR pool item',
+      metadata: {
+        taskType: 'pr_pool.develop',
+        payload: { prItemId: item.id },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      status: 'waiting_user_confirm',
+      targetAgentId: 'pr-pool-runtime',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({ status: 'waiting_user_confirm' });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
+  });
 });
