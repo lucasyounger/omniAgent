@@ -448,6 +448,69 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('dispatches PR pool cron scan tasks and respects concurrent development slots', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const ready = await prPoolRuntime.create({
+      title: 'Ready cron item',
+      objective: 'Develop ready item',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['queued'],
+      codeAgentPrompt: 'Implement ready item',
+    });
+    const draft = await prPoolRuntime.create({
+      title: 'Draft cron item',
+      objective: 'Do not scan draft item',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['not queued'],
+      codeAgentPrompt: 'Ignore draft item',
+    });
+    await prPoolRuntime.confirm(ready.id);
+    await prPoolRuntime.update(ready.id, { approval: { developApprovalToken: 'approved' } });
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'scan PR pool',
+      metadata: {
+        taskType: 'pr_pool.cron_scan',
+        payload: {},
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const updatedReady = await prPoolRuntime.get(ready.id);
+    const updatedDraft = await prPoolRuntime.get(draft.id);
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      handler: 'pr-pool-handler',
+      result: { scanned: 1, dispatched: 1, skipped: 0, failed: 0 },
+    });
+    expect(updatedReady).toMatchObject({ status: 'developing' });
+    expect(updatedDraft).toMatchObject({ status: 'draft' });
+  });
+
+  it('registers a PR pool cron job without duplicates', async () => {
+    await loadRuntime();
+    const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+    const { ensurePrPoolCronJob } = await import('../src/mastra/runtime/pr-pool/pr-pool-scheduler');
+
+    const first = await ensurePrPoolCronJob();
+    const second = await ensurePrPoolCronJob();
+    const jobs = await listCronJobs();
+
+    expect(first.id).toBe(second.id);
+    expect(jobs.filter(job => job.taskType === 'pr_pool.cron_scan')).toHaveLength(1);
+    expect(first).toMatchObject({
+      name: 'PR Pool Daily Development Scan',
+      schedule: '0 1 * * *',
+      targetAgentId: 'pr-pool-runtime',
+      taskType: 'pr_pool.cron_scan',
+    });
+  });
+
   it('dispatches approved PR pool develop tasks into code-agent runtime tasks', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');

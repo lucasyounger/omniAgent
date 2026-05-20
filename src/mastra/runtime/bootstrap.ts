@@ -1,6 +1,7 @@
 import { startCronScheduler } from '../lib/cron-store';
 import { markTimedOutTeamRuns, recoverInterruptedTeamRuns } from '../lib/team-runtime-store';
 import { dispatchPendingRuntimeTasks } from './task-dispatcher';
+import { ensurePrPoolCronJob } from './pr-pool/pr-pool-scheduler';
 
 let bootstrapped = false;
 
@@ -13,6 +14,7 @@ export function bootstrapRuntimeCompatibility() {
   void recoverInterruptedTeamRuns();
   void markTimedOutTeamRuns();
   void dispatchPendingRuntimeTasks();
+  void ensurePrPoolCronJob();
   startCronScheduler();
 
   setInterval(() => {

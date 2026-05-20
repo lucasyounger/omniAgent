@@ -1,4 +1,5 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-runtime-store';
+import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { prPoolRuntime } from './pr-pool-runtime';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import { taskRuntime } from '../task-runtime';
@@ -150,12 +151,7 @@ async function dispatchPrPoolArchiveTask(task: RuntimeTask): Promise<DispatchRes
 }
 
 async function dispatchPrPoolCronScanTask(task: RuntimeTask): Promise<DispatchResult> {
-  return runPrPoolHandler(task, 'PR pool cron scan is not enabled yet.', async () => ({
-    scanned: 0,
-    dispatched: 0,
-    skipped: 0,
-    failed: 0,
-  }));
+  return runPrPoolHandler(task, 'Scanned PR pool items for scheduled development.', () => runPrPoolCronScan());
 }
 
 async function runPrPoolHandler(task: RuntimeTask, summary: string, action: () => Promise<Record<string, unknown>>): Promise<DispatchResult> {
