@@ -18,8 +18,9 @@ through Team Runtime.
   from paired or allowlisted channels
 - Natural language first passes through the Runtime Orchestrator. Supported
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
-  messages call the LLM orchestrator by default, with structured conversation
-  context, inferred active module/entities, and active Goal scope injected before
+  messages call the LLM orchestrator by default, with persisted semantic
+  conversation context, active module/entities from current and previous
+  messages in the same channel conversation, and active Goal scope injected before
   falling back to OmniRouterAgent. The LLM orchestrator can return either one
   executable runtime task or a multi-capability plan preview for later Planner
   execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable the semantic

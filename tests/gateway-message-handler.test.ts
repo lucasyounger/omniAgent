@@ -306,6 +306,34 @@ describe('Gateway message handler', () => {
     expect(body).toContain('scope=memory, docs-memory');
   });
 
+  it('persists semantic state across continuation prompts', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'unknown',
+          confidence: 0.4,
+          clarifyingQuestion: 'Need more detail',
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    await handleChannelMessage(message('先研究 memory repo', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await handleChannelMessage(message('继续看看 tests', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const secondBody = String(fetchMock.mock.calls[1][1]?.body);
+    expect(secondBody).toContain('- activeModule: tests');
+    expect(secondBody).toContain('- recentEntities: tests, memory');
+    expect(secondBody).toContain('- continuationRequest: yes');
+  });
+
   it('returns a capability plan preview for multi-capability LLM decisions', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

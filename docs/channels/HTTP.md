@@ -72,9 +72,10 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 
 Incomplete schedule-like messages return a clarification question. Other
 normal text is first offered to the LLM orchestrator by default; that prompt
-includes structured conversation context, inferred active module/entities, and
-active Goal scope so continuation requests such as “顺便也看看 eventbus” can reuse
-the current topic. The LLM orchestrator may return a single executable runtime
+includes persisted semantic conversation context, active module/entities from the
+current and previous messages in the same channel conversation, and active Goal
+scope so continuation requests such as “顺便也看看 eventbus” can reuse the current
+topic. The LLM orchestrator may return a single executable runtime
 task or a multi-capability plan preview with `requiredCapabilities` and
 `executionMode` for later Planner execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
 to disable that semantic decision pass. If the LLM orchestrator is disabled,

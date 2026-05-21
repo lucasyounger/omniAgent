@@ -13,6 +13,7 @@ import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrch
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
+import { getConversationSemanticState, inferConversationContext, updateConversationSemanticState } from './conversation-semantic-state';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage } from './types';
@@ -129,7 +130,14 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
   const activeGoals = goals.length
     ? goals.map(goal => formatActiveGoalForPrompt(goal)).join('\n')
     : '- none';
-  const inferredContext = inferConversationContext(message.text, goals);
+  const previousContext = await getConversationSemanticState(message);
+  const inferredContext = inferConversationContext(message.text, goals, previousContext);
+  const semanticState = await updateConversationSemanticState({
+    channel: message.channel,
+    conversationId: message.conversationId,
+    senderId: message.senderId,
+    inference: inferredContext,
+  });
 
   return [
     'You are OmniAgent runtime orchestrator. Return strict JSON only.',
@@ -144,9 +152,9 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     `- conversationId: ${message.conversationId}`,
     `- channel: ${message.channel}`,
     `- senderId: ${message.senderId}`,
-    `- activeModule: ${inferredContext.activeModule ?? 'unknown'}`,
-    `- recentEntities: ${inferredContext.recentEntities.length ? inferredContext.recentEntities.join(', ') : 'none'}`,
-    `- continuationRequest: ${inferredContext.continuationRequest ? 'yes' : 'no'}`,
+    `- activeModule: ${semanticState.activeModule ?? 'unknown'}`,
+    `- recentEntities: ${semanticState.recentEntities.length ? semanticState.recentEntities.join(', ') : 'none'}`,
+    `- continuationRequest: ${semanticState.continuationRequest ? 'yes' : 'no'}`,
     '',
     'Active goals:',
     activeGoals,
@@ -165,43 +173,6 @@ function formatActiveGoalForPrompt(goal: Awaited<ReturnType<typeof listGoals>>[n
   if (goal.scope.length) parts.push(`scope=${goal.scope.join(', ')}`);
   if (goal.tags?.length) parts.push(`tags=${goal.tags.join(', ')}`);
   return parts.join(' | ');
-}
-
-function inferConversationContext(text: string, goals: Awaited<ReturnType<typeof listGoals>>): {
-  activeModule?: string;
-  recentEntities: string[];
-  continuationRequest: boolean;
-} {
-  const lower = text.toLowerCase();
-  const continuationRequest = /\b(also|too|continue|next)\b/i.test(text) || /(顺便|也看看|再看看|继续|一起看|另外)/.test(text);
-  const entities = new Set<string>();
-
-  for (const match of lower.matchAll(/\b([a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*)\s*(?:module|模块|runtime|agent|store|gateway|repo)?\b/g)) {
-    const value = match[1];
-    if (!isContextStopWord(value)) entities.add(value);
-  }
-
-  for (const goal of goals) {
-    for (const item of [goal.title, goal.objective, ...goal.scope, ...(goal.tags ?? [])]) {
-      const normalized = item.toLowerCase();
-      if (normalized && (lower.includes(normalized) || continuationRequest)) {
-        for (const token of normalized.matchAll(/\b[a-z][a-z0-9_-]*\b/g)) {
-          if (!isContextStopWord(token[0])) entities.add(token[0]);
-        }
-      }
-    }
-  }
-
-  const recentEntities = Array.from(entities).slice(0, 12);
-  return {
-    activeModule: recentEntities[0],
-    recentEntities,
-    continuationRequest,
-  };
-}
-
-function isContextStopWord(value: string): boolean {
-  return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'please', 'http', 'local', 'conv', 'user', 'msg']).has(value);
 }
 
 function formatCapabilityPlanDecision(decision: Extract<OrchestratorDecision, { kind: 'capability_plan' }>): string {

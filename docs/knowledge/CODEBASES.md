@@ -7,6 +7,7 @@
 - Tools: `src/mastra/tools`
 - Internal libraries: `src/mastra/lib`
 - Planner schema/helpers and composite workflow: `src/mastra/runtime/planner`, `src/mastra/workflows/composite-task-workflow.ts`
+- Gateway semantic state: `~/.omni/runs/gateway/semantic-state`
 - Long-term memory: `~/.omni/memory`
 - Project docs and implementation knowledge: `docs`
 
