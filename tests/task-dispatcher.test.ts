@@ -442,6 +442,36 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('exposes capability metadata for every runtime task type without changing default targets', async () => {
+    const {
+      defaultTargetAgentIdForTaskType,
+      getRuntimeTaskCapability,
+      isRuntimeTaskType,
+      listRuntimeTaskCapabilities,
+      runtimeTaskTypeRegistry,
+      runtimeTaskTypes,
+    } = await import('../src/mastra/runtime/task-types');
+
+    const capabilities = listRuntimeTaskCapabilities();
+
+    expect(capabilities).toHaveLength(Object.keys(runtimeTaskTypeRegistry).length);
+    expect(capabilities.map(capability => capability.id).sort()).toEqual(Object.values(runtimeTaskTypes).sort());
+    expect(getRuntimeTaskCapability('goal.create')).toMatchObject({
+      id: 'goal.create',
+      taskType: 'goal.create',
+      category: 'goal',
+      safetyLevel: 'medium',
+    });
+    expect(getRuntimeTaskCapability('code.claude_code_task')).toMatchObject({
+      category: 'tool',
+      tools: ['code-agent'],
+      safetyLevel: 'high',
+    });
+    expect(getRuntimeTaskCapability('unknown.task')).toBeUndefined();
+    expect(isRuntimeTaskType('pr_pool.develop')).toBe(true);
+    expect(defaultTargetAgentIdForTaskType('pr_pool.develop')).toBe('pr-pool-runtime');
+  });
+
   it('dispatches PR pool runtime tasks through the pr-pool handler', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { defaultTargetAgentIdForTaskType, isRuntimeTaskType } = await import('../src/mastra/runtime/task-types');

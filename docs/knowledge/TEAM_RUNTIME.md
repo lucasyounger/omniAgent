@@ -115,8 +115,11 @@ approval linkage.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
-  research, schedule-handler, PR pool, and Goal task types. Code tasks without
-  approval move to `waiting_user_confirm`.
+  research, schedule-handler, PR pool, and Goal task types. The task type
+  registry also exposes capability metadata for each existing task type
+  (category, examples, handler tools, dependencies, outputs, and safety level)
+  without changing dispatch behavior or default target agent IDs. Code tasks
+  without approval move to `waiting_user_confirm`.
 - `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
   mirrors the execution result into the Team Run result file.

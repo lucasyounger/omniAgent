@@ -96,7 +96,11 @@ work is delegated, executed, reported, and recovered across all agents.
   the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task.
-- Task type registry defines 25 granular task types: `code.claude_code_task`,
+- Task type registry defines 25 granular task types and exposes capability
+  metadata for each one. Capability metadata keeps the existing `taskType` and
+  default target mapping intact while adding category, examples, tools,
+  dependencies, outputs, and safety level for semantic orchestration.
+- Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
   `schedule.list`, `schedule.delete`, `schedule.pause`, `schedule.resume`,
