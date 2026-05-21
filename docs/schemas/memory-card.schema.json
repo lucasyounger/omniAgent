@@ -1,6 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "MemoryCard",
+  "status": "unimplemented",
+  "description": "This schema describes a PLANNED but NOT YET IMPLEMENTED memory model. The current memory system uses flat Markdown/JSONL files (USER.md, EPISODIC_LOG.md, doc-update-proposals.jsonl) with MemoryProposalType='user|project|lesson|reference'. Do not treat this schema as reflecting current runtime behavior.",
   "type": "object",
   "required": ["id", "kind", "title", "content", "confidence", "stability", "tags", "createdAt", "updatedAt"],
   "properties": {

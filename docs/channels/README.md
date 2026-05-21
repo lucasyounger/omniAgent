@@ -25,6 +25,16 @@ through Team Runtime.
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records
   directly, and `research.ai_daily_digest` uses that path for scheduled digests.
 
+## Adapter Types
+
+- HTTP channel: local test and generic webhook entry through `POST /message`.
+- OneBot channel: OneBot-compatible webhook entry through `POST /onebot`, useful
+  for NapCat-style local QQ bridges.
+- Official QQ Bot channel: websocket event adapter plus official HTTP send APIs
+  when `OMNI_QQBOT_APPID` and `OMNI_QQBOT_CLIENTSECRET` are configured.
+- Goal Runtime QQ feedback helpers: mock adapters used by Goal Runtime tests and
+  MVP feedback loops; they are not a real QQ delivery channel.
+
 ## QQ Bot Delivery
 
 QQ Bot inbound C2C and group-at events are normalized to the shared channel

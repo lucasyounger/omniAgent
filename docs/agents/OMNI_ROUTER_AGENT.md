@@ -47,6 +47,19 @@ messages to report completed delegated tasks.
 - Do not directly start CodeAgent, CronAgent, or KnowledgeAgent tools. Create a
   Runtime Task and let Task Dispatcher or specialist handlers execute it.
 
+## Routing Intents
+
+Router chooses one of these intents:
+
+- `chat`: answer directly.
+- `code`: create Runtime/Team tasks for CodeAgent execution.
+- `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
+- `knowledge`: use KnowledgeAgent tools.
+- `mixed`: split into explicit sub-tasks.
+
+Router should keep final replies short, include task ids for long-running work,
+and avoid hiding execution state.
+
 ## Known Pitfalls
 
 - Do not summarize large outputs from inbox alone; inbox only stores notices.
@@ -57,4 +70,3 @@ messages to report completed delegated tasks.
 
 - `docs/agents/TASK_AGENT.md`
 - `docs/knowledge/TEAM_RUNTIME.md`
-- `docs/context/router-context.md`

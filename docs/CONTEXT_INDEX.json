@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-11T07:36:58.302Z",
+  "updatedAt": "2026-05-21T00:00:00.000Z",
   "startHere": "START_HERE.md",
   "architecture": "ARCHITECTURE.md",
   "testing": "TESTING.md",
@@ -49,5 +49,12 @@
       "channels/ONEBOT.md",
       "agents/TASK_AGENT.md"
     ]
-  }
+  },
+  "removedContextFiles": [
+    "context/router-context.md (merged into agents/OMNI_ROUTER_AGENT.md)",
+    "context/cron-agent-context.md (merged into agents/CRON_AGENT.md)",
+    "context/code-agent-context.md (merged into agents/CODE_AGENT.md)",
+    "context/knowledge-agent-context.md (merged into agents/KNOWLEDGE_AGENT.md)",
+    "context/context-budget.md (merged into CONTEXT_PACKS.md)"
+  ]
 }

@@ -45,6 +45,73 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   then asks the Runtime Orchestrator for `taskType + payload + notifyTarget`
   instead of embedding business execution logic in channel adapters.
 
+## Experimental / Unregistered Modules
+
+The following runtime modules exist in source but are not registered in the
+Mastra instance (`src/mastra/index.ts`). They may be under development or
+used only by unregistered workflows:
+
+- **Goal Runtime** (`src/mastra/runtime/goal/`): lifecycle management for
+  improvement and research goals. Includes goal store, run store, workspace
+  management, proof-of-work, reconciliation, retry, timeout, and capsule
+  serialization. Used by `module-improvement-goal-workflow.ts` and
+  `topic-research-goal-workflow.ts` (both currently unregistered).
+- **PR Pool** (`src/mastra/runtime/pr-pool/`): patch-proposal pool management
+  with `pr-pool-runtime.ts` and `pr-pool-store.ts`. Has registered task types
+  (`pr_pool.create/list/confirm/develop/archive/cron_scan`) but no agent card.
+- **Artifact Store** (`src/mastra/runtime/artifacts/`): generic artifact storage
+  with versioning, wiki-diff generation, and markdown import/export.
+- **Connectors** (`src/mastra/runtime/connectors/`): external system connector
+  registry with audit trails. Defines `Connector`, `ConnectorRegistry`, and
+  tool definitions for future integrations.
+- **Evidence Store** (`src/mastra/runtime/evidence/`): evidence collection,
+  deduplication, ranking, and scoring for research workflows.
+- **Feedback** (`src/mastra/runtime/feedback/`): user feedback parsing
+  (positive/negative/neutral/correction) and event persistence.
+- **Profile Facets** (`src/mastra/runtime/profile/`): user profile facet
+  management with propose/accept/reject lifecycle.
+- **Model Router** (`src/mastra/runtime/model-router/`): model selection based
+  on hints, cost estimation, and route decision persistence.
+- **Memory Index** (`src/mastra/runtime/memory-index/`): searchable memory
+  index separate from docs-memory. Provides `indexMemory` and
+  `searchMemoryIndex`.
+- **Memory Consolidation** (`src/mastra/runtime/memory-consolidation/`):
+  structured memory consolidation report generation.
+- **Policy Center** (`src/mastra/runtime/policy-center/`): centralized tool
+  policy registry and enforcement.
+- **Eval Harness** (`src/mastra/runtime/eval-harness/`): evaluation harness
+  for scoring agent scenarios.
+- **Module Analysis** (`src/mastra/runtime/module-analysis/`): module context
+  building and gap analysis for improvement workflows.
+- **Dashboard** (`src/mastra/runtime/dashboard/`): runtime dashboard data
+  aggregation for the gateway `/runtime/dashboard` endpoint.
+- **Registry** (`src/mastra/registry/`): agent/workflow/tool registry with
+  schema validation.
+- **Skills** (`src/mastra/skills/repo/`, `src/mastra/skills/research/`):
+  reusable skill modules for GitHub repo search, comparison, arXiv/blog/RSS
+  search. Used by unregistered workflows.
+- **Notification Channel** (`src/gateway/notification-channel.ts`): outbound
+  message abstraction used by the delivery worker.
+
+## Pending Implementations
+
+- `research-agent`: target agent for `research.ai_daily_digest` task type.
+  Handler exists in dispatcher; no Mastra Agent class yet.
+- `notify-agent`: target agent for `notify.send_channel_message`. Handler
+  exists in dispatcher; no Mastra Agent class yet.
+
+## Gateway HTTP Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health` | Health check |
+| GET | `/deliveries` | List delivery records |
+| GET | `/deliveries/dead-letter` | List dead-letter deliveries |
+| GET | `/runtime/dashboard` | Runtime dashboard data |
+| GET | `/qqbot/status` | QQ Bot adapter status |
+| POST | `/message` | Handle HTTP channel message |
+| POST | `/onebot` | Handle OneBot protocol message |
+
 ## Data Flow
 
 User or scheduler creates work:
@@ -99,9 +166,9 @@ TeamTask status stays on its closest compatible value.
 9. Task Dispatcher scans pending tasks on startup and on
    `OMNI_TASK_DISPATCH_POLL_INTERVAL_MS`, defaulting to 30000 ms.
 10. Dispatcher handlers currently cover `code-agent`, `knowledge-agent`,
-   `schedule.create`, `schedule.list`, `schedule.delete`, `schedule.pause`,
-   `schedule.resume`, `schedule.run_now`, `notify.send_channel_message`, and
-   `research.ai_daily_digest`.
+    `schedule-handler`, `channel-gateway`, `research-handler`,
+    `notify-handler`, and `pr-pool-handler`. See `docs/agents/TASK_AGENT.md`
+    for the full task type registry.
 
 Valid runtime transitions are enforced by TaskRuntime. Callers should not write
 runtime status metadata directly.

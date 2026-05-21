@@ -30,8 +30,10 @@ Purpose: load the smallest useful context before changing OmniAgent.
 ## Update Rule
 
 When behavior changes, update the relevant agent card and knowledge doc in the
-same task, update or add tests, then refresh `~/.omni/memory/MEMORY_INDEX.json`.
-If GitNexus or another code index is used for this repo, refresh it after
+same task, update or add tests, then refresh `~/.omni/memory/MEMORY_INDEX.json`
+when memory docs changed. `verify:change-sync` checks code/docs/tests sync and
+GitNexus support files; it does not mechanically validate the external memory
+index. If GitNexus or another code index is used for this repo, refresh it after
 successful typecheck/tests when the code change should be discoverable by later
 agents.
 

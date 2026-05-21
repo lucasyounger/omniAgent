@@ -5,7 +5,8 @@ cards, schemas, channel notes, and implementation knowledge.
 
 Runtime assets do not belong under `docs/`. OmniAgent stores operational data
 under `~/.omni`: long-term memory in `~/.omni/memory`, run artifacts in
-`~/.omni/runs`, gateway logs in `~/.omni/gateway`, and LibSQL storage in
+`~/.omni/runs`, gateway sessions, approvals, audits, and delivery records in
+`~/.omni/runs/gateway`, and LibSQL storage in
 `~/.omni/storage`.
 
 Start with `START_HERE.md` for low-token context assembly. Use
@@ -23,8 +24,9 @@ source files.
 - `TESTING.md`: test rules and required verification commands.
 - `knowledge/`: durable facts about projects, tools, and operating procedures.
 - `skills/`: reusable task playbooks for agents.
-- `context/`: prompt context fragments and context budget rules.
-- `schemas/`: JSON schemas for memory cards, task results, cron jobs, and doc updates.
+- `schemas/`: JSON schema snapshots for docs, fixtures, and external protocol
+  review. Runtime validation is authoritative in TypeScript/Zod source; update
+  these snapshots when data shapes intentionally change.
 
 ## Runtime Assets
 

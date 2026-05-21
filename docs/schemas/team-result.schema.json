@@ -13,7 +13,8 @@
     "error": { "type": "string" },
     "artifacts": { "type": "array", "items": { "type": "string" } },
     "completedAt": { "type": "string", "format": "date-time" },
-    "metadata": { "type": "object" }
+    "metadata": { "type": "object" },
+    "resultRef": { "type": "string", "description": "Added by writeRunResult at write time; not part of the in-memory RunResult type but present in persisted files." }
   },
   "additionalProperties": false
 }

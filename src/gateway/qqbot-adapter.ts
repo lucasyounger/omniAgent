@@ -167,8 +167,7 @@ async function connect(): Promise<void> {
       state = 'CLOSED';
 
       if (event.code === 4006) {
-        sessionId = null;
-        console.log('[qqbot] invalid session, will re-identify');
+        resetSession('invalid websocket session');
       }
 
       scheduleReconnect();
@@ -239,7 +238,7 @@ function handleWsMessage(payload: {
       break;
     case 9:
       console.log('[qqbot] invalid session, re-identifying');
-      sessionId = null;
+      resetSession('invalid session dispatch');
       sendIdentify().catch(e => console.error('[qqbot] identify error:', e));
       break;
     case 10:
@@ -441,6 +440,7 @@ function startConnectReadyTimer(): void {
     if (state === 'READY') return;
 
     console.error(`[qqbot] connection did not become ready within ${CONNECT_READY_TIMEOUT_MS}ms (state=${state}), reconnecting`);
+    resetSession(`ready timeout while ${state}`);
     cleanupWs();
     if (ws) {
       try {
@@ -453,6 +453,14 @@ function startConnectReadyTimer(): void {
     state = 'CLOSED';
     scheduleReconnect();
   }, CONNECT_READY_TIMEOUT_MS).unref();
+}
+
+function resetSession(reason: string): void {
+  if (sessionId || lastSequence !== null) {
+    console.log(`[qqbot] clearing session: ${reason}`);
+  }
+  sessionId = null;
+  lastSequence = null;
 }
 
 function clearConnectReadyTimer(): void {

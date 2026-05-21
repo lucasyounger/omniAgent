@@ -2,9 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DocUpdateProposal",
   "type": "object",
-  "required": ["id", "reason", "targetFiles", "risk", "proposedAt", "changes"],
+  "required": ["id", "proposalType", "reason", "targetFiles", "risk", "proposedAt", "changes"],
   "properties": {
     "id": { "type": "string" },
+    "proposalType": {
+      "type": "string",
+      "enum": ["user", "project", "lesson", "reference"]
+    },
     "reason": { "type": "string" },
     "targetFiles": {
       "type": "array",
@@ -12,6 +16,18 @@
     },
     "risk": { "type": "string", "enum": ["low", "medium", "high"] },
     "proposedAt": { "type": "string" },
-    "changes": { "type": "array" }
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "operation", "summary", "content"],
+        "properties": {
+          "file": { "type": "string" },
+          "operation": { "type": "string", "enum": ["append", "replace-section", "update-json"] },
+          "summary": { "type": "string" },
+          "content": { "type": "string" }
+        }
+      }
+    }
   }
 }

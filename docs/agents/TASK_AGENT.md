@@ -80,7 +80,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - Cancel, retry, timeout, and interrupted states are part of the protocol.
 - TaskRuntime records runtime lifecycle status on backing Team Tasks through
   `metadata.runtimeStatus`.
-- Supported runtime states include `pending`, `running`,
+- Supported runtime states include `created`, `pending`, `running`,
   `waiting_user_confirm`, `succeeded`, `failed`, `cancelled`, `retrying`, and
   `paused`.
 - Retry uses a two-step runtime lifecycle: the failed source task becomes
@@ -96,6 +96,19 @@ work is delegated, executed, reported, and recovered across all agents.
   the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task.
+- Task type registry defines 20 granular task types: `code.claude_code_task`,
+  `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
+  `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
+  `schedule.list`, `schedule.delete`, `schedule.pause`, `schedule.resume`,
+  `schedule.run_now`, `research.ai_daily_digest`,
+  `notify.send_channel_message`, `pr_pool.create`, `pr_pool.list`,
+  `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
+  `pr_pool.cron_scan`.
+- `research-agent` and `notify-agent` target agents are referenced in the
+  registry but are pending implementation; their handlers exist in the
+  dispatcher.
+- `pr-pool-runtime` target is referenced for PR pool task types; handler
+  exists in the dispatcher.
 
 ## Known Pitfalls
 
@@ -107,7 +120,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - The first implementation is file-backed. Avoid high-frequency event spam
   until storage moves to LibSQL.
 - `teamRuntimeStoreBackend` is the current backend boundary for future LibSQL
-  migration.
+  migration. It is not dead code while Team Runtime remains file-backed and the
+  migration boundary is preserved.
 - Test messages in `omni-router-agent` inbox should be marked read, otherwise
   the main agent may surface smoke-test results as real work.
 - If future code introduces a real Mastra `TaskAgent`, keep this file as the

@@ -1,5 +1,9 @@
 下面是一版重构后的 omniAgent.md 设计文档。
 
+> 历史草案说明（2026-05-20）：本文是早期产品/架构设想，不代表当前实现状态。
+> 当前实现以 `README.md`、`docs/START_HERE.md`、`docs/ARCHITECTURE.md`、`docs/TESTING.md`、源码和测试为准。
+> 本文中关于目录、ScheduleAgent、ResearchAgent、NotifyTool、MemoryRuntime 和 Tool Gateway 的描述只能作为后续方向参考。
+
 # omniAgent 本地个人助手设计文档
 
 ## 1. 设计目标

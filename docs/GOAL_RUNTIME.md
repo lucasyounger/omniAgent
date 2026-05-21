@@ -15,10 +15,11 @@ Supported goal types are `topic_research`, `module_improvement`, `personal_assis
 
 ## Workspace layout
 
-Each goal owns a path-safe workspace under `.omni/goals/{goalId}/`:
+Each goal owns a path-safe workspace under `~/.omni/goals/{goalId}/` by default.
+Set `OMNI_HOME` to override the `~/.omni` runtime asset root.
 
 ```text
-.omni/goals/{goalId}/
+~/.omni/goals/{goalId}/
   goal.json
   capsule.md
   runs/
@@ -32,10 +33,10 @@ The workspace manager rejects invalid goal IDs and rejects relative paths that e
 
 ## Goal runs and proof of work
 
-Each execution attempt is a GoalRun under `.omni/goals/{goalId}/runs/{runId}/`:
+Each execution attempt is a GoalRun under `~/.omni/goals/{goalId}/runs/{runId}/`:
 
 ```text
-.omni/goals/{goalId}/runs/{runId}/
+~/.omni/goals/{goalId}/runs/{runId}/
   run.json
   event-log.jsonl
   proof-of-work.md
@@ -88,7 +89,7 @@ PR-17 adds the Topic Research MVP:
 Topic research run artifacts:
 
 ```text
-.omni/goals/{goalId}/runs/{runId}/
+~/.omni/goals/{goalId}/runs/{runId}/
   plan.md
   sources.json
   evidence.jsonl
@@ -101,7 +102,7 @@ Topic research run artifacts:
 Module improvement run artifacts:
 
 ```text
-.omni/goals/{goalId}/runs/{runId}/
+~/.omni/goals/{goalId}/runs/{runId}/
   candidate-repos.json
   repo-analysis.md
   gap-analysis.md

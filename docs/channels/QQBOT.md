@@ -6,7 +6,7 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 
 ## Responsibilities
 
-- Connect to QQ Bot gateway or webhook.
+- Connect to QQ Bot websocket events. Webhook support is not implemented yet and is a future adapter option.
 - Normalize QQ events into `ChannelMessage`.
 - Send outgoing `OutboundMessage` replies through QQ Bot APIs.
 - Keep credentials outside docs and git.
@@ -67,6 +67,14 @@ These are written directly as Cron jobs with:
 When the schedule fires, Cron creates a Runtime Task, the dispatcher handles
 `channel-gateway`, and the delivery worker sends the original text back to the
 QQ conversation.
+
+## Verification Status
+
+The adapter implements websocket event normalization, HTTP send calls, safe
+status reporting, and shared delivery-worker routing. A real QQ end-to-end loop
+still requires external validation with live QQ Open Platform credentials and a
+reachable bot. Record that validation separately when performed; local tests and
+`/qqbot/status` only prove local adapter mechanics.
 
 ## Non-Goals
 

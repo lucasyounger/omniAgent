@@ -29,6 +29,13 @@ execution through Team Runtime.
 - Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
 - Sends completion or failure inbox messages.
 
+## Tools
+
+- `start-claude-code-task`: start a Claude Code CLI task.
+- `get-claude-code-task-status`: query the status of an in-progress or
+  completed code task.
+- `list-claude-code-tasks`: list recent code task records.
+
 ## Known Pitfalls
 
 - On Windows, direct `spawn('claude')` fails with `spawn claude ENOENT`.

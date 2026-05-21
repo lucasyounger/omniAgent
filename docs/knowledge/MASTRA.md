@@ -8,4 +8,9 @@ OmniAgent uses:
 
 ## Current Pattern
 
-All team agents are registered in `src/mastra/index.ts`. Router has access to team tools so the first version works without a separate UI or network layer.
+All team agents are registered in `src/mastra/index.ts`. OmniRouterAgent remains
+the user-facing router, but high-risk business execution should be created as
+Runtime Tasks and routed by Task Dispatcher through Tool Gateway. Router should
+primarily use team discovery, runtime coordination, inbox/result lookup, and
+clarification paths; specialist agents or dispatcher handlers own concrete code,
+schedule, memory, channel, notify, and research execution.

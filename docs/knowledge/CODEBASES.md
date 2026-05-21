@@ -6,7 +6,8 @@
 - Agents: `src/mastra/agents`
 - Tools: `src/mastra/tools`
 - Internal libraries: `src/mastra/lib`
-- Long-term memory: `docs`
+- Long-term memory: `~/.omni/memory`
+- Project docs and implementation knowledge: `docs`
 
 ## Extension Pattern
 

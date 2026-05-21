@@ -36,6 +36,12 @@ stable contract.
   - basic command routing
   - task command validation
   - natural-language schedule creation through RuntimeTask
+- `tests/gateway-delivery.test.ts`
+  - delivery worker polling, result lookup, retry, and dead-letter behavior
+- `tests/gateway-http-server.test.ts`
+  - gateway health/message/OneBot HTTP request handling
+- `tests/qqbot-adapter.test.ts`
+  - official QQBot adapter configuration, token/status, and event handling
 - `tests/code-task-store.test.ts`
   - dry-run task summary persistence
   - status and list recovery after module reload
@@ -63,6 +69,7 @@ stable contract.
   - `schedule.create` persists cron jobs
   - schedule list/delete/pause/resume RuntimeTasks dispatch without approval
   - direct-code `schedule.run_now` moves to `waiting_user_confirm`
+  - `channel.message` dispatches channel responses
   - research daily digest queues notify delivery
   - code tasks without approval move to `waiting_user_confirm`
   - approved dry-run code tasks dispatch and become `succeeded`
@@ -78,6 +85,38 @@ stable contract.
   - memory writes, schedule writes, and schedule deletes do not require approval
   - non-code `run_now` does not require approval
   - direct-code `run_now` requires Tool Gateway approval
+- `tests/requirement-e2e-artifacts.test.ts`
+  - Requirement E2E artifact generation and manifest shape
+- `tests/evidence-store.test.ts`
+  - evidence record persistence and retrieval
+- `tests/goal-runtime.test.ts`
+  - Goal Runtime lifecycle and run artifact behavior
+- `tests/memory-index.test.ts`
+  - memory index refresh and lookup behavior
+- `tests/profile-facets.test.ts`
+  - profile facet persistence and update rules
+- `tests/memory-consolidation.test.ts`
+  - memory consolidation report generation
+- `tests/context-pack.test.ts`
+  - context pack schema and selection behavior
+- `tests/memory-maintenance-workflow.test.ts`
+  - memory maintenance workflow outputs
+- `tests/model-router.test.ts`
+  - model routing policy and fallback decisions
+- `tests/artifact-engine.test.ts`
+  - artifact metadata, versioning, and write behavior
+- `tests/notification-channel.test.ts`
+  - notification channel abstraction behavior
+- `tests/connectors.test.ts`
+  - connector registration and invocation boundaries
+- `tests/eval-harness.test.ts`
+  - eval case loading and scoring harness
+- `tests/runtime-dashboard.test.ts`
+  - runtime dashboard data aggregation
+- `tests/registry.test.ts`
+  - agent/workflow/tool registry behavior
+- `tests/tool-policy-center.test.ts`
+  - centralized tool policy definitions and decisions
 
 ## Add Tests When
 

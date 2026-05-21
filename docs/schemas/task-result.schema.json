@@ -1,6 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "TaskResult",
+  "status": "deprecated",
+  "description": "This schema is DEPRECATED. The actual runtime result type is RunResult (see team-result.schema.json). TaskResult described a future design that was never implemented. Kept for reference only.",
   "type": "object",
   "required": ["userSummary", "verification"],
   "properties": {

@@ -79,6 +79,20 @@ requiring review before edits.
 summaries plus repo-impact approval state. Failed, not-run, or approval-blocked
 runs are reflected as remaining actions in the final summary.
 
+## Context Budget Rules
+
+- Read `START_HERE.md` first.
+- Choose one pack from `CONTEXT_PACKS.md`.
+- Read one agent card before source files.
+- Do not read `~/.omni/runs/**` unless a specific id points there.
+- Prefer `knowledge/PITFALLS.md` over rediscovering known issues.
+- Router: load team registry when routing is unclear; use at most five relevant
+  docs memory facts; do not inject raw code task logs.
+- CodeAgent: use objective, workspace path, constraints, and a concise context
+  brief; do not pass full docs tree to Claude Code.
+- KnowledgeAgent: read target docs before proposing changes; keep proposals
+  short and auditable.
+
 ## Routing And Delegation
 
 - `docs/agents/OMNI_ROUTER_AGENT.md`
@@ -92,7 +106,8 @@ runs are reflected as remaining actions in the final summary.
 - `docs/knowledge/TEAM_RUNTIME.md`
 - `docs/knowledge/PITFALLS.md`
 - Schemas only if changing data shape: `docs/schemas/team-*.schema.json`,
-  `docs/schemas/inbox-message.schema.json`
+  `docs/schemas/inbox-message.schema.json`. These JSON schemas are review
+  snapshots; TypeScript/Zod source remains authoritative for runtime validation.
 - Source after docs: `src/mastra/lib/team-runtime-store.ts`,
   `src/mastra/tools/team-runtime-tools.ts`
 

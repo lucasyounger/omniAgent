@@ -28,8 +28,8 @@ TaskRuntime.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
   preserving legacy `task`, `targetAgent`, and `workspacePath` records.
 - Schedule maintenance can also enter through Runtime Tasks handled by
-  `schedule-handler`: `schedule.list`, `schedule.delete`, `schedule.pause`,
-  `schedule.resume`, and `schedule.run_now`.
+  `schedule-handler`: `schedule.create`, `schedule.list`, `schedule.delete`,
+  `schedule.pause`, `schedule.resume`, and `schedule.run_now`.
 - Records `lastRunTaskId` and `lastRunTeamTaskId` as the created runtime/team
   task id. `lastRunTeamRunId` is only present if a later executor creates a run
   synchronously.
@@ -38,6 +38,15 @@ TaskRuntime.
 - Ordinary create/list/delete/pause/resume schedule maintenance is audited but
   does not require Tool Gateway approval. Manual `schedule.run_now` dynamically
   requires approval only when it would trigger direct code execution.
+
+## Tools
+
+- `create-cron-job`: create a new scheduled job record.
+- `list-cron-jobs`: list all scheduled job records.
+- `update-cron-job-status`: update job status (active/paused).
+- `delete-cron-job`: delete a scheduled job record.
+- `run-cron-job-now`: trigger a schedule immediately.
+- `explain-cron-job-next-run`: explain when a schedule will next fire.
 
 ## Known Pitfalls
 

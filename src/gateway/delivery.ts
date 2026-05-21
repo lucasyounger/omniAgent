@@ -1,3 +1,4 @@
+import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import {
   getRunResult,
   getTeamTask,
@@ -65,6 +66,11 @@ export async function deliverPendingInbox(config: GatewayConfig) {
       }
 
       const task = await getTeamTask(inboxMessage.taskId);
+      if (task.metadata?.taskType === runtimeTaskTypes.scheduleCreate) {
+        await markInboxMessageRead({ recipientAgentId: 'channel-gateway', messageId: inboxMessage.messageId });
+        continue;
+      }
+
       const metadata = (task.metadata || {}) as SourceMetadata;
       const target = channelTargetFromMetadata(metadata);
       if (!target) {

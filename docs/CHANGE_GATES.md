@@ -56,6 +56,13 @@ Before commit, run:
 
 ```shell
 npm run verify
+```
+
+`npm run verify` runs typecheck, tests, and `verify:change-sync`. It does not
+refresh the GitNexus index. When code changes should be discoverable by future
+agents, refresh the index after verification:
+
+```shell
 npm run index:code
 ```
 

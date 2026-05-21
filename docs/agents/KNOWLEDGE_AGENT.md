@@ -21,6 +21,20 @@ knowledge, decisions, and procedures synchronized with code behavior.
 - Refreshes `~/.omni/memory/MEMORY_INDEX.json`.
 - Persists explicit user-provided profile facts with `upsert-user-profile-fact`.
 
+## Tools
+
+- `list-memory-docs`: list available memory documents.
+- `read-memory-doc`: read a specific memory document.
+- `append-episodic-log`: append a low-risk episode summary.
+- `propose-doc-update`: create a reviewable doc update proposal.
+- `update-memory-index`: refresh the memory index.
+- `upsert-user-profile-fact`: persist an explicit user profile fact.
+
+Note: KnowledgeAgent does not include `teamRuntimeTools` (unlike CodeAgent and
+CronAgent). It cannot directly query team tasks, runs, or inbox. If KnowledgeAgent
+needs to coordinate with Team Runtime, the work should be delegated through a
+Runtime Task or the router.
+
 ## Known Pitfalls
 
 - Do not store secrets, raw credentials, or private API keys.
@@ -38,4 +52,3 @@ knowledge, decisions, and procedures synchronized with code behavior.
 - `docs/skills/doc-sync.md`
 - `docs/skills/memory-maintenance.md`
 - `~/.omni/memory/OMNI.md`
-- `docs/context/knowledge-agent-context.md`

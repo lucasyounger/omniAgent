@@ -9,6 +9,13 @@ connecting a real QQ or OneBot adapter.
 POST http://localhost:4120/message
 ```
 
+## Authorization
+
+Before using `/message`, either configure `OMNI_GATEWAY_ALLOW_SENDERS` for the
+sender id or send `/pair <OMNI_GATEWAY_PAIRING_TOKEN>` from the same channel,
+account, conversation, and sender tuple. Unpaired senders receive a pairing
+prompt instead of executing commands.
+
 ## Example
 
 ```json
