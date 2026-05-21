@@ -132,6 +132,33 @@ describe('Runtime Orchestrator', () => {
     });
   });
 
+  it('converts LLM multi-capability output into capability plan decisions', () => {
+    const output = parseOrchestratorModelOutput(`
+      {
+        "intent": "capability.plan",
+        "confidence": 0.78,
+        "requiredCapabilities": ["goal.create", "knowledge.memory_index", "pr_pool.create", "goal.create"],
+        "executionMode": "long_running_goal",
+        "shouldCreateGoal": true,
+        "shouldPersistMemory": true,
+        "objective": "Long-running memory module improvement",
+        "reason": "Needs goal tracking and PR planning"
+      }
+    `);
+
+    const decision = orchestratorModelOutputToDecision(output, message('长期优化 memory 模块并生成 PR'));
+
+    expect(decision).toMatchObject({
+      kind: 'capability_plan',
+      confidence: 0.78,
+      requiredCapabilities: ['goal.create', 'knowledge.memory_index', 'pr_pool.create'],
+      executionMode: 'long_running_goal',
+      shouldCreateGoal: true,
+      shouldPersistMemory: true,
+      objective: 'Long-running memory module improvement',
+    });
+  });
+
   it('converts LLM orchestrator output into runtime decisions with channel context', () => {
     const output = parseOrchestratorModelOutput(`
       {

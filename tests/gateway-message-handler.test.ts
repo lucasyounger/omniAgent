@@ -306,6 +306,34 @@ describe('Gateway message handler', () => {
     expect(body).toContain('scope=memory, docs-memory');
   });
 
+  it('returns a capability plan preview for multi-capability LLM decisions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'capability.plan',
+          confidence: 0.8,
+          requiredCapabilities: ['goal.create', 'knowledge.memory_index', 'pr_pool.create'],
+          executionMode: 'composite',
+          objective: 'Analyze memory and create PR plan',
+          shouldCreateGoal: false,
+          shouldPersistMemory: true,
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('帮我研究 memory 模块并生成 PR', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toContain('已识别为复合能力请求');
+    expect(replies[0].text).toContain('Execution Mode: composite');
+    expect(replies[0].text).toContain('Capabilities: goal.create, knowledge.memory_index, pr_pool.create');
+  });
+
   it('falls back to OmniRouter when LLM orchestrator returns invalid output', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

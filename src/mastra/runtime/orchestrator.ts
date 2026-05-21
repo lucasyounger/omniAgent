@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
+import { retrieveCapabilities } from './capabilities';
 import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
 
 const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
@@ -20,6 +21,10 @@ export const orchestratorModelSchema = z.object({
   objective: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
   notifyTarget: channelTargetSchema.optional(),
+  requiredCapabilities: z.array(z.enum(orchestratorTaskTypes)).optional(),
+  executionMode: z.enum(['single_step', 'composite', 'long_running_goal', 'passthrough']).optional(),
+  shouldCreateGoal: z.boolean().optional(),
+  shouldPersistMemory: z.boolean().optional(),
   clarifyingQuestion: z.string().min(1).optional(),
   reason: z.string().optional(),
 });
@@ -35,6 +40,17 @@ export type OrchestratorDecision =
       objective: string;
       payload: Record<string, unknown>;
       notifyTarget?: ChannelTarget;
+      source: Record<string, unknown>;
+    }
+  | {
+      kind: 'capability_plan';
+      confidence: number;
+      requiredCapabilities: RuntimeTaskType[];
+      executionMode: 'composite' | 'long_running_goal' | 'passthrough';
+      shouldCreateGoal: boolean;
+      shouldPersistMemory: boolean;
+      objective: string;
+      reason: string;
       source: Record<string, unknown>;
     }
   | {
@@ -201,10 +217,14 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
+  const retrievedCapabilities = retrieveCapabilities(message.text, { topK: 5 });
+
   return {
     kind: 'passthrough',
     confidence: 0.2,
-    reason: 'No deterministic runtime intent matched.',
+    reason: retrievedCapabilities.length
+      ? `No deterministic runtime intent matched. Candidate capabilities: ${retrievedCapabilities.map(match => `${match.capability.id}:${match.score}`).join(', ')}`
+      : 'No deterministic runtime intent matched.',
   };
 }
 
@@ -217,7 +237,7 @@ export function parseOrchestratorModelOutput(raw: string): OrchestratorModelOutp
     throw new Error(`Unsupported taskType from orchestrator model: ${output.taskType}`);
   }
 
-  if (output.intent === 'unknown' && !output.clarifyingQuestion) {
+  if (output.intent === 'unknown' && !output.clarifyingQuestion && !output.requiredCapabilities?.length) {
     throw new Error('Low-confidence orchestrator output must include clarifyingQuestion.');
   }
 
@@ -239,6 +259,20 @@ export function orchestratorModelOutputToDecision(output: OrchestratorModelOutpu
       confidence: output.confidence,
       question: output.clarifyingQuestion || '我需要更多信息才能继续。',
       reason: output.reason || 'LLM orchestrator requested clarification.',
+    };
+  }
+
+  if (output.requiredCapabilities?.length) {
+    return {
+      kind: 'capability_plan',
+      confidence: output.confidence,
+      requiredCapabilities: Array.from(new Set(output.requiredCapabilities)),
+      executionMode: output.executionMode === 'long_running_goal' ? 'long_running_goal' : output.executionMode === 'passthrough' ? 'passthrough' : 'composite',
+      shouldCreateGoal: output.shouldCreateGoal ?? output.executionMode === 'long_running_goal',
+      shouldPersistMemory: output.shouldPersistMemory ?? false,
+      objective: output.objective || message.text.trim().slice(0, 120),
+      reason: output.reason || 'LLM orchestrator returned a multi-capability plan.',
+      source: channelSourceFromMessage(message),
     };
   }
 

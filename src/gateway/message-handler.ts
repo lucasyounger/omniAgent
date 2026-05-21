@@ -63,6 +63,10 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
     return [reply(message, orchestratorDecision.question)];
   }
 
+  if (orchestratorDecision.kind === 'capability_plan') {
+    return [reply(message, formatCapabilityPlanDecision(orchestratorDecision))];
+  }
+
   if (orchestratorDecision.kind === 'runtime_task') {
     return [reply(message, await handleRuntimeTaskDecision(message, orchestratorDecision))];
   }
@@ -133,7 +137,8 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     'Use taskType for executable runtime tasks and include objective plus payload.',
     'If the message is a continuation such as "also", "顺便", "再看看", or "继续", reuse the conversation context and active goal/module instead of treating it as isolated.',
     'Supported taskType values: code.claude_code_task, knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
-    'Return shape: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
+    'Return shape for executable single-step tasks: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
+    'Return shape for composite or long-running requests: {"intent":"capability.plan","confidence":0-1,"requiredCapabilities":["goal.create","pr_pool.create"],"executionMode":"composite|long_running_goal","shouldCreateGoal":false,"shouldPersistMemory":false,"objective":"...","reason":"..."}',
     '',
     'Conversation context:',
     `- conversationId: ${message.conversationId}`,
@@ -197,6 +202,17 @@ function inferConversationContext(text: string, goals: Awaited<ReturnType<typeof
 
 function isContextStopWord(value: string): boolean {
   return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'please', 'http', 'local', 'conv', 'user', 'msg']).has(value);
+}
+
+function formatCapabilityPlanDecision(decision: Extract<OrchestratorDecision, { kind: 'capability_plan' }>): string {
+  return [
+    '已识别为复合能力请求，后续将交给 Planner 编排执行。',
+    `Execution Mode: ${decision.executionMode}`,
+    `Capabilities: ${decision.requiredCapabilities.join(', ')}`,
+    `Create Goal: ${decision.shouldCreateGoal ? 'yes' : 'no'}`,
+    `Persist Memory: ${decision.shouldPersistMemory ? 'yes' : 'no'}`,
+    `Objective: ${decision.objective}`,
+  ].join('\n');
 }
 
 async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extract<OrchestratorDecision, { kind: 'runtime_task' }>) {
