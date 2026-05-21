@@ -21,10 +21,12 @@ through Team Runtime.
   messages call the LLM orchestrator by default, with persisted semantic
   conversation context, active module/entities from current and previous
   messages in the same channel conversation, and active Goal scope injected before
-  falling back to OmniRouterAgent. The LLM orchestrator can return either one
-  executable runtime task or a multi-capability plan preview for later Planner
-  execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable the semantic
-  decision pass.
+  falling back to OmniRouterAgent. The gateway logs a privacy-preserving
+  orchestrator trace with input hash, decision metadata, candidate capabilities,
+  and fallback reason, without storing raw channel message text in the trace. The
+  LLM orchestrator can return either one executable runtime task or a
+  multi-capability plan preview for later Planner execution. Set
+  `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable the semantic decision pass.
 - Deterministic Goal intents support explicit creation (`创建目标：...`),
   natural long-running creation with auto-run (`我想长期优化 memory 模块`),
   list/status/run/feedback phrases, and confirmation prompts for ambiguous

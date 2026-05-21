@@ -1,7 +1,45 @@
 import { describe, expect, it } from 'vitest';
+import goldenPlans from './fixtures/planner/golden-plans.json';
+import { tracePlannerDecision } from '../src/mastra/runtime/decision-trace';
 import { createExecutionPlan, parseExecutionPlan } from '../src/mastra/runtime/planner';
+import type { OrchestratorDecision } from '../src/mastra/runtime/orchestrator';
+type PlannerGoldenFixture = {
+  name: string;
+  messageId: string;
+  message: string;
+  decision?: Extract<OrchestratorDecision, { kind: 'capability_plan' }>;
+  expectedTrace?: {
+    mode: 'single_step' | 'composite' | 'long_running_goal';
+    stepCount: number;
+    capabilities: string[];
+    dependencyCount: number;
+  };
+  expectedIncludes?: string[];
+};
 
 describe('Execution planner', () => {
+  it.each((goldenPlans as PlannerGoldenFixture[]).map(fixture => [fixture.name, fixture] as const))('matches golden plan fixture %s', (_name, fixture) => {
+    const plan = createExecutionPlan({
+      messageId: fixture.messageId,
+      message: fixture.message,
+      decision: fixture.decision,
+    });
+    const trace = tracePlannerDecision(plan);
+
+    if (fixture.expectedTrace) {
+      expect(trace).toMatchObject({
+        mode: fixture.expectedTrace.mode,
+        stepCount: fixture.expectedTrace.stepCount,
+        capabilities: fixture.expectedTrace.capabilities,
+      });
+      expect(trace.dependencies.flatMap(item => item.dependsOn)).toHaveLength(fixture.expectedTrace.dependencyCount);
+    }
+    for (const capabilityId of fixture.expectedIncludes ?? []) {
+      expect(trace.capabilities).toContain(capabilityId);
+    }
+  });
+
+
   it('validates ExecutionPlan schema', () => {
     const plan = parseExecutionPlan({
       planId: 'plan-msg-1',

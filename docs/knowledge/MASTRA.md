@@ -21,6 +21,10 @@ runtime capabilities and conversation context into lightweight ExecutionPlan JSO
 directly. ExecutionPlan schema and local builder helpers live under
 `src/mastra/runtime/planner/` so gateway/orchestrator decisions can be converted
 into ordered capability steps before `compositeTaskWorkflow` executes them.
-`src/mastra/index.ts` registers `compositeTaskWorkflow` alongside the existing
-Task, Code, and memory workflows so ExecutionPlan dispatch is available through
-Mastra workflow registration.
+`src/mastra/runtime/decision-trace.ts` provides privacy-preserving trace helpers:
+orchestrator traces store an input hash, candidate capability IDs/scores, decision
+kind/confidence, and fallback reason without storing raw message text; planner
+traces store plan ID, mode, step count, capabilities, and dependency edges for
+golden regression tests. `src/mastra/index.ts` registers `compositeTaskWorkflow`
+alongside the existing Task, Code, and memory workflows so ExecutionPlan dispatch
+is available through Mastra workflow registration.

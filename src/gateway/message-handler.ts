@@ -9,6 +9,7 @@ import {
   type GoalChannelRequest,
 } from '../mastra/runtime/goal-channel';
 import { listGoals } from '../mastra/runtime/goal';
+import { traceOrchestratorDecision } from '../mastra/runtime/decision-trace';
 import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
@@ -80,21 +81,25 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
   const decision = orchestrateChannelMessage(message);
   if (decision.kind !== 'passthrough') {
     console.info('[gateway] orchestrator route source=regex_match');
+    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision }));
     return decision;
   }
 
   if (process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR === '0') {
     console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_disabled');
+    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision, fallbackReason: 'llm_disabled' }));
     return decision;
   }
 
   const modelDecision = await callLlmOrchestrator(message, config);
   if (modelDecision) {
     console.info('[gateway] orchestrator route source=llm_orchestrator');
+    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision: modelDecision }));
     return modelDecision;
   }
 
   console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_unavailable');
+  console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision, fallbackReason: 'llm_unavailable' }));
   return decision;
 }
 

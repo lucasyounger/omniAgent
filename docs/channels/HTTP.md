@@ -77,9 +77,12 @@ normal text is first offered to the LLM orchestrator by default; that prompt
 includes persisted semantic conversation context, active module/entities from the
 current and previous messages in the same channel conversation, and active Goal
 scope so continuation requests such as “顺便也看看 eventbus” can reuse the current
-topic. The LLM orchestrator may return a single executable runtime
-task or a multi-capability plan preview with `requiredCapabilities` and
-`executionMode` for later Planner execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
-to disable that semantic decision pass. If the LLM orchestrator is disabled,
-unavailable, or does not return a supported runtime task, the message falls back
-to OmniRouterAgent for synchronous response.
+topic. The gateway logs a privacy-preserving orchestrator trace with an input hash,
+decision kind/confidence, candidate capabilities when available, and fallback
+reason; it does not log the raw channel message in the trace payload. The LLM
+orchestrator may return a single executable runtime task or a multi-capability
+plan preview with `requiredCapabilities` and `executionMode` for later Planner
+execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable that semantic decision
+pass. If the LLM orchestrator is disabled, unavailable, or does not return a
+supported runtime task, the message falls back to OmniRouterAgent for synchronous
+response.

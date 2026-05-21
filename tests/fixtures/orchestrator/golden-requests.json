@@ -1,0 +1,41 @@
+[
+  {
+    "name": "single_step_schedule",
+    "message": "今天21点08分，OmniAgent给我回复一句：你好",
+    "expected": {
+      "kind": "runtime_task",
+      "taskType": "schedule.create",
+      "confidenceAtLeast": 0.9
+    }
+  },
+  {
+    "name": "long_running_goal",
+    "message": "我想长期优化 memory 模块",
+    "expected": {
+      "kind": "runtime_task",
+      "taskType": "goal.create",
+      "confidenceAtLeast": 0.85,
+      "payload": {
+        "scope": ["memory"],
+        "autoRun": true
+      }
+    }
+  },
+  {
+    "name": "context_continuation_fallback",
+    "message": "顺便也看看 repo",
+    "expected": {
+      "kind": "passthrough",
+      "confidenceAtLeast": 0.2,
+      "reasonIncludes": ["Candidate capabilities"]
+    }
+  },
+  {
+    "name": "low_confidence_schedule_clarify",
+    "message": "帮我建个定时任务",
+    "expected": {
+      "kind": "clarify",
+      "confidenceAtMost": 0.5
+    }
+  }
+]

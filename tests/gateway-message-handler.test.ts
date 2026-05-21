@@ -401,6 +401,27 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toBe('router direct response');
   });
 
+  it('writes privacy-preserving orchestrator traces while routing messages', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const { handleChannelMessage } = await loadHandler();
+
+    await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const traceCall = infoSpy.mock.calls.find(call => call[0] === '[gateway] orchestrator trace');
+    expect(traceCall?.[1]).toMatchObject({
+      inputHash: expect.stringMatching(/^[a-f0-9]{16}$/),
+      decision: {
+        kind: 'runtime_task',
+        confidence: expect.any(Number),
+        taskType: 'goal.create',
+      },
+    });
+    expect(JSON.stringify(traceCall?.[1])).not.toContain('我想长期优化 memory 模块');
+  });
+
   it('creates and auto-runs long-running goals from natural language', async () => {
     const { handleChannelMessage } = await loadHandler();
     const { getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');

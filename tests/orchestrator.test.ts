@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import goldenRequests from './fixtures/orchestrator/golden-requests.json';
+import { traceOrchestratorDecision } from '../src/mastra/runtime/decision-trace';
 import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput } from '../src/mastra/runtime/orchestrator';
+import type { OrchestratorDecision } from '../src/mastra/runtime/orchestrator';
 import type { ChannelMessage } from '../src/gateway/types';
+
+type OrchestratorGoldenFixture = {
+  name: string;
+  message: string;
+  expected: {
+    kind: OrchestratorDecision['kind'];
+    taskType?: string;
+    confidenceAtLeast?: number;
+    confidenceAtMost?: number;
+    payload?: Record<string, unknown>;
+    reasonIncludes?: string[];
+  };
+};
 
 function message(text: string): ChannelMessage {
   return {
@@ -16,6 +32,23 @@ function message(text: string): ChannelMessage {
 }
 
 describe('Runtime Orchestrator', () => {
+  it.each((goldenRequests as OrchestratorGoldenFixture[]).map(fixture => [fixture.name, fixture] as const))('matches golden fixture %s', (_name, fixture) => {
+    const decision = orchestrateChannelMessage(message(fixture.message));
+    const trace = traceOrchestratorDecision({ messageText: fixture.message, decision });
+
+    expect(decision.kind).toBe(fixture.expected.kind);
+    expect(trace.inputHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(JSON.stringify(trace)).not.toContain(fixture.message);
+    if (fixture.expected.confidenceAtLeast !== undefined) expect(decision.confidence).toBeGreaterThanOrEqual(fixture.expected.confidenceAtLeast);
+    if (fixture.expected.confidenceAtMost !== undefined) expect(decision.confidence).toBeLessThanOrEqual(fixture.expected.confidenceAtMost);
+    if (fixture.expected.taskType) expect(decision).toMatchObject({ taskType: fixture.expected.taskType });
+    if (fixture.expected.payload) expect(decision).toMatchObject({ payload: fixture.expected.payload });
+    for (const value of fixture.expected.reasonIncludes ?? []) {
+      expect('reason' in decision ? decision.reason : '').toContain(value);
+    }
+  });
+
+
   it('parses one-time channel reminders into schedule.create runtime tasks', () => {
     const decision = orchestrateChannelMessage(message('帮我定一个定时任务，今天21点08分，OmniAgent给我回复一句：你好'));
 
