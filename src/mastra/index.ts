@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import { Mastra } from '@mastra/core/mastra';
-import { codeAgent, cronAgent, knowledgeAgent, omniRouterAgent } from './agents';
+import { codeAgent, cronAgent, knowledgeAgent, omniRouterAgent, plannerAgent } from './agents';
 import { bootstrapRuntimeCompatibility, omniStorage } from './runtime';
 import { memoryMaintenanceWorkflow, runCodeTaskWorkflow, taskOrchestrationWorkflow } from './workflows';
 
@@ -10,6 +10,7 @@ bootstrapRuntimeCompatibility();
 export const mastra = new Mastra({
   agents: {
     omniRouterAgent,
+    plannerAgent,
     codeAgent,
     cronAgent,
     knowledgeAgent,

@@ -6,6 +6,7 @@
 - Agents: `src/mastra/agents`
 - Tools: `src/mastra/tools`
 - Internal libraries: `src/mastra/lib`
+- Planner schema/helpers: `src/mastra/runtime/planner`
 - Long-term memory: `~/.omni/memory`
 - Project docs and implementation knowledge: `docs`
 
