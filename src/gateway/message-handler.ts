@@ -8,7 +8,8 @@ import {
   parseGoalCommand,
   type GoalChannelRequest,
 } from '../mastra/runtime/goal-channel';
-import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
+import { listGoals } from '../mastra/runtime/goal';
+import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
@@ -53,7 +54,7 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
     return [reply(message, await handlePrCommand(text.slice('/pr '.length)))];
   }
 
-  const orchestratorDecision = orchestrateChannelMessage(message);
+  const orchestratorDecision = await resolveOrchestratorDecision(message, config);
   if (orchestratorDecision.kind === 'status') {
     return [reply(message, orchestratorDecision.message)];
   }
@@ -68,6 +69,68 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
 
   const response = await callOmniRouter(message, config);
   return [reply(message, response)];
+}
+
+async function resolveOrchestratorDecision(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision> {
+  const decision = orchestrateChannelMessage(message);
+  if (decision.kind !== 'passthrough' || process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR !== '1') {
+    return decision;
+  }
+
+  const modelDecision = await callLlmOrchestrator(message, config);
+  return modelDecision || decision;
+}
+
+async function callLlmOrchestrator(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision | undefined> {
+  const prompt = await buildOrchestratorPrompt(message);
+
+  try {
+    const response = await fetch(`${config.omniApiBaseUrl}/agents/omni-router-agent/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const data = (await response.json()) as { text?: string };
+    if (!data.text) {
+      return undefined;
+    }
+
+    return orchestratorModelOutputToDecision(parseOrchestratorModelOutput(data.text), message);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[gateway] LLM orchestrator call failed: ${msg}`);
+    return undefined;
+  }
+}
+
+async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string> {
+  const goals = (await listGoals({ status: 'active' })).slice(0, 5);
+  const activeGoals = goals.length
+    ? goals.map(goal => `- ${goal.id}: ${goal.title} (${goal.type}, priority=${goal.priority})`).join('\n')
+    : '- none';
+
+  return [
+    'You are OmniAgent runtime orchestrator. Return strict JSON only.',
+    'Map the user message to a supported runtime task when appropriate; otherwise return intent unknown with clarifyingQuestion.',
+    'Use taskType for executable runtime tasks and include objective plus payload.',
+    'Supported taskType values: code.claude_code_task, knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
+    'Return shape: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
+    '',
+    'Active goals:',
+    activeGoals,
+    '',
+    `Channel: ${message.channel}`,
+    `Conversation: ${message.conversationId}`,
+    `Sender: ${message.senderId}`,
+    '',
+    'User message:',
+    message.text,
+  ].join('\n');
 }
 
 async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extract<OrchestratorDecision, { kind: 'runtime_task' }>) {

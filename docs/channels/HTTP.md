@@ -71,4 +71,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 - `状态` returns Gateway runtime status.
 
 Incomplete schedule-like messages return a clarification question. Other
-normal text is forwarded to OmniRouterAgent for synchronous response.
+normal text is first offered to the optional LLM orchestrator when
+`OMNI_GATEWAY_LLM_ORCHESTRATOR=1`; that prompt includes active Goal context and
+may return a runtime task decision. If the LLM orchestrator is disabled,
+unavailable, or does not return a supported runtime task, the message falls back
+to OmniRouterAgent for synchronous response.

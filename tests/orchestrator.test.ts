@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orchestrateChannelMessage, parseOrchestratorModelOutput } from '../src/mastra/runtime/orchestrator';
+import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput } from '../src/mastra/runtime/orchestrator';
 import type { ChannelMessage } from '../src/gateway/types';
 
 function message(text: string): ChannelMessage {
@@ -129,6 +129,33 @@ describe('Runtime Orchestrator', () => {
       intent: 'notify.send_channel_message',
       taskType: 'notify.send_channel_message',
       confidence: 0.86,
+    });
+  });
+
+  it('converts LLM orchestrator output into runtime decisions with channel context', () => {
+    const output = parseOrchestratorModelOutput(`
+      {
+        "intent": "goal.feedback",
+        "confidence": 0.82,
+        "taskType": "goal.feedback",
+        "objective": "Apply feedback",
+        "payload": { "goalId": "goal-1", "text": "继续" }
+      }
+    `);
+
+    const decision = orchestratorModelOutputToDecision(output, message('继续推进这个目标'));
+
+    expect(decision).toMatchObject({
+      kind: 'runtime_task',
+      confidence: 0.82,
+      taskType: 'goal.feedback',
+      targetAgentId: 'goal-runtime',
+      payload: {
+        goalId: 'goal-1',
+        text: '继续',
+        actorId: 'user-1',
+        channelId: 'http:conv-1',
+      },
     });
   });
 });

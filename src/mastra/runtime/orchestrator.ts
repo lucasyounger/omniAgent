@@ -2,21 +2,7 @@ import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
 import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
 
-const orchestratorTaskTypes = [
-  runtimeTaskTypes.scheduleCreate,
-  runtimeTaskTypes.scheduleList,
-  runtimeTaskTypes.scheduleDelete,
-  runtimeTaskTypes.schedulePause,
-  runtimeTaskTypes.scheduleResume,
-  runtimeTaskTypes.scheduleRunNow,
-  runtimeTaskTypes.researchAiDailyDigest,
-  runtimeTaskTypes.notifySendChannelMessage,
-  runtimeTaskTypes.goalCreate,
-  runtimeTaskTypes.goalList,
-  runtimeTaskTypes.goalStatus,
-  runtimeTaskTypes.goalRun,
-  runtimeTaskTypes.goalFeedback,
-] as const;
+const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
 
 const channelTargetSchema = z.object({
   channel: z.string().min(1),
@@ -27,24 +13,7 @@ const channelTargetSchema = z.object({
 });
 
 export const orchestratorModelSchema = z.object({
-  intent: z.enum([
-    'schedule.create',
-    'schedule.list',
-    'schedule.delete',
-    'schedule.pause',
-    'schedule.resume',
-    'schedule.run_now',
-    'research.ai_daily_digest',
-    'notify.send_channel_message',
-    'goal.create',
-    'goal.create.confirm',
-    'goal.list',
-    'goal.status',
-    'goal.run',
-    'goal.feedback',
-    'status.query',
-    'unknown',
-  ]),
+  intent: z.string().min(1),
   confidence: z.number().min(0).max(1),
   taskType: z.enum(orchestratorTaskTypes).optional(),
   targetAgentId: z.string().min(1).optional(),
@@ -253,6 +222,53 @@ export function parseOrchestratorModelOutput(raw: string): OrchestratorModelOutp
   }
 
   return output;
+}
+
+export function orchestratorModelOutputToDecision(output: OrchestratorModelOutput, message: ChannelMessage): OrchestratorDecision {
+  if (output.intent === 'status.query') {
+    return {
+      kind: 'status',
+      confidence: output.confidence,
+      message: output.reason || 'Omni Gateway 在线。',
+    };
+  }
+
+  if (output.intent === 'unknown' || output.clarifyingQuestion) {
+    return {
+      kind: 'clarify',
+      confidence: output.confidence,
+      question: output.clarifyingQuestion || '我需要更多信息才能继续。',
+      reason: output.reason || 'LLM orchestrator requested clarification.',
+    };
+  }
+
+  if (!output.taskType) {
+    return {
+      kind: 'passthrough',
+      confidence: output.confidence,
+      reason: output.reason || 'LLM orchestrator did not return a runtime task type.',
+    };
+  }
+
+  const notifyTarget = output.notifyTarget || targetFromMessage(message);
+  const source = channelSourceFromMessage(message);
+
+  return {
+    kind: 'runtime_task',
+    confidence: output.confidence,
+    taskType: output.taskType,
+    targetAgentId: output.targetAgentId || defaultTargetAgentIdForTaskType(output.taskType) || 'omni-router-agent',
+    objective: output.objective || message.text.trim().slice(0, 120),
+    notifyTarget,
+    source,
+    payload: {
+      ...(output.payload || {}),
+      notifyTarget,
+      source,
+      actorId: message.senderId,
+      channelId: `${message.channel}:${message.conversationId}`,
+    },
+  };
 }
 
 export function targetFromMessage(message: ChannelMessage): ChannelTarget {

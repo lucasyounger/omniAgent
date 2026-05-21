@@ -55,6 +55,7 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
+  delete process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -228,6 +229,45 @@ describe('Gateway message handler', () => {
     });
 
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
+  });
+
+  it('routes passthrough messages through optional LLM orchestrator before OmniRouter fallback', async () => {
+    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'notify.send_channel_message',
+          confidence: 0.88,
+          taskType: 'notify.send_channel_message',
+          objective: 'Send model-routed notification',
+          payload: { text: 'LLM routed hello' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+
+    const replies = await handleChannelMessage(message('请帮我把这句话通知给当前会话：LLM routed hello', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const tasks = await listTeamTasks();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:4111/api/agents/omni-router-agent/generate');
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain('Active goals:');
+    expect(replies[0].text).toContain('通知任务已创建');
+    expect(tasks[0]).toMatchObject({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'notify-agent',
+      metadata: {
+        taskType: 'notify.send_channel_message',
+        payload: {
+          text: 'LLM routed hello',
+        },
+      },
+    });
   });
 
   it('handles /goal commands through Goal runtime tasks', async () => {
