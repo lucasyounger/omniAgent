@@ -118,8 +118,10 @@ approval linkage.
   research, schedule-handler, PR pool, and Goal task types. The task type
   registry also exposes capability metadata for each existing task type
   (category, examples, handler tools, dependencies, outputs, and safety level)
-  without changing dispatch behavior or default target agent IDs. Code tasks
-  without approval move to `waiting_user_confirm`.
+  without changing dispatch behavior or default target agent IDs. A lightweight
+  capability retriever can rank these capabilities from a natural-language
+  message using metadata text and semantic keyword boosts, without embeddings or
+  a vector database. Code tasks without approval move to `waiting_user_confirm`.
 - `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
   mirrors the execution result into the Team Run result file.

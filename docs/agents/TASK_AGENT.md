@@ -100,6 +100,10 @@ work is delegated, executed, reported, and recovered across all agents.
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,
   dependencies, outputs, and safety level for semantic orchestration.
+- Capability retriever provides a lightweight message → top-k capability match
+  over runtime task capability metadata. It uses task IDs, names, categories,
+  descriptions, examples, tools, and semantic keyword boosts; it does not require
+  embeddings or a vector database.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
