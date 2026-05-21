@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { retrieveCapabilities } from '../src/mastra/runtime/capabilities';
+import { capabilityRetrieverBackendFromEnv, retrieveCapabilities } from '../src/mastra/runtime/capabilities';
 
 describe('Capability retriever', () => {
   it('retrieves goal, memory, and repo capabilities for long-running memory improvement requests', () => {
@@ -27,8 +27,20 @@ describe('Capability retriever', () => {
     expect(ids).toContain('research.ai_daily_digest');
     expect(ids).toContain('pr_pool.create');
   });
-
   it('returns no matches for empty messages', () => {
     expect(retrieveCapabilities('   ')).toEqual([]);
+  });
+
+  it('keeps text retrieval as the default backend', () => {
+    expect(capabilityRetrieverBackendFromEnv({})).toBe('text');
+    expect(capabilityRetrieverBackendFromEnv({ OMNI_CAPABILITY_RETRIEVER: 'unknown' })).toBe('text');
+  });
+
+  it('uses text fallback when embedding evaluation is enabled', () => {
+    const textMatches = retrieveCapabilities('研究 repo 并生成 PR 改进方案', { topK: 5, backend: 'text' });
+    const evaluationMatches = retrieveCapabilities('研究 repo 并生成 PR 改进方案', { topK: 5, backend: 'embedding_evaluation' });
+
+    expect(evaluationMatches.map(match => match.capability.id)).toEqual(textMatches.map(match => match.capability.id));
+    expect(evaluationMatches[0].matchReason).toContain('backend:text_fallback_for_embedding_evaluation');
   });
 });

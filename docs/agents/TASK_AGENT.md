@@ -104,7 +104,10 @@ work is delegated, executed, reported, and recovered across all agents.
 - Capability retriever provides a lightweight message → top-k capability match
   over runtime task capability metadata. It uses task IDs, names, categories,
   descriptions, examples, tools, and semantic keyword boosts; it does not require
-  embeddings or a vector database.
+  embeddings or a vector database. `OMNI_CAPABILITY_RETRIEVER=embedding_evaluation`
+  enables an evaluation-only path that still falls back to text retrieval and tags
+  match reasons, so default routing remains deterministic without external vector
+  storage.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

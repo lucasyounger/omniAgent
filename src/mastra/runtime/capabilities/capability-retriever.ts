@@ -1,5 +1,7 @@
 import { listRuntimeTaskCapabilities, type RuntimeTaskCapability } from '../task-types';
 
+export type CapabilityRetrieverBackend = 'text' | 'embedding_evaluation';
+
 export type CapabilityMatch = {
   capability: RuntimeTaskCapability;
   score: number;
@@ -9,6 +11,7 @@ export type CapabilityMatch = {
 export type RetrieveCapabilitiesOptions = {
   topK?: number;
   capabilities?: RuntimeTaskCapability[];
+  backend?: CapabilityRetrieverBackend;
 };
 
 const DEFAULT_TOP_K = 5;
@@ -16,6 +19,11 @@ const DEFAULT_TOP_K = 5;
 export function retrieveCapabilities(message: string, options: RetrieveCapabilitiesOptions = {}): CapabilityMatch[] {
   const query = normalize(message);
   if (!query) return [];
+
+  const backend = options.backend ?? capabilityRetrieverBackendFromEnv();
+  if (backend === 'embedding_evaluation') {
+    return retrieveCapabilitiesWithEmbeddingEvaluation(message, { ...options, backend: 'text' });
+  }
 
   const capabilities = options.capabilities ?? listRuntimeTaskCapabilities();
   const queryTokens = tokenize(query);
@@ -28,6 +36,16 @@ export function retrieveCapabilities(message: string, options: RetrieveCapabilit
     .slice(0, topK);
 }
 
+export function capabilityRetrieverBackendFromEnv(env: NodeJS.ProcessEnv = process.env): CapabilityRetrieverBackend {
+  return env.OMNI_CAPABILITY_RETRIEVER === 'embedding_evaluation' ? 'embedding_evaluation' : 'text';
+}
+
+function retrieveCapabilitiesWithEmbeddingEvaluation(message: string, options: RetrieveCapabilitiesOptions): CapabilityMatch[] {
+  return retrieveCapabilities(message, options).map(match => ({
+    ...match,
+    matchReason: `${match.matchReason}; backend:text_fallback_for_embedding_evaluation`,
+  }));
+}
 function scoreCapability(capability: RuntimeTaskCapability, query: string, queryTokens: Set<string>): CapabilityMatch {
   const reasons: string[] = [];
   let score = 0;
