@@ -11,6 +11,11 @@ const orchestratorTaskTypes = [
   runtimeTaskTypes.scheduleRunNow,
   runtimeTaskTypes.researchAiDailyDigest,
   runtimeTaskTypes.notifySendChannelMessage,
+  runtimeTaskTypes.goalCreate,
+  runtimeTaskTypes.goalList,
+  runtimeTaskTypes.goalStatus,
+  runtimeTaskTypes.goalRun,
+  runtimeTaskTypes.goalFeedback,
 ] as const;
 
 const channelTargetSchema = z.object({
@@ -31,6 +36,12 @@ export const orchestratorModelSchema = z.object({
     'schedule.run_now',
     'research.ai_daily_digest',
     'notify.send_channel_message',
+    'goal.create',
+    'goal.create.confirm',
+    'goal.list',
+    'goal.status',
+    'goal.run',
+    'goal.feedback',
     'status.query',
     'unknown',
   ]),
@@ -84,6 +95,28 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
       kind: 'status',
       confidence: 0.94,
       message: 'Omni Gateway 在线。可以创建定时任务、AI 日报任务，或使用 /task <workspace> :: <objective> 创建异步代码任务。',
+    };
+  }
+
+  const goal = parseGoalIntent(text, source);
+  if (goal) {
+    if ('kind' in goal) return goal;
+    return {
+      kind: 'runtime_task',
+      confidence: goal.confidence,
+      taskType: goal.taskType,
+      targetAgentId: defaultTargetAgentIdForTaskType(goal.taskType) || 'goal-runtime',
+      objective: goal.objective,
+      notifyTarget,
+      source,
+      payload: {
+        ...goal.payload,
+        notifyTarget,
+        source,
+        actorId: message.senderId,
+        channelId: `${message.channel}:${message.conversationId}`,
+        idempotencyKey: goal.taskType === runtimeTaskTypes.goalCreate ? `goal:${message.messageId}` : undefined,
+      },
     };
   }
 
@@ -244,6 +277,88 @@ export function channelSourceFromMessage(message: ChannelMessage) {
   };
 }
 
+function parseGoalIntent(text: string, source: Record<string, unknown>):
+  | {
+      taskType:
+        | typeof runtimeTaskTypes.goalCreate
+        | typeof runtimeTaskTypes.goalList
+        | typeof runtimeTaskTypes.goalStatus
+        | typeof runtimeTaskTypes.goalRun
+        | typeof runtimeTaskTypes.goalFeedback;
+      confidence: number;
+      objective: string;
+      payload: Record<string, unknown>;
+    }
+  | Extract<OrchestratorDecision, { kind: 'clarify' }>
+  | undefined {
+  const create = text.match(/^(?:创建一个?目标|创建目标|新建目标|帮我创建目标)[:：]?\s*(.+)$/);
+  if (create) {
+    const objective = cleanText(create[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.9,
+      objective: `Create goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: objective.slice(0, 80),
+        objective,
+        type: inferGoalType(objective),
+      },
+    };
+  }
+
+  if (/^(确认创建|确认创建目标|确定创建)$/.test(text)) {
+    return {
+      kind: 'clarify',
+      confidence: 0.62,
+      question: '请把要创建的目标内容一起发来，例如：创建目标：研究 AI Agent 长期记忆。',
+      reason: 'No durable pending confirmation store is available for this message.',
+    };
+  }
+
+  const ambiguous = text.match(/^(?:帮我分析|分析一下|研究一下)\s*(.+)$/);
+  if (ambiguous) {
+    const objective = cleanText(ambiguous[1]);
+    return {
+      kind: 'clarify',
+      confidence: 0.66,
+      question: `要把“${objective}”创建为长期 Goal 吗？如需创建，请回复：创建目标：${objective}`,
+      reason: 'Analysis-like goal request requires explicit creation confirmation.',
+    };
+  }
+
+  if (/^(?:列出|查看|查询).*目标/.test(text)) {
+    return { taskType: runtimeTaskTypes.goalList, confidence: 0.84, objective: 'List goals', payload: {} };
+  }
+
+  const status = text.match(/^(?:目标状态|查看目标|查询目标)\s+(.+)$/);
+  if (status) {
+    return { taskType: runtimeTaskTypes.goalStatus, confidence: 0.84, objective: 'Get goal status', payload: { goalId: cleanText(status[1]) } };
+  }
+
+  const run = text.match(/^(?:运行目标|执行目标|启动目标)\s+(.+)$/);
+  if (run) {
+    return { taskType: runtimeTaskTypes.goalRun, confidence: 0.84, objective: 'Run goal', payload: { goalId: cleanText(run[1]) } };
+  }
+
+  const feedback = text.match(/^(?:反馈目标|给目标反馈)\s+(\S+)\s+(.+)$/);
+  if (feedback) {
+    return {
+      taskType: runtimeTaskTypes.goalFeedback,
+      confidence: 0.84,
+      objective: 'Apply goal feedback',
+      payload: { goalId: feedback[1], text: cleanText(feedback[2]), channel: source.channel === 'qq' ? 'qq' : 'web' },
+    };
+  }
+
+  return undefined;
+}
+
+function inferGoalType(raw: string) {
+  if (/(module|模块|改进|重构)/i.test(raw)) return 'module_improvement';
+  if (/(assistant|助理|提醒|个人)/i.test(raw)) return 'personal_assistant';
+  if (/(workflow|自动化|流程)/i.test(raw)) return 'workflow_automation';
+  return 'topic_research';
+}
 function parseSchedule(text: string, receivedAt: string): { value: string; kind: 'once' | 'daily' } | undefined {
   const daily = text.match(/(?:每天|每日|天天|daily|every day).*?(\d{1,2})\s*(?:点|:|：)\s*(\d{1,2})?\s*(?:分)?/i);
   if (daily) {

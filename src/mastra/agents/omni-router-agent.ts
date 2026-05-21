@@ -3,6 +3,7 @@ import { codeAgent } from './code-agent';
 import { cronAgent } from './cron-agent';
 import { knowledgeAgent } from './knowledge-agent';
 import { createAgentMemory } from '../runtime';
+import { goalTools } from '../tools/goal-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 import { teamTools } from '../tools/team-tools';
 import { taskOrchestrationWorkflow } from '../workflows';
@@ -25,7 +26,7 @@ Routing rules:
 - For long-running work, create the task, return the task id, then use status polling for progress.
 - Check listAgentInboxTool for completed delegated work and use getRunResultTool to read durable results.
 - For scheduled tasks, create a Runtime task with taskType=schedule.create, targetAgentId=scheduler-runtime, and payload containing name, schedule, task, taskType, targetAgentId, payload, and notifyTarget when available. Do not target cron-agent directly.
-- For durable knowledge, create a task targeting knowledge-agent instead of calling memory write tools directly.
+- For durable goals, use goal tools for create/list/status/run/feedback. Ambiguous analysis requests should ask for confirmation before creating a Goal.
 - High-risk capabilities are executed by specialist handlers through Tool Gateway.
 
 Memory rules:
@@ -39,6 +40,7 @@ Memory rules:
   tools: {
     ...teamTools,
     ...teamRuntimeTools,
+    ...goalTools,
   },
   agents: {
     codeAgent,

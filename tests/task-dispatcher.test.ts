@@ -661,4 +661,68 @@ describe('Task Dispatcher', () => {
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({ status: 'waiting_user_confirm' });
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
   });
+
+  it('dispatches goal runtime tasks through the goal handler', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const createTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'goal-runtime',
+      objective: 'create goal',
+      metadata: {
+        taskType: 'goal.create',
+        payload: {
+          id: 'dispatcher-goal',
+          title: 'Dispatcher Goal',
+          objective: 'Create through dispatcher',
+          type: 'topic_research',
+          idempotencyKey: 'dispatcher-msg-1',
+        },
+      },
+    });
+
+    const createResult = await dispatchRuntimeTask(createTask.id);
+    expect(createResult).toMatchObject({ status: 'dispatched', handler: 'goal-handler', result: { goalId: 'dispatcher-goal', created: true } });
+
+    const duplicateTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'goal-runtime',
+      objective: 'create duplicate goal',
+      metadata: {
+        taskType: 'goal.create',
+        payload: {
+          id: 'ignored-goal',
+          title: 'Ignored Goal',
+          objective: 'Should be idempotent',
+          type: 'topic_research',
+          idempotencyKey: 'dispatcher-msg-1',
+        },
+      },
+    });
+    await expect(dispatchRuntimeTask(duplicateTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: { goalId: 'dispatcher-goal', created: false },
+    });
+
+    const runTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'goal-runtime',
+      objective: 'run goal',
+      metadata: { taskType: 'goal.run', payload: { goalId: 'dispatcher-goal' } },
+    });
+    await expect(dispatchRuntimeTask(runTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: { goalId: 'dispatcher-goal', run: { status: 'pending' } },
+    });
+
+    const feedbackTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'goal-runtime',
+      objective: 'pause goal',
+      metadata: { taskType: 'goal.feedback', payload: { goalId: 'dispatcher-goal', text: '暂停', action: 'pause' } },
+    });
+    await expect(dispatchRuntimeTask(feedbackTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      result: { goalId: 'dispatcher-goal', action: 'pause', goal: { status: 'paused' } },
+    });
+  });
 });

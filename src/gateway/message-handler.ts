@@ -1,5 +1,13 @@
 import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from '../mastra/runtime/pr-pool/pr-pool-runtime';
 import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
+import {
+  formatGoalHelp,
+  formatGoalList,
+  formatGoalRun,
+  formatGoalStatus,
+  parseGoalCommand,
+  type GoalChannelRequest,
+} from '../mastra/runtime/goal-channel';
 import { orchestrateChannelMessage, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
@@ -31,6 +39,10 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
 
   if (text === '/status') {
     return [reply(message, 'Omni Gateway \u5728\u7ebf\u3002\u53ef\u4ee5\u4f7f\u7528 /task <workspace> :: <objective> \u521b\u5efa\u5f02\u6b65\u4efb\u52a1\u3002')];
+  }
+
+  if (text.startsWith('/goal')) {
+    return [reply(message, await handleGoalCommand(message, config))];
   }
 
   if (text.startsWith('/task ')) {
@@ -153,6 +165,38 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
       .join('\n');
   }
 
+  if (decision.taskType === runtimeTaskTypes.goalCreate) {
+    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+    return [
+      goalId ? `Goal 已创建：${goalId}` : `Goal 创建失败：${dispatch.status}`,
+      runId ? `Run: ${runId}` : undefined,
+      `Runtime Task: ${task.id}`,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.goalList) {
+    const goals = arrayValue(dispatch.status === 'dispatched' ? dispatch.result?.goals : undefined);
+    return formatGoalList(goals as Parameters<typeof formatGoalList>[0]);
+  }
+
+  if (decision.taskType === runtimeTaskTypes.goalStatus) {
+    return dispatch.status === 'dispatched' ? formatGoalStatus(dispatch.result as Parameters<typeof formatGoalStatus>[0]) : `Goal 查询失败：${dispatch.status}`;
+  }
+
+  if (decision.taskType === runtimeTaskTypes.goalRun) {
+    const run = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.run) : undefined;
+    return run ? `Goal Run 已排队：${formatGoalRun(run as Parameters<typeof formatGoalRun>[0])}` : `Goal Run 失败：${dispatch.status}`;
+  }
+
+  if (decision.taskType === runtimeTaskTypes.goalFeedback) {
+    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+    const action = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.action) : undefined;
+    return goalId ? `Goal 反馈已记录：${goalId} (${action || 'note'})` : `Goal 反馈失败：${dispatch.status}`;
+  }
+
   return ['Runtime Task \u5df2\u521b\u5efa\u3002', `Runtime Task: ${task.id}`, `Dispatch: ${dispatch.status}`].join('\n');
 }
 
@@ -183,6 +227,55 @@ async function authorizeMessage(message: ChannelMessage, config: GatewayConfig):
     ? '\u8bf7\u53d1\u9001 /pair <token> \u5b8c\u6210\u914d\u5bf9\u3002'
     : '\u5f53\u524d\u672a\u914d\u7f6e pairing token \u6216 allowlist\u3002';
   return { allowed: false, reason: `\u672a\u6388\u6743\u7684\u53d1\u9001\u8005\uff1a${message.senderId}\u3002${pairHint}` };
+}
+
+async function handleGoalCommand(message: ChannelMessage, _config: GatewayConfig): Promise<string> {
+  const request = parseGoalCommand(message);
+  if (!request || request.payload.help) return formatGoalHelp();
+  return handleGoalChannelRequest(message, request);
+}
+
+async function handleGoalChannelRequest(message: ChannelMessage, request: GoalChannelRequest): Promise<string> {
+  const taskType = request.action === 'confirm_create' ? runtimeTaskTypes.goalCreate : `goal.${request.action}`;
+  const task = await taskRuntime.createTask({
+    sourceAgentId: 'channel-gateway',
+    targetAgentId: 'goal-runtime',
+    objective: `Goal ${request.action}`,
+    requestedBy: `${message.channel}:${message.senderId}`,
+    metadata: {
+      taskType,
+      notifyTarget: request.notifyTarget,
+      source: channelSourceFromMessage(message),
+      payload: {
+        ...request.payload,
+        actorId: request.actorId,
+        channelId: request.channelId,
+        idempotencyKey: request.payload.idempotencyKey || (request.sourceMessageId ? `goal:${request.sourceMessageId}` : undefined),
+      },
+    },
+  });
+  const dispatch = await dispatchRuntimeTask(task.id);
+
+  if (request.action === 'create' || request.action === 'confirm_create') {
+    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+    return goalId ? `Goal 已创建：${goalId}` : `Goal 创建失败：${dispatch.status}`;
+  }
+  if (request.action === 'list') {
+    const goals = arrayValue(dispatch.status === 'dispatched' ? dispatch.result?.goals : undefined);
+    return formatGoalList(goals as Parameters<typeof formatGoalList>[0]);
+  }
+  if (request.action === 'status') {
+    return dispatch.status === 'dispatched' ? formatGoalStatus(dispatch.result as Parameters<typeof formatGoalStatus>[0]) : `Goal 查询失败：${dispatch.status}`;
+  }
+  if (request.action === 'run') {
+    const run = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.run) : undefined;
+    return run ? `Goal Run 已排队：${formatGoalRun(run as Parameters<typeof formatGoalRun>[0])}` : `Goal Run 失败：${dispatch.status}`;
+  }
+  if (request.action === 'feedback') {
+    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+    return goalId ? `Goal 反馈已记录：${goalId}` : `Goal 反馈失败：${dispatch.status}`;
+  }
+  return formatGoalHelp();
 }
 
 async function handleTaskCommand(message: ChannelMessage, raw: string) {
@@ -377,6 +470,7 @@ function helpText() {
     '/status \u67e5\u770b\u72b6\u6001',
     '/task <workspacePath> :: <objective> \u521b\u5efa\u5f02\u6b65 CodeAgent \u4efb\u52a1',
     '/pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id] \u7ba1\u7406 PR \u6c60',
+    '/goal <create|list|status|run|feedback> [参数] 管理长期 Goal',
     '/pair <token> \u914d\u5bf9\u5f53\u524d\u4f1a\u8bdd',
     '',
     '\u81ea\u7136\u8bed\u8a00\u53ef\u521b\u5efa\u5b9a\u65f6\u63d0\u9192\u3001AI \u65e5\u62a5\u548c\u901a\u77e5\uff1b\u5176\u4ed6\u6d88\u606f\u4f1a\u8f6c\u53d1\u7ed9 OmniRouterAgent \u5e76\u540c\u6b65\u56de\u590d\u3002',

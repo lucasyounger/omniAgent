@@ -230,6 +230,35 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
 
+  it('handles /goal commands through Goal runtime tasks', async () => {
+    const { handleChannelMessage } = await loadHandler();
+
+    const create = await handleChannelMessage(message('/goal create Gateway Goal', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const goalId = create[0].text.match(/Goal 已创建：([^\n]+)/)?.[1];
+    expect(goalId).toBeDefined();
+
+    const list = await handleChannelMessage(message('/goal list', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(list[0].text).toContain(goalId);
+
+    const run = await handleChannelMessage(message(`/goal run ${goalId}`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(run[0].text).toContain('Goal Run 已排队');
+
+    const feedback = await handleChannelMessage(message(`/goal feedback ${goalId} 暂停`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(feedback[0].text).toContain('Goal 反馈已记录');
+  });
+
   it('handles explicit PR pool commands', async () => {
     const { handleChannelMessage } = await loadHandler();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');

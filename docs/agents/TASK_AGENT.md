@@ -103,12 +103,12 @@ work is delegated, executed, reported, and recovered across all agents.
   `schedule.run_now`, `research.ai_daily_digest`,
   `notify.send_channel_message`, `pr_pool.create`, `pr_pool.list`,
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
-  `pr_pool.cron_scan`.
+  `pr_pool.cron_scan`, `goal.create`, `goal.list`, `goal.status`,
+  `goal.run`, `goal.feedback`.
 - `research-agent` and `notify-agent` target agents are referenced in the
   registry but are pending implementation; their handlers exist in the
   dispatcher.
-- `pr-pool-runtime` target is referenced for PR pool task types; handler
-  exists in the dispatcher.
+- `goal-runtime` target is referenced for Goal task types; dispatcher handles create/list/status/run/feedback via GoalService and records a Team Run result.
 
 ## Known Pitfalls
 

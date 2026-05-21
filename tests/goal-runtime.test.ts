@@ -404,4 +404,34 @@ describe('goal runtime workspace manager', () => {
     await expect(latestFeedbackEvent('feedback-goal')).resolves.toMatchObject({ channel: 'qq', parsedIntent: 'resume' });
     await expect(listFeedbackEvents('feedback-goal')).resolves.toHaveLength(3);
   });
+
+  it('creates, lists, statuses, runs, and applies feedback through GoalService', async () => {
+    const { applyGoalFeedback, createGoalService, getGoalStatus, listGoals, enqueueGoalRun } = await loadGoalRuntime();
+
+    const created = await createGoalService({
+      id: 'service-goal',
+      type: 'topic_research',
+      title: 'Service Goal',
+      objective: 'Exercise GoalService',
+      tags: ['runtime'],
+      idempotencyKey: 'msg-1',
+    });
+    const duplicate = await createGoalService({
+      id: 'ignored-id',
+      type: 'topic_research',
+      title: 'Duplicate',
+      objective: 'Should not create',
+      idempotencyKey: 'msg-1',
+    });
+    const run = await enqueueGoalRun('service-goal');
+    const feedback = await applyGoalFeedback({ goalId: 'service-goal', runId: run.id, action: 'pause', text: '暂停', channel: 'cli' });
+    const goals = await listGoals({ status: 'paused', type: 'topic_research', tag: 'runtime' });
+    const status = await getGoalStatus('service-goal');
+
+    expect(created).toMatchObject({ created: true, goal: { id: 'service-goal' } });
+    expect(duplicate).toMatchObject({ created: false, goal: { id: 'service-goal' } });
+    expect(feedback).toMatchObject({ action: 'pause', goal: { status: 'paused' } });
+    expect(goals).toHaveLength(1);
+    expect(status).toMatchObject({ goal: { id: 'service-goal', status: 'paused' }, latestRun: { id: run.id }, feedbackCount: 1 });
+  });
 });

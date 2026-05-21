@@ -34,6 +34,11 @@ prompt instead of executing commands.
 - `/pair <token>`
 - `/help`
 - `/status`
+- `/goal create <title>` creates a durable Goal through GoalService. The
+  command also supports `/goal list`, `/goal status <goalId>`,
+  `/goal run <goalId>`, and `/goal feedback <goalId> <text>` for listing,
+  status, queued GoalRun creation, and feedback-driven pause/resume/cancel or
+  priority updates.
 - `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
   RuntimeTask and dispatches it through Task Dispatcher. Direct Claude Code
   startup normally returns `Dispatch: waiting_user_confirm` until Tool Gateway
@@ -43,6 +48,13 @@ prompt instead of executing commands.
 
 Supported runtime intents are parsed before OmniRouterAgent fallback:
 
+- `创建目标：研究 AI Agent 长期记忆` creates a `goal.create` RuntimeTask with a
+  channel idempotency key.
+- `帮我分析 AI Agent 长期记忆` is treated as an ambiguous analysis request and
+  returns a confirmation/clarification prompt instead of persisting a Goal.
+- `列出我的目标`, `目标状态 <goalId>`, `运行目标 <goalId>`, and
+  `反馈目标 <goalId> 暂停` map to `goal.list`, `goal.status`, `goal.run`, and
+  `goal.feedback` RuntimeTasks.
 - `今天21点08分回复一句：你好` creates a one-time `schedule.create` task for
   a `channel.message` reminder.
 - `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for

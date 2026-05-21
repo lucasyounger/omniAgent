@@ -54,7 +54,8 @@ Router chooses one of these intents:
 - `chat`: answer directly.
 - `code`: create Runtime/Team tasks for CodeAgent execution.
 - `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
-- `knowledge`: use KnowledgeAgent tools.
+- Goal: use goal tools for durable create/list/status/run/feedback workflows.
+  Ambiguous analysis requests should ask for confirmation before creating a Goal.
 - `mixed`: split into explicit sub-tasks.
 
 Router should keep final replies short, include task ids for long-running work,

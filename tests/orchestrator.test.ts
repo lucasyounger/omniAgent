@@ -89,6 +89,28 @@ describe('Runtime Orchestrator', () => {
     });
   });
 
+  it('parses explicit goal requests and asks confirmation for ambiguous analysis', () => {
+    expect(orchestrateChannelMessage(message('创建目标：研究 AI Agent 长期记忆'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'goal.create',
+      targetAgentId: 'goal-runtime',
+      payload: {
+        title: '研究 AI Agent 长期记忆',
+        type: 'topic_research',
+      },
+    });
+
+    expect(orchestrateChannelMessage(message('帮我分析 AI Agent 长期记忆'))).toMatchObject({
+      kind: 'clarify',
+    });
+
+    expect(orchestrateChannelMessage(message('列出我的目标'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'goal.list',
+      targetAgentId: 'goal-runtime',
+    });
+  });
+
   it('validates strict JSON orchestrator model output', () => {
     const output = parseOrchestratorModelOutput(`
       \`\`\`json

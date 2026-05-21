@@ -17,6 +17,8 @@ export const goalStatuses = [
 
 export type GoalStatus = typeof goalStatuses[number];
 
+export type GoalPriority = 'low' | 'normal' | 'high';
+
 export type Goal = {
   id: string;
   type: GoalType;
@@ -28,6 +30,8 @@ export type Goal = {
   sources: string[];
   artifactPolicy: string[];
   feedbackPolicy: string;
+  tags?: string[];
+  priority?: GoalPriority;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,6 +47,8 @@ export type CreateGoalInput = {
   sources?: string[];
   artifactPolicy?: string[];
   feedbackPolicy?: string;
+  tags?: string[];
+  priority?: GoalPriority;
 };
 
 export function assertValidGoalId(goalId: string): string {
@@ -64,6 +70,8 @@ export function createGoalRecord(input: CreateGoalInput, now = new Date().toISOS
     sources: input.sources ?? [],
     artifactPolicy: input.artifactPolicy ?? [],
     feedbackPolicy: input.feedbackPolicy ?? 'manual',
+    tags: input.tags?.filter(Boolean),
+    priority: input.priority,
     createdAt: now,
     updatedAt: now,
   };

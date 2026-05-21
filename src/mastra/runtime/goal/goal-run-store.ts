@@ -48,6 +48,19 @@ export async function readGoalRun(goalId: string, runId: string): Promise<GoalRu
   }
 }
 
+export async function listGoalRuns(goalId: string): Promise<GoalRun[]> {
+  const workspace = await ensureGoalWorkspace(goalId);
+
+  try {
+    const entries = await fs.readdir(workspace.runsDir, { withFileTypes: true });
+    const runs = await Promise.all(entries.filter(entry => entry.isDirectory()).map(entry => readGoalRun(goalId, entry.name)));
+    return runs.filter((run): run is GoalRun => Boolean(run)).sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 export async function updateGoalRunStatus(goalId: string, runId: string, status: GoalRunStatus): Promise<GoalRun> {
   const run = await requireGoalRun(goalId, runId);
   const updated: GoalRun = { ...run, status };

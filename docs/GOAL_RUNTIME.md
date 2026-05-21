@@ -118,6 +118,16 @@ PR-19 adds feedback loop support:
 - `adaptQQMessageToFeedback(message)` maps mock QQ messages into FeedbackEvent.
 - `pushGoalDigestToQQ(message)` provides a mock delivered push result.
 
-## PR-14 / PR-19 scope
+## Goal channel integration
+
+Goal Runtime now has a service boundary for channel, dispatcher, and agent-tool entry points:
+
+- `createGoalService(input)` creates goals with optional `idempotencyKey`; repeated keys return the existing goal instead of creating duplicates.
+- `listGoals({ status, type, tag })` scans `~/.omni/goals` and filters persisted goals.
+- `getGoalStatus(goalId)` returns the goal, latest run summary, and feedback count.
+- `enqueueGoalRun(goalId)` creates a pending GoalRun without blocking on workflow execution.
+- `applyGoalFeedback(input)` records raw feedback and applies pause/resume/cancel/priority changes.
+
+The Task Dispatcher supports `goal.create`, `goal.list`, `goal.status`, `goal.run`, and `goal.feedback` through a narrow `goal-handler` branch. Gateway `/goal` commands and deterministic natural-language goal intents create Runtime Tasks instead of calling storage directly. Ambiguous analysis requests ask for confirmation and do not create goals.
 
 PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. PR-17 adds mock-provider topic research with evidence persistence, ranking, daily digest, wiki diff, memory proposal, and Proof of Work. PR-18 adds mock module improvement with local module context, candidate repo analysis, gap analysis, 4+1 design draft, and implementation plan. PR-19 adds structured feedback events, pause/resume feedback state changes, and mock QQ push/message adapters. Real external research providers and production push channels are handled by later slices.

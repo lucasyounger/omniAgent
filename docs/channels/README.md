@@ -14,9 +14,14 @@ through Team Runtime.
   `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
 - `/task <workspacePath> :: <objective>` for async CodeAgent execution
+- `/goal create/list/status/run/feedback` for durable Goal Runtime management
+  from paired or allowlisted channels
 - Natural language first passes through the Runtime Orchestrator. Supported
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unknown
   general chat still forwards to OmniRouterAgent.
+- Deterministic Goal intents support explicit creation (`创建目标：...`),
+  list/status/run/feedback phrases, and confirmation prompts for ambiguous
+  analysis requests before any Goal is persisted.
 - Structured parsing for simple channel reminders such as "today HH:mm reply
   ...", daily AI digest schedules, immediate channel notifications, natural
   status queries, and low-confidence clarification.

@@ -6,6 +6,7 @@ import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
+import { applyGoalFeedback, createGoalService, enqueueGoalRun, getGoalStatus, listGoals } from './goal';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes } from './task-types';
@@ -102,6 +103,10 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
   if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
     return dispatchResearchAiDailyDigestTask(leased);
+  }
+
+  if (taskType?.startsWith('goal.')) {
+    return dispatchGoalTask(leased);
   }
 
   if (taskType?.startsWith('pr_pool.')) {
@@ -936,6 +941,132 @@ async function dispatchChannelGatewayTask(task: RuntimeTask): Promise<DispatchRe
       runId: run.runId,
       executorAgentId: 'channel-gateway',
       error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const taskType = readTaskType(task);
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Dispatching Goal task.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'goal-handler',
+  });
+
+  try {
+    let summary = 'Goal task completed.';
+    let goalResult: Record<string, unknown> = {};
+
+    if (taskType === runtimeTaskTypes.goalCreate) {
+      const title = stringValue(payload.title);
+      const objective = stringValue(payload.objective) || title;
+      if (!title || !objective) throw new Error('goal.create requires payload.title and payload.objective.');
+      const created = await createGoalService({
+        id: stringValue(payload.id),
+        type: (stringValue(payload.type) as Parameters<typeof createGoalService>[0]['type']) || 'topic_research',
+        title,
+        objective,
+        scope: stringArrayValue(payload.scope),
+        sources: stringArrayValue(payload.sources),
+        artifactPolicy: stringArrayValue(payload.artifactPolicy),
+        feedbackPolicy: stringValue(payload.feedbackPolicy),
+        idempotencyKey: stringValue(payload.idempotencyKey),
+        actorId: stringValue(payload.actorId),
+        channelId: stringValue(payload.channelId),
+        autoRun: booleanValue(payload.autoRun),
+      });
+      summary = created.created ? `Goal created: ${created.goal.id}` : `Goal already exists: ${created.goal.id}`;
+      goalResult = { goalId: created.goal.id, created: created.created, goal: created.goal, runId: created.run?.id };
+    } else if (taskType === runtimeTaskTypes.goalList) {
+      const goals = await listGoals({
+        status: stringValue(payload.status) as NonNullable<Parameters<typeof listGoals>[0]>['status'],
+        type: stringValue(payload.type) as NonNullable<Parameters<typeof listGoals>[0]>['type'],
+        tag: stringValue(payload.tag),
+      });
+      summary = `Goals listed: ${goals.length}`;
+      goalResult = { goalCount: goals.length, goals };
+    } else if (taskType === runtimeTaskTypes.goalStatus) {
+      const goalId = stringValue(payload.goalId) || stringValue(payload.id);
+      if (!goalId) throw new Error('goal.status requires payload.goalId.');
+      const status = await getGoalStatus(goalId);
+      summary = `Goal status: ${status.goal.id}`;
+      goalResult = { goalId: status.goal.id, ...status };
+    } else if (taskType === runtimeTaskTypes.goalRun) {
+      const goalId = stringValue(payload.goalId) || stringValue(payload.id);
+      if (!goalId) throw new Error('goal.run requires payload.goalId.');
+      const goalRun = await enqueueGoalRun(goalId, { runId: stringValue(payload.runId), plan: payload.plan });
+      summary = `Goal run queued: ${goalRun.id}`;
+      goalResult = { goalId, runId: goalRun.id, run: goalRun };
+    } else if (taskType === runtimeTaskTypes.goalFeedback) {
+      const goalId = stringValue(payload.goalId) || stringValue(payload.id);
+      const text = stringValue(payload.text) || stringValue(payload.feedback);
+      if (!goalId || !text) throw new Error('goal.feedback requires payload.goalId and payload.text.');
+      const feedback = await applyGoalFeedback({
+        goalId,
+        runId: stringValue(payload.runId),
+        action: stringValue(payload.action) as Parameters<typeof applyGoalFeedback>[0]['action'],
+        text,
+        channel: (stringValue(payload.channel) as Parameters<typeof applyGoalFeedback>[0]['channel']) || 'cli',
+        priority: stringValue(payload.priority) as Parameters<typeof applyGoalFeedback>[0]['priority'],
+      });
+      summary = `Goal feedback applied: ${goalId}`;
+      goalResult = { goalId, action: feedback.action, goal: feedback.goal, run: feedback.run };
+    } else {
+      throw new Error(`Unsupported Goal task type: ${taskType}`);
+    }
+
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'goal-handler',
+      summary,
+      output: JSON.stringify(goalResult, null, 2),
+      metadata: {
+        taskType,
+        ...goalResult,
+      },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: summary,
+      sourceAgentId: 'task-dispatcher',
+      metadata: {
+        resultRef: result.resultRef,
+        ...goalResult,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'goal-handler',
+      runId: run.runId,
+      result: goalResult,
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'goal-handler',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
     });
     throw error;
   }

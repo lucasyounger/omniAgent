@@ -31,6 +31,7 @@ export {
   getGoalRunEventLogPath,
   getGoalRunPath,
   getProofOfWorkPath,
+  listGoalRuns,
   readGoalRun,
   updateGoalRunStatus,
 } from './goal-run-store';
@@ -54,6 +55,7 @@ export {
   pauseGoal,
   readGoal,
   resumeGoal,
+  updateGoal,
   updateGoalStatus,
 } from './goal-store';
 export {
@@ -62,4 +64,19 @@ export {
   goalStatuses,
   goalTypes,
 } from './goal.schema';
-export type { CreateGoalInput, Goal, GoalStatus, GoalType } from './goal.schema';
+export type { CreateGoalInput, Goal, GoalPriority, GoalStatus, GoalType } from './goal.schema';
+export {
+  applyGoalFeedback,
+  createGoalService,
+  enqueueGoalRun,
+  getGoalStatus,
+  listGoals,
+} from './goal-service';
+export type {
+  GoalCreateServiceInput,
+  GoalFeedbackAction,
+  GoalFeedbackInput,
+  GoalListFilters,
+  GoalServiceCreateResult,
+  GoalStatusSummary,
+} from './goal-service';

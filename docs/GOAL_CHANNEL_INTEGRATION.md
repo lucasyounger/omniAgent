@@ -9,9 +9,9 @@
 | 自然语言意图 | schedule / notify / research / status 共 10 种 | `goal.create` / `goal.run` / `goal.list` / `goal.feedback` |
 | 斜杠命令 | `/task` / `/pr` / `/pair` / `/help` / `/status` | `/goal` 命令族 |
 | Task Type | 20 种 runtimeTaskType | `goal.*` 系列 |
-| Task Dispatcher | 9 个 handler 分支 | `goal-handler` 分支 |
-| Agent Tool | 24 个 tool，0 个 goal 相关 | `goalTools` |
-| Agent 指令 | OmniRouterAgent 无 goal 路由规则 | Goal 路由与委派指令 |
+| Task Dispatcher | 9 个 handler 分支 | `goal-handler` handles `goal.create/list/status/run/feedback` through GoalService |
+| Agent Tool | 24 个 tool，0 个 goal 相关 | `goalTools` exported and attached to OmniRouterAgent |
+| Agent 指令 | OmniRouterAgent 无 goal 路由规则 | Goal routing instructions added; ambiguous analysis asks confirmation |
 | Mastra 注册 | 0 个 Goal Workflow 注册 | 两个 Goal Workflow 注册 |
 | 反馈闭环 | Feedback Schema + Store 存在，但未接入消息通道 | QQ → feedback → goal 状态变更 |
 
