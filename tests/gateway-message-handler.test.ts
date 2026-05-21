@@ -231,8 +231,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
 
-  it('routes passthrough messages through optional LLM orchestrator before OmniRouter fallback', async () => {
-    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '1';
+  it('routes passthrough messages through LLM orchestrator before OmniRouter fallback', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -268,6 +267,45 @@ describe('Gateway message handler', () => {
         },
       },
     });
+  });
+
+  it('falls back to OmniRouter when LLM orchestrator returns invalid output', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: 'not json' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: 'router fallback response' }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请随便处理一下这个模糊请求', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).toBe('router fallback response');
+  });
+
+  it('skips LLM orchestrator when explicitly disabled', async () => {
+    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'router direct response' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请走普通路由', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toBe('router direct response');
   });
 
   it('handles /goal commands through Goal runtime tasks', async () => {

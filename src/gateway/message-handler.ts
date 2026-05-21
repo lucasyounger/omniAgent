@@ -73,12 +73,24 @@ export async function handleChannelMessage(message: ChannelMessage, config: Gate
 
 async function resolveOrchestratorDecision(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision> {
   const decision = orchestrateChannelMessage(message);
-  if (decision.kind !== 'passthrough' || process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR !== '1') {
+  if (decision.kind !== 'passthrough') {
+    console.info('[gateway] orchestrator route source=regex_match');
+    return decision;
+  }
+
+  if (process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR === '0') {
+    console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_disabled');
     return decision;
   }
 
   const modelDecision = await callLlmOrchestrator(message, config);
-  return modelDecision || decision;
+  if (modelDecision) {
+    console.info('[gateway] orchestrator route source=llm_orchestrator');
+    return modelDecision;
+  }
+
+  console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_unavailable');
+  return decision;
 }
 
 async function callLlmOrchestrator(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision | undefined> {

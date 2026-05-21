@@ -18,9 +18,9 @@ through Team Runtime.
   from paired or allowlisted channels
 - Natural language first passes through the Runtime Orchestrator. Supported
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
-  messages can optionally call the LLM orchestrator when
-  `OMNI_GATEWAY_LLM_ORCHESTRATOR=1`, with active Goal context injected before
-  falling back to OmniRouterAgent.
+  messages call the LLM orchestrator by default, with active Goal context injected
+  before falling back to OmniRouterAgent. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
+  to disable the semantic decision pass.
 - Deterministic Goal intents support explicit creation (`创建目标：...`),
   list/status/run/feedback phrases, and confirmation prompts for ambiguous
   analysis requests before any Goal is persisted.
