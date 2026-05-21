@@ -744,13 +744,19 @@ describe('Task Dispatcher', () => {
           title: 'Dispatcher Goal',
           objective: 'Create through dispatcher',
           type: 'topic_research',
+          scope: ['memory'],
+          tags: ['memory'],
           idempotencyKey: 'dispatcher-msg-1',
         },
       },
     });
 
     const createResult = await dispatchRuntimeTask(createTask.id);
-    expect(createResult).toMatchObject({ status: 'dispatched', handler: 'goal-handler', result: { goalId: 'dispatcher-goal', created: true } });
+    expect(createResult).toMatchObject({
+      status: 'dispatched',
+      handler: 'goal-handler',
+      result: { goalId: 'dispatcher-goal', created: true, goal: { scope: ['memory'], tags: ['memory'] } },
+    });
 
     const duplicateTask = await taskRuntime.createTask({
       sourceAgentId: 'test',

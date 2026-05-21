@@ -114,6 +114,7 @@ work is delegated, executed, reported, and recovered across all agents.
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
   `pr_pool.cron_scan`, `goal.create`, `goal.list`, `goal.status`,
   `goal.run`, `goal.feedback`.
+- Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.
 - `goal.run` Runtime Tasks target `goal-runtime`. The dispatcher reserves a
   run ID, executes the routed goal workflow, writes standard Goal artifacts,
   and marks the RuntimeTask succeeded only after execution completes.

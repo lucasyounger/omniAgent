@@ -13,7 +13,7 @@ import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrch
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
-import { getConversationSemanticState, inferConversationContext, updateConversationSemanticState } from './conversation-semantic-state';
+import { getConversationSemanticState, inferConversationContext, setConversationActiveGoal, updateConversationSemanticState } from './conversation-semantic-state';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage } from './types';
@@ -152,6 +152,7 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     `- conversationId: ${message.conversationId}`,
     `- channel: ${message.channel}`,
     `- senderId: ${message.senderId}`,
+    `- activeGoalId: ${semanticState.activeGoalId ?? 'none'}`,
     `- activeModule: ${semanticState.activeModule ?? 'unknown'}`,
     `- recentEntities: ${semanticState.recentEntities.length ? semanticState.recentEntities.join(', ') : 'none'}`,
     `- continuationRequest: ${semanticState.continuationRequest ? 'yes' : 'no'}`,
@@ -284,9 +285,19 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
   if (decision.taskType === runtimeTaskTypes.goalCreate) {
     const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
     const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+    if (goalId) {
+      await setConversationActiveGoal({
+        channel: message.channel,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+        goalId,
+        activeModule: stringArrayValue(decision.payload.scope)[0],
+        recentEntities: stringArrayValue(decision.payload.scope),
+      });
+    }
     return [
       goalId ? `Goal 已创建：${goalId}` : `Goal 创建失败：${dispatch.status}`,
-      runId ? `Run: ${runId}` : undefined,
+      runId ? `已启动首轮运行：${runId}` : undefined,
       `Runtime Task: ${task.id}`,
     ]
       .filter((item): item is string => Boolean(item))
@@ -376,7 +387,18 @@ async function handleGoalChannelRequest(message: ChannelMessage, request: GoalCh
 
   if (request.action === 'create' || request.action === 'confirm_create') {
     const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
-    return goalId ? `Goal 已创建：${goalId}` : `Goal 创建失败：${dispatch.status}`;
+    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+    if (goalId) {
+      await setConversationActiveGoal({
+        channel: message.channel,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+        goalId,
+        activeModule: stringArrayValue(request.payload.scope)[0],
+        recentEntities: stringArrayValue(request.payload.scope),
+      });
+    }
+    return goalId ? `Goal 已创建：${goalId}${runId ? `\n已启动首轮运行：${runId}` : ''}` : `Goal 创建失败：${dispatch.status !== 'dispatched' ? dispatch.reason : dispatch.status}`;
   }
   if (request.action === 'list') {
     const goals = arrayValue(dispatch.status === 'dispatched' ? dispatch.result?.goals : undefined);

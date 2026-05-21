@@ -29,6 +29,16 @@ export function parseGoalCommand(message: ChannelMessage): GoalChannelRequest | 
 
 export function parseNaturalGoalRequest(message: ChannelMessage): GoalChannelRequest | undefined {
   const text = message.text.trim();
+  const longRunningGoal = text.match(/^(?:我想|我要|帮我|请帮我)?(?:长期|持续|逐步|分阶段|接下来长期)(?:优化|改进|研究|推进|跟进|维护)\s*(.+)$/);
+  if (longRunningGoal) {
+    return createGoalChannelRequest(message, 'create', {
+      ...parseCreatePayload(longRunningGoal[1], message.messageId),
+      scope: inferGoalScope(longRunningGoal[1]),
+      tags: inferGoalScope(longRunningGoal[1]),
+      autoRun: true,
+    });
+  }
+
   const create = text.match(/^(?:创建一个?目标|创建目标|新建目标|帮我创建目标)[:：]?\s*(.+)$/);
   if (create) {
     return createGoalChannelRequest(message, 'create', parseCreatePayload(create[1], message.messageId));
@@ -88,5 +98,15 @@ function inferGoalType(raw: string) {
 }
 
 function cleanTitle(raw: string) {
-  return raw.replace(/--auto-run/g, '').trim().slice(0, 80);
+  const cleaned = raw.replace(/--auto-run/g, '').trim();
+  return cleaned.replace(/[\u4e00-\u9fff]+/g, '').trim().slice(0, 80) || cleaned.slice(0, 80);
+}
+
+function inferGoalScope(raw: string): string[] {
+  const matches = raw.toLowerCase().matchAll(/\b[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\b/g);
+  return Array.from(new Set(Array.from(matches, match => match[0]).filter(token => !isGoalScopeStopWord(token)))).slice(0, 6);
+}
+
+function isGoalScopeStopWord(value: string): boolean {
+  return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'module', 'repo', 'runtime']).has(value);
 }

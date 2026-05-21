@@ -123,6 +123,7 @@ approval linkage.
   capability retriever can rank these capabilities from a natural-language
   message using metadata text and semantic keyword boosts, without embeddings or
   a vector database. Code tasks without approval move to `waiting_user_confirm`.
+- Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.
 - `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
   mirrors the execution result into the Team Run result file.

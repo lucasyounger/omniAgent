@@ -401,6 +401,25 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toBe('router direct response');
   });
 
+  it('creates and auto-runs long-running goals from natural language', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+
+    const replies = await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const goalId = replies[0].text.match(/Goal 已创建：([^\n]+)/)?.[1];
+
+    expect(goalId).toBeDefined();
+    expect(replies[0].text).toContain('已启动首轮运行：');
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1' })).resolves.toMatchObject({
+      activeGoalId: goalId,
+      activeModule: 'memory',
+      recentEntities: ['memory'],
+    });
+  });
+
   it('handles /goal commands through Goal runtime tasks', async () => {
     const { handleChannelMessage } = await loadHandler();
 

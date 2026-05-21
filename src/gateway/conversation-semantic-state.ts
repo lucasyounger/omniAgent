@@ -7,6 +7,7 @@ export type ConversationSemanticState = {
   channel: string;
   senderId: string;
   activeModule?: string;
+  activeGoalId?: string;
   recentEntities: string[];
   continuationRequest: boolean;
   updatedAt: string;
@@ -33,6 +34,30 @@ export async function getConversationSemanticState(input: {
   }
 }
 
+export async function setConversationActiveGoal(input: {
+  channel: string;
+  conversationId: string;
+  senderId: string;
+  goalId: string;
+  activeModule?: string;
+  recentEntities?: string[];
+}): Promise<ConversationSemanticState> {
+  const previous = await getConversationSemanticState(input);
+  const state: ConversationSemanticState = {
+    conversationId: input.conversationId,
+    channel: input.channel,
+    senderId: input.senderId,
+    activeModule: input.activeModule || previous?.activeModule,
+    activeGoalId: input.goalId,
+    recentEntities: mergeRecentEntities(input.recentEntities || [], previous?.recentEntities || []),
+    continuationRequest: previous?.continuationRequest || false,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await fs.mkdir(semanticStateRoot, { recursive: true });
+  await fs.writeFile(stateFile(input), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  return state;
+}
 export async function updateConversationSemanticState(input: {
   channel: string;
   conversationId: string;
@@ -46,6 +71,7 @@ export async function updateConversationSemanticState(input: {
     channel: input.channel,
     senderId: input.senderId,
     activeModule: input.inference.activeModule || previous?.activeModule,
+    activeGoalId: previous?.activeGoalId,
     recentEntities,
     continuationRequest: input.inference.continuationRequest,
     updatedAt: new Date().toISOString(),

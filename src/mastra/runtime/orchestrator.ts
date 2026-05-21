@@ -341,6 +341,24 @@ function parseGoalIntent(text: string, source: Record<string, unknown>):
     }
   | Extract<OrchestratorDecision, { kind: 'clarify' }>
   | undefined {
+  const longRunningGoal = text.match(/^(?:我想|我要|帮我|请帮我)?(?:长期|持续|逐步|分阶段|接下来长期)(?:优化|改进|研究|推进|跟进|维护)\s*(.+)$/);
+  if (longRunningGoal) {
+    const objective = cleanText(longRunningGoal[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.88,
+      objective: `Create long-running goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: cleanGoalTitle(objective),
+        objective,
+        type: inferGoalType(objective),
+        scope: inferGoalScope(objective),
+        tags: inferGoalScope(objective),
+        autoRun: true,
+      },
+    };
+  }
+
   const create = text.match(/^(?:创建一个?目标|创建目标|新建目标|帮我创建目标)[:：]?\s*(.+)$/);
   if (create) {
     const objective = cleanText(create[1]);
@@ -408,6 +426,23 @@ function inferGoalType(raw: string) {
   if (/(assistant|助理|提醒|个人)/i.test(raw)) return 'personal_assistant';
   if (/(workflow|自动化|流程)/i.test(raw)) return 'workflow_automation';
   return 'topic_research';
+}
+
+function inferGoalScope(raw: string): string[] {
+  const matches = raw.toLowerCase().matchAll(/\b[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\b/g);
+  return Array.from(new Set(Array.from(matches, match => match[0]).filter(token => !isGoalScopeStopWord(token)))).slice(0, 6);
+}
+
+function cleanGoalTitle(raw: string): string {
+  return raw
+    .replace(/^(?:优化|改进|研究|推进|跟进|维护)\s*/, '')
+    .replace(/[\u4e00-\u9fff]+/g, '')
+    .trim()
+    .slice(0, 80) || raw.replace(/[\u4e00-\u9fff]+/g, '').trim().slice(0, 80) || raw.slice(0, 80);
+}
+
+function isGoalScopeStopWord(value: string): boolean {
+  return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'module', 'repo', 'runtime']).has(value);
 }
 function parseSchedule(text: string, receivedAt: string): { value: string; kind: 'once' | 'daily' } | undefined {
   const daily = text.match(/(?:每天|每日|天天|daily|every day).*?(\d{1,2})\s*(?:点|:|：)\s*(\d{1,2})?\s*(?:分)?/i);

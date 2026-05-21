@@ -70,6 +70,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 - `通知我：hello` creates a `notify.send_channel_message` task.
 - `状态` returns Gateway runtime status.
 
+Natural long-running goal requests such as “我想长期优化 memory 模块” create a `goal.create` RuntimeTask with inferred scope/tags and `autoRun: true`, then persist the created Goal as the active conversation Goal for later continuation prompts.
+
 Incomplete schedule-like messages return a clarification question. Other
 normal text is first offered to the LLM orchestrator by default; that prompt
 includes persisted semantic conversation context, active module/entities from the

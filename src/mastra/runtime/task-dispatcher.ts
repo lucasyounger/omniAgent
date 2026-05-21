@@ -988,6 +988,7 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
         actorId: stringValue(payload.actorId),
         channelId: stringValue(payload.channelId),
         autoRun: booleanValue(payload.autoRun),
+        tags: stringArrayValue(payload.tags),
       });
       summary = created.created ? `Goal created: ${created.goal.id}` : `Goal already exists: ${created.goal.id}`;
       goalResult = { goalId: created.goal.id, created: created.created, goal: created.goal, runId: created.run?.id };

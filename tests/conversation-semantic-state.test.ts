@@ -49,6 +49,33 @@ describe('ConversationSemanticState', () => {
     });
   });
 
+  it('stores an active goal for later continuation prompts', async () => {
+    const { getConversationSemanticState, setConversationActiveGoal, updateConversationSemanticState } = await loadStore();
+
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+      },
+    });
+    await setConversationActiveGoal({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      goalId: 'goal-memory',
+    });
+
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1' })).resolves.toMatchObject({
+      activeModule: 'memory',
+      activeGoalId: 'goal-memory',
+      recentEntities: ['memory'],
+    });
+  });
+
   it('uses previous active module and entities for continuation requests', async () => {
     const { inferConversationContext } = await loadStore();
 
