@@ -269,6 +269,43 @@ describe('Gateway message handler', () => {
     });
   });
 
+  it('injects active goal and inferred continuation context into LLM orchestrator prompt', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'unknown',
+          confidence: 0.4,
+          clarifyingQuestion: 'Need more detail',
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { createGoal } = await import('../src/mastra/runtime/goal');
+    await createGoal({
+      id: 'memory-improvement',
+      type: 'module_improvement',
+      title: 'Improve memory module',
+      objective: 'Analyze and improve memory runtime behavior',
+      scope: ['memory', 'docs-memory'],
+      tags: ['memory'],
+      priority: 'high',
+    });
+
+    await handleChannelMessage(message('顺便也看看 eventbus', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const body = String(fetchMock.mock.calls[0][1]?.body);
+    expect(body).toContain('Conversation context:');
+    expect(body).toContain('- activeModule: eventbus');
+    expect(body).toContain('- recentEntities: eventbus, improve, memory, module');
+    expect(body).toContain('- continuationRequest: yes');
+    expect(body).toContain('memory-improvement: Improve memory module');
+    expect(body).toContain('scope=memory, docs-memory');
+  });
+
   it('falls back to OmniRouter when LLM orchestrator returns invalid output', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

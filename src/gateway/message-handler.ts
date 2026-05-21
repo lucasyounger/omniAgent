@@ -123,26 +123,80 @@ async function callLlmOrchestrator(message: ChannelMessage, config: GatewayConfi
 async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string> {
   const goals = (await listGoals({ status: 'active' })).slice(0, 5);
   const activeGoals = goals.length
-    ? goals.map(goal => `- ${goal.id}: ${goal.title} (${goal.type}, priority=${goal.priority})`).join('\n')
+    ? goals.map(goal => formatActiveGoalForPrompt(goal)).join('\n')
     : '- none';
+  const inferredContext = inferConversationContext(message.text, goals);
 
   return [
     'You are OmniAgent runtime orchestrator. Return strict JSON only.',
     'Map the user message to a supported runtime task when appropriate; otherwise return intent unknown with clarifyingQuestion.',
     'Use taskType for executable runtime tasks and include objective plus payload.',
+    'If the message is a continuation such as "also", "顺便", "再看看", or "继续", reuse the conversation context and active goal/module instead of treating it as isolated.',
     'Supported taskType values: code.claude_code_task, knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
     'Return shape: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
+    '',
+    'Conversation context:',
+    `- conversationId: ${message.conversationId}`,
+    `- channel: ${message.channel}`,
+    `- senderId: ${message.senderId}`,
+    `- activeModule: ${inferredContext.activeModule ?? 'unknown'}`,
+    `- recentEntities: ${inferredContext.recentEntities.length ? inferredContext.recentEntities.join(', ') : 'none'}`,
+    `- continuationRequest: ${inferredContext.continuationRequest ? 'yes' : 'no'}`,
     '',
     'Active goals:',
     activeGoals,
     '',
-    `Channel: ${message.channel}`,
-    `Conversation: ${message.conversationId}`,
-    `Sender: ${message.senderId}`,
-    '',
     'User message:',
     message.text,
   ].join('\n');
+}
+
+function formatActiveGoalForPrompt(goal: Awaited<ReturnType<typeof listGoals>>[number]): string {
+  const parts = [
+    `- ${goal.id}: ${goal.title}`,
+    `type=${goal.type}`,
+    `priority=${goal.priority ?? 'normal'}`,
+  ];
+  if (goal.scope.length) parts.push(`scope=${goal.scope.join(', ')}`);
+  if (goal.tags?.length) parts.push(`tags=${goal.tags.join(', ')}`);
+  return parts.join(' | ');
+}
+
+function inferConversationContext(text: string, goals: Awaited<ReturnType<typeof listGoals>>): {
+  activeModule?: string;
+  recentEntities: string[];
+  continuationRequest: boolean;
+} {
+  const lower = text.toLowerCase();
+  const continuationRequest = /\b(also|too|continue|next)\b/i.test(text) || /(顺便|也看看|再看看|继续|一起看|另外)/.test(text);
+  const entities = new Set<string>();
+
+  for (const match of lower.matchAll(/\b([a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*)\s*(?:module|模块|runtime|agent|store|gateway|repo)?\b/g)) {
+    const value = match[1];
+    if (!isContextStopWord(value)) entities.add(value);
+  }
+
+  for (const goal of goals) {
+    for (const item of [goal.title, goal.objective, ...goal.scope, ...(goal.tags ?? [])]) {
+      const normalized = item.toLowerCase();
+      if (normalized && (lower.includes(normalized) || continuationRequest)) {
+        for (const token of normalized.matchAll(/\b[a-z][a-z0-9_-]*\b/g)) {
+          if (!isContextStopWord(token[0])) entities.add(token[0]);
+        }
+      }
+    }
+  }
+
+  const recentEntities = Array.from(entities).slice(0, 12);
+  return {
+    activeModule: recentEntities[0],
+    recentEntities,
+    continuationRequest,
+  };
+}
+
+function isContextStopWord(value: string): boolean {
+  return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'please', 'http', 'local', 'conv', 'user', 'msg']).has(value);
 }
 
 async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extract<OrchestratorDecision, { kind: 'runtime_task' }>) {
