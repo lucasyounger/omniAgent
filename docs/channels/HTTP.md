@@ -37,7 +37,7 @@ prompt instead of executing commands.
 - `/goal create <title>` creates a durable Goal through GoalService. The
   command also supports `/goal list`, `/goal status <goalId>`,
   `/goal run <goalId>`, and `/goal feedback <goalId> <text>` for listing,
-  status, queued GoalRun creation, and feedback-driven pause/resume/cancel or
+  status, executable GoalRun workflow execution, and feedback-driven pause/resume/cancel or
   priority updates.
 - `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
   RuntimeTask and dispatches it through Task Dispatcher. Direct Claude Code

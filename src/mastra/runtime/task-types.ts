@@ -178,7 +178,7 @@ export const runtimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDef
     taskType: runtimeTaskTypes.goalRun,
     defaultTargetAgentId: 'goal-runtime',
     handler: 'goal-handler',
-    description: 'Queue a Goal run.',
+    description: 'Execute a durable GoalRun through the routed goal workflow.',
   },
   [runtimeTaskTypes.goalFeedback]: {
     taskType: runtimeTaskTypes.goalFeedback,

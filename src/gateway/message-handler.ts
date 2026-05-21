@@ -187,8 +187,10 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
   }
 
   if (decision.taskType === runtimeTaskTypes.goalRun) {
-    const run = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.run) : undefined;
-    return run ? `Goal Run 已排队：${formatGoalRun(run as Parameters<typeof formatGoalRun>[0])}` : `Goal Run 失败：${dispatch.status}`;
+    const output = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.output) : undefined;
+    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+    const summary = stringValue(output?.summary);
+    return runId ? `Goal Run 已完成：${runId}${summary ? `\n${summary}` : ''}` : `Goal Run 失败：${dispatch.status}`;
   }
 
   if (decision.taskType === runtimeTaskTypes.goalFeedback) {
@@ -268,8 +270,10 @@ async function handleGoalChannelRequest(message: ChannelMessage, request: GoalCh
     return dispatch.status === 'dispatched' ? formatGoalStatus(dispatch.result as Parameters<typeof formatGoalStatus>[0]) : `Goal 查询失败：${dispatch.status}`;
   }
   if (request.action === 'run') {
-    const run = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.run) : undefined;
-    return run ? `Goal Run 已排队：${formatGoalRun(run as Parameters<typeof formatGoalRun>[0])}` : `Goal Run 失败：${dispatch.status}`;
+    const output = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.output) : undefined;
+    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+    const summary = stringValue(output?.summary);
+    return runId ? `Goal Run 已完成：${runId}${summary ? `\n${summary}` : ''}` : `Goal Run 失败：${dispatch.status}`;
   }
   if (request.action === 'feedback') {
     const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;

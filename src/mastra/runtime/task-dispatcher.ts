@@ -5,8 +5,9 @@ import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, s
 import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
+import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
-import { applyGoalFeedback, createGoalService, enqueueGoalRun, getGoalStatus, listGoals } from './goal';
+import { applyGoalFeedback, createGoalService, getGoalStatus, listGoals } from './goal';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes } from './task-types';
@@ -266,6 +267,10 @@ async function dispatchNotifySendChannelMessageTask(task: RuntimeTask): Promise<
     });
     throw error;
   }
+}
+
+function createGoalRuntimeRunId() {
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function dispatchResearchAiDailyDigestTask(task: RuntimeTask): Promise<DispatchResult> {
@@ -1003,9 +1008,16 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
     } else if (taskType === runtimeTaskTypes.goalRun) {
       const goalId = stringValue(payload.goalId) || stringValue(payload.id);
       if (!goalId) throw new Error('goal.run requires payload.goalId.');
-      const goalRun = await enqueueGoalRun(goalId, { runId: stringValue(payload.runId), plan: payload.plan });
-      summary = `Goal run queued: ${goalRun.id}`;
-      goalResult = { goalId, runId: goalRun.id, run: goalRun };
+      const runId = stringValue(payload.runId) || createGoalRuntimeRunId();
+      const output = await executeGoalRun({ goalId, runId, runMode: stringValue(payload.runMode) });
+      summary = output.summary;
+      goalResult = {
+        goalId,
+        runId,
+        output,
+        artifactCount: output.artifacts.length,
+        prCandidateCount: output.prCandidates?.length || 0,
+      };
     } else if (taskType === runtimeTaskTypes.goalFeedback) {
       const goalId = stringValue(payload.goalId) || stringValue(payload.id);
       const text = stringValue(payload.text) || stringValue(payload.feedback);

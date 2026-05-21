@@ -276,6 +276,45 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('dispatches goal.run tasks through the goal workflow executor', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { createGoal } = await import('../src/mastra/runtime/goal');
+    await createGoal({
+      id: 'dispatcher-goal-run',
+      type: 'topic_research',
+      title: 'Dispatcher Goal Run',
+      objective: 'AI long memory systems',
+      artifactPolicy: ['daily_digest'],
+    });
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'goal-runtime',
+      objective: 'run goal',
+      metadata: { taskType: 'goal.run', payload: { goalId: 'dispatcher-goal-run', runId: 'dispatcher-run-001' } },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: 'goal-runtime',
+      handler: 'goal-handler',
+      result: {
+        goalId: 'dispatcher-goal-run',
+        runId: 'dispatcher-run-001',
+      },
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        goalId: 'dispatcher-goal-run',
+        runId: 'dispatcher-run-001',
+      },
+    });
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'goals', 'dispatcher-goal-run', 'runs', 'dispatcher-run-001', 'output.json'), 'utf8')).resolves.toContain('daily-digest.md');
+  });
+
   it('dispatches research.ai_daily_digest tasks and queues notification through notify handler', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { listDeliveries } = await import('../src/gateway/gateway-store');
@@ -711,7 +750,12 @@ describe('Task Dispatcher', () => {
     });
     await expect(dispatchRuntimeTask(runTask.id)).resolves.toMatchObject({
       status: 'dispatched',
-      result: { goalId: 'dispatcher-goal', run: { status: 'pending' } },
+      result: {
+        goalId: 'dispatcher-goal',
+        output: {
+          summary: expect.stringContaining('Generated topic digest'),
+        },
+      },
     });
 
     const feedbackTask = await taskRuntime.createTask({

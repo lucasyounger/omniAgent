@@ -250,7 +250,7 @@ describe('Gateway message handler', () => {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
-    expect(run[0].text).toContain('Goal Run 已排队');
+    expect(run[0].text).toContain('Goal Run 已完成');
 
     const feedback = await handleChannelMessage(message(`/goal feedback ${goalId} 暂停`, 'trusted'), {
       ...baseConfig(),
