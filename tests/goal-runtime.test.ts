@@ -375,6 +375,26 @@ describe('goal runtime workspace manager', () => {
     expect(capsule.markdown).toContain('[Capsule truncated]');
   });
 
+  it('executes a goal run through the workflow router and writes standard output artifacts', async () => {
+    const { createGoal } = await loadGoalRuntime();
+    const { executeGoalRun } = await import('../src/mastra/runtime/goal/goal-run-executor');
+    await createGoal({
+      id: 'executor-topic-goal',
+      type: 'topic_research',
+      title: 'Executor Topic Goal',
+      objective: 'AI long memory systems',
+      artifactPolicy: ['daily_digest'],
+    });
+
+    const output = await executeGoalRun({ goalId: 'executor-topic-goal', runId: 'executor-run-001' });
+    const runDir = path.join(tempRoot, '.omni', 'goals', 'executor-topic-goal', 'runs', 'executor-run-001');
+
+    expect(output.summary).toContain('Generated topic digest');
+    await expect(fs.readFile(path.join(runDir, 'output.json'), 'utf8')).resolves.toContain('daily-digest.md');
+    await expect(fs.readFile(path.join(runDir, 'proof-of-work.md'), 'utf8')).resolves.toContain('Generated daily digest and wiki diff');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'goals', 'executor-topic-goal', 'artifacts', 'run-summary.md'), 'utf8')).resolves.toContain('Goal Run Summary');
+  });
+
   it('records feedback events, updates goal state, and adapts QQ messages', async () => {
     const { createGoal, readGoal } = await loadGoalRuntime();
     await createGoal({

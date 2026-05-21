@@ -96,14 +96,17 @@ work is delegated, executed, reported, and recovered across all agents.
   the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task.
-- Task type registry defines 20 granular task types: `code.claude_code_task`,
+- Task type registry defines 21 granular task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
   `schedule.list`, `schedule.delete`, `schedule.pause`, `schedule.resume`,
   `schedule.run_now`, `research.ai_daily_digest`,
   `notify.send_channel_message`, `pr_pool.create`, `pr_pool.list`,
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
-  `pr_pool.cron_scan`.
+  `pr_pool.cron_scan`, `goal.run`.
+- `goal.run` Runtime Tasks target `goal-runtime`. The dispatcher reserves a
+  run ID, executes the routed goal workflow, writes standard Goal artifacts,
+  and marks the RuntimeTask succeeded only after execution completes.
 - `research-agent` and `notify-agent` target agents are referenced in the
   registry but are pending implementation; their handlers exist in the
   dispatcher.

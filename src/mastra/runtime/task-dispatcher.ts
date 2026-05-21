@@ -5,6 +5,7 @@ import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, s
 import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
+import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
@@ -98,6 +99,10 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
   if (taskType === runtimeTaskTypes.notifySendChannelMessage) {
     return dispatchNotifySendChannelMessageTask(leased);
+  }
+
+  if (taskType === runtimeTaskTypes.goalRun) {
+    return dispatchGoalRunTask(leased);
   }
 
   if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
@@ -261,6 +266,103 @@ async function dispatchNotifySendChannelMessageTask(task: RuntimeTask): Promise<
     });
     throw error;
   }
+}
+
+async function dispatchGoalRunTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const goalId = stringValue(payload.goalId) || stringValue(payload.id);
+
+  if (!goalId) {
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: 'goal.run requires payload.goalId.',
+      sourceAgentId: 'task-dispatcher',
+    });
+    return {
+      taskId: task.id,
+      status: 'failed',
+      targetAgentId: task.targetAgentId,
+      reason: 'goal.run requires payload.goalId.',
+    };
+  }
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Executing GoalRun workflow.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({
+    taskId: task.id,
+    executorAgentId: 'goal-handler',
+  });
+
+  try {
+    const runId = stringValue(payload.runId) || createGoalRuntimeRunId();
+    const output = await executeGoalRun({ goalId, runId, runMode: stringValue(payload.runMode) });
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'goal-handler',
+      summary: output.summary,
+      output: JSON.stringify(output, null, 2),
+      metadata: {
+        taskType: runtimeTaskTypes.goalRun,
+        goalId,
+        runId,
+        artifactCount: output.artifacts.length,
+        prCandidateCount: output.prCandidates?.length || 0,
+      },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: output.summary,
+      sourceAgentId: 'task-dispatcher',
+      metadata: {
+        resultRef: result.resultRef,
+        goalId,
+        runId,
+        artifactCount: output.artifacts.length,
+        prCandidateCount: output.prCandidates?.length || 0,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: task.targetAgentId,
+      handler: 'goal-handler',
+      runId: run.runId,
+      result: {
+        goalId,
+        runId,
+        output,
+        resultRef: result.resultRef,
+      },
+    };
+  } catch (error) {
+    await failTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'goal-handler',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      sourceAgentId: 'task-dispatcher',
+    });
+    throw error;
+  }
+}
+
+function createGoalRuntimeRunId() {
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function dispatchResearchAiDailyDigestTask(task: RuntimeTask): Promise<DispatchResult> {

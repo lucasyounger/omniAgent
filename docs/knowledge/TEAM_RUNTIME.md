@@ -115,8 +115,11 @@ approval linkage.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
-  research, and schedule-handler task types. Code tasks without approval move
-  to `waiting_user_confirm`.
+  research, schedule-handler, PR pool, and GoalRun task types. Code tasks
+  without approval move to `waiting_user_confirm`.
+- `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
+  invokes the routed Goal workflow executor, writes Goal output artifacts, and
+  mirrors the execution result into the Team Run result file.
 - Schedule create/list/delete/pause/resume maintenance tasks are audited but do
   not require Tool Gateway approval. `schedule.run_now` dynamically requires
   approval when it would trigger direct code execution.

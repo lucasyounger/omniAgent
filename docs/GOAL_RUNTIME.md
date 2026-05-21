@@ -39,6 +39,8 @@ Each execution attempt is a GoalRun under `~/.omni/goals/{goalId}/runs/{runId}/`
 ~/.omni/goals/{goalId}/runs/{runId}/
   run.json
   event-log.jsonl
+  output.json
+  error.json
   proof-of-work.md
 ```
 
@@ -72,6 +74,7 @@ Use `src/mastra/runtime/goal` or the aggregate runtime export:
 - `updateGoalRunStatus(goalId, runId, status)` records status transitions.
 - `completeGoalRun(input)` marks a run succeeded, writes `proof-of-work.md`, and requires non-empty work evidence.
 - `failGoalRun(input)` marks a run failed and records the failure reason.
+- `executeGoalRun(input)` routes `goal.run` to the workflow for the persisted goal type, writes `output.json`, updates `artifacts/run-summary.md`, and writes `error.json` if execution fails.
 - `mergeProofOfWork(base, patch)` combines proof sections without duplicates.
 
 PR-16 adds retry/reconcile helpers:
@@ -111,7 +114,13 @@ Module improvement run artifacts:
   proof-of-work.md
 ```
 
-PR-19 adds feedback loop support:
+PR-20 adds executable GoalRun routing:
+
+- `goal.run` runtime tasks now use the `goal-handler` dispatcher path.
+- The dispatcher reserves a run ID, calls `executeGoalRun`, and marks the RuntimeTask succeeded only after the workflow completes.
+- Workflow routing currently supports `topic_research` and `module_improvement` goals.
+- Standard run outputs include `output.json`, `proof-of-work.md`, and the latest `artifacts/run-summary.md`; failures also persist `error.json`.
+
 
 - `recordRawFeedback(input)` parses feedback into structured intent and appends `feedback.jsonl`.
 - `pause` / `resume` feedback updates goal state.

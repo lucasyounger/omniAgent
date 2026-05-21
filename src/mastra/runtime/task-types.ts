@@ -19,6 +19,7 @@ export const runtimeTaskTypes = {
   prPoolDevelop: 'pr_pool.develop',
   prPoolArchive: 'pr_pool.archive',
   prPoolCronScan: 'pr_pool.cron_scan',
+  goalRun: 'goal.run',
 } as const;
 
 export type RuntimeTaskType = (typeof runtimeTaskTypes)[keyof typeof runtimeTaskTypes];
@@ -150,6 +151,12 @@ export const runtimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDef
     defaultTargetAgentId: 'pr-pool-runtime',
     handler: 'pr-pool-handler',
     description: 'Cron-triggered scan of ready PR items for scheduled development.',
+  },
+  [runtimeTaskTypes.goalRun]: {
+    taskType: runtimeTaskTypes.goalRun,
+    defaultTargetAgentId: 'goal-runtime',
+    handler: 'goal-handler',
+    description: 'Execute a durable GoalRun through the routed goal workflow.',
   },
 };
 
