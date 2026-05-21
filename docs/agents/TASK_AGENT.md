@@ -18,7 +18,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/runtime/task-runtime.ts`
 - `src/mastra/runtime/task-dispatcher.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
-- `src/mastra/tools/index.ts`
+- `src/mastra/workflows/composite-task-workflow.ts`
 - `src/mastra/agents/omni-router-agent.ts`
 - `src/mastra/agents/code-agent.ts`
 - `src/mastra/agents/cron-agent.ts`
@@ -96,6 +96,7 @@ work is delegated, executed, reported, and recovered across all agents.
   the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task.
+- Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,

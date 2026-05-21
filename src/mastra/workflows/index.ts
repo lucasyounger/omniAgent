@@ -1,5 +1,7 @@
 export { getRegistryCatalog, getRegistryEntry, listRegistryEntries, searchRegistryEntries } from '../registry';
 export type { RegistryCatalog, RegistryEntry, RegistryEntryKind } from '../registry';
+export { compositeTaskWorkflow, executeCompositePlan } from './composite-task-workflow';
+export type { CompositeTaskStepResult, CompositeTaskWorkflowResult } from './composite-task-workflow';
 export { runCodeTaskWorkflow } from './code-task-workflow';
 export { memoryMaintenanceWorkflow } from './memory-maintenance-workflow';
 export { taskOrchestrationWorkflow } from './task-orchestration-workflow';

@@ -20,4 +20,7 @@ runtime capabilities and conversation context into lightweight ExecutionPlan JSO
 (`single_step`, `composite`, or `long_running_goal`) and must not execute tools
 directly. ExecutionPlan schema and local builder helpers live under
 `src/mastra/runtime/planner/` so gateway/orchestrator decisions can be converted
-into ordered capability steps before a future workflow executor runs them.
+into ordered capability steps before `compositeTaskWorkflow` executes them.
+`src/mastra/index.ts` registers `compositeTaskWorkflow` alongside the existing
+Task, Code, and memory workflows so ExecutionPlan dispatch is available through
+Mastra workflow registration.

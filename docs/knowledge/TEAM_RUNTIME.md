@@ -114,6 +114,7 @@ approval linkage.
 - Invalid runtime transitions throw before task metadata is changed.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
+- Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. The task type
   registry also exposes capability metadata for each existing task type
