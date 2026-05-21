@@ -26,6 +26,7 @@ Purpose: load the smallest useful context before changing OmniAgent.
 - Modify scheduling: read `docs/agents/CRON_AGENT.md`.
 - Modify routing or user-facing delegation: read `docs/agents/OMNI_ROUTER_AGENT.md`.
 - Modify docs memory: read `docs/agents/KNOWLEDGE_AGENT.md`.
+- Reflection / self-evolution roadmap: read `docs/roadmap/SELF_EVOLUTION.md`.
 
 ## Update Rule
 
