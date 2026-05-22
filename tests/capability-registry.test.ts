@@ -31,10 +31,25 @@ describe('Capability Registry', () => {
     }
   });
 
-  it('can be instantiated with custom definitions', () => {
+  it('supports runtime upsert and delete for debug capability management', () => {
     const registry = new CapabilityRegistry([capabilityRegistry.getById('goal_management')!]);
-    expect(registry.getAll()).toHaveLength(1);
-    expect(registry.getTaskTypeMapping(runtimeTaskTypes.goalCreate)[0].id).toBe('goal_management');
+    registry.upsert({
+      id: 'debug_custom_report',
+      name: 'Debug Custom Report',
+      description: 'Debug custom report capability.',
+      category: 'debug',
+      taskTypes: [runtimeTaskTypes.knowledgeTask],
+      examples: ['custom zebra report'],
+      safetyLevel: 'low',
+      standalone: true,
+    });
+
+    expect(registry.validateIds(['debug_custom_report'])).toBe(true);
+    expect(registry.getTaskTypeMapping(runtimeTaskTypes.knowledgeTask).map(capability => capability.id)).toContain('debug_custom_report');
+    expect(routeLightweightCapability(request('custom zebra report'), 5).capabilities.map(capability => capability.capabilityId)).not.toContain('debug_custom_report');
+    expect(registry.delete('debug_custom_report')).toBe(true);
+    expect(registry.validateIds(['debug_custom_report'])).toBe(false);
+    expect(registry.delete('debug_custom_report')).toBe(false);
   });
 });
 

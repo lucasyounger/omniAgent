@@ -105,7 +105,21 @@ export async function dispatchCapabilityPlan(plan: CapabilityPlan): Promise<Capa
         payload: step.params,
       },
     });
-    const dispatch = await dispatchRuntimeTask(task.id);
+    let dispatch: DispatchResult;
+    try {
+      dispatch = await dispatchRuntimeTask(task.id);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      results.push({
+        stepId: step.id,
+        capabilityId: step.capabilityId,
+        taskId: task.id,
+        taskType: step.taskType,
+        status: 'failed',
+        reason,
+      });
+      break;
+    }
     results.push({
       stepId: step.id,
       capabilityId: step.capabilityId,

@@ -36,11 +36,88 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_GATEWAY_DELIVERY_MAX_ATTEMPTS;
+  delete process.env.OMNI_ROUTER_ADMIN;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
 
 describe('Gateway HTTP server', () => {
+  it('routes /message requests through the unified gateway request pipeline', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer({
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/message`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'trusted',
+          text: '/status',
+        }),
+      });
+      const body = (await response.json()) as { ok: boolean; replies: Array<{ text: string }> };
+
+      expect(response.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.replies[0].text).toContain('Omni Gateway 在线');
+    } finally {
+      server.close();
+    }
+  });
+
+  it('returns debug route trace for /message when explicitly requested', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer({
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/message?trace=1`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'trusted',
+          text: '我想长期优化 memory 模块',
+        }),
+      });
+      const body = (await response.json()) as { ok: boolean; replies: Array<{ text: string }> };
+
+      expect(response.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.replies[0].text).toContain('Route Trace:');
+      expect(body.replies[0].text).toContain('"inputHash"');
+      expect(body.replies[0].text).not.toContain('我想长期优化 memory 模块');
+    } finally {
+      server.close();
+    }
+  });
+
   it('returns QQBot adapter status without exposing credentials', async () => {
     const { startGatewayHttpServer } = await loadGateway();
     const server = startGatewayHttpServer(baseConfig());
@@ -72,20 +149,8 @@ describe('Gateway HTTP server', () => {
     }
   });
 
-  it('returns dead-letter deliveries', async () => {
-    const { createDelivery, markDeliveryAttempt, startGatewayHttpServer } = await loadGateway();
-    const delivery = await createDelivery({
-      target: {
-        channel: 'http',
-        accountId: 'local',
-        conversationId: 'conv-1',
-        senderId: 'user-1',
-        messageType: 'dm',
-      },
-      text: 'hello',
-    });
-    await markDeliveryAttempt({ deliveryId: delivery.deliveryId, error: 'offline' });
-
+  it('keeps router admin endpoints disabled by default', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
     const server = startGatewayHttpServer(baseConfig());
     await new Promise<void>(resolve => {
       if (server.listening) {
@@ -97,18 +162,63 @@ describe('Gateway HTTP server', () => {
 
     try {
       const address = server.address() as AddressInfo;
-      const response = await fetch(`http://127.0.0.1:${address.port}/deliveries/dead-letter`);
-      const body = (await response.json()) as { ok: boolean; deliveries: Array<Record<string, unknown>> };
+      const response = await fetch(`http://127.0.0.1:${address.port}/capabilities`);
+      const body = (await response.json()) as { ok: boolean; error: string };
 
-      expect(response.status).toBe(200);
-      expect(body.ok).toBe(true);
-      expect(body.deliveries).toHaveLength(1);
-      expect(body.deliveries[0]).toMatchObject({
-        deliveryId: delivery.deliveryId,
-        status: 'dead_letter',
-        error: 'offline',
-      });
+      expect(response.status).toBe(404);
+      expect(body).toEqual({ ok: false, error: 'not found' });
     } finally {
+      server.close();
+    }
+  });
+
+  it('evaluates and updates capabilities when router admin mode is enabled', async () => {
+    process.env.OMNI_ROUTER_ADMIN = '1';
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer(baseConfig());
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const createResponse = await fetch(`${baseUrl}/capabilities`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: 'debug_custom_report',
+          name: 'Debug Custom Report',
+          description: 'Debug-only custom report capability.',
+          category: 'debug',
+          taskTypes: ['knowledge.task'],
+          examples: ['custom zebra report'],
+          safetyLevel: 'low',
+          standalone: true,
+        }),
+      });
+      const createBody = (await createResponse.json()) as { ok: boolean; capability: { id: string } };
+      expect(createBody).toMatchObject({ ok: true, capability: { id: 'debug_custom_report' } });
+
+      const evalResponse = await fetch(`${baseUrl}/router/eval`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'custom zebra report', expectedCapability: 'debug_custom_report' }),
+      });
+      const evalBody = (await evalResponse.json()) as { ok: boolean; matched: boolean; result: { capabilities: Array<{ capabilityId: string }> } };
+      expect(evalBody.ok).toBe(true);
+      expect(evalBody.matched).toBe(true);
+      expect(evalBody.result.capabilities.map(item => item.capabilityId)).toContain('debug_custom_report');
+
+      const deleteResponse = await fetch(`${baseUrl}/capabilities/debug_custom_report`, { method: 'DELETE' });
+      const deleteBody = (await deleteResponse.json()) as { ok: boolean; deleted: boolean };
+      expect(deleteBody).toEqual({ ok: true, deleted: true });
+    } finally {
+      delete process.env.OMNI_ROUTER_ADMIN;
       server.close();
     }
   });

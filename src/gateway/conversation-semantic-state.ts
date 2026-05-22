@@ -144,6 +144,14 @@ export async function appendConversationTurnSummary(input: {
   return state;
 }
 
+export async function clearConversationSemanticState(input: {
+  channel: string;
+  conversationId: string;
+  senderId?: string;
+}): Promise<void> {
+  await fs.rm(stateFile(input), { force: true });
+}
+
 export function inferConversationContext(
   text: string,
   goals: Array<{ title: string; objective: string; scope: string[]; tags?: string[] }>,

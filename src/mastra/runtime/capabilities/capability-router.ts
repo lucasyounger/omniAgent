@@ -66,7 +66,7 @@ export function routeLightweightCapability(request: UnifiedRequest, topK = 5): R
   }
 
   const synonymSelections = scoreSynonyms(request.content, capabilities);
-  for (const selection of synonymSelections) {
+  for (const selection of [...scoreRegistryDefinitions(request.content, capabilities), ...synonymSelections]) {
     const current = byCapability.get(selection.capabilityId);
     if (!current || selection.score > current.score) byCapability.set(selection.capabilityId, selection);
   }
@@ -87,6 +87,24 @@ export function routeLightweightCapability(request: UnifiedRequest, topK = 5): R
 function normalizeScore(score: number, capability: CapabilityDefinition): number {
   const maxExpected = 40 + capability.examples.length * 4;
   return Math.min(0.95, Number((score / maxExpected).toFixed(2)));
+}
+
+function scoreRegistryDefinitions(text: string, capabilities: CapabilityDefinition[]): RouteCapabilitySelection[] {
+  const tokens = tokenize(text);
+  if (!tokens.length) return [];
+
+  return capabilities.reduce<RouteCapabilitySelection[]>((selections, capability) => {
+    const haystack = tokenize([capability.name, capability.description, capability.category, capability.examples.join(' ')].join(' '));
+    const hits = tokens.filter(token => haystack.some(candidate => candidate === token || candidate.includes(token) || token.includes(candidate))).length;
+    if (hits) {
+      selections.push({ capabilityId: capability.id, score: Math.min(0.88, 0.3 + hits * 0.14), reason: 'registry definition match' });
+    }
+    return selections;
+  }, []);
+}
+
+function tokenize(text: string): string[] {
+  return Array.from(new Set(text.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter(token => token.length >= 2)));
 }
 
 function scoreSynonyms(text: string, capabilities: CapabilityDefinition[]): RouteCapabilitySelection[] {

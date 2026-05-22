@@ -19,23 +19,10 @@ through Team Runtime.
 - Adapters still emit `ChannelMessage`, but Gateway converts each message into a
   `UnifiedRequest` with stable `source`, `userId`, `sessionId`, `content`, and
   metadata before invoking the shared request pipeline.
-- Rule Router only handles deterministic slash commands and safety boundaries;
+- Rule Router only handles deterministic slash commands, mention/wake control,
+  `/reset` sender-scoped semantic context clearing, and safety boundaries;
   business natural language continues to capability routing or legacy fallback.
-- Natural language first passes through the Runtime Orchestrator. Supported
-  intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
-  messages are evaluated by deterministic/lightweight capability routing. Low-confidence,
-  close-score, multi-capability, or context-dependent candidates can enter the LLM
-  Router arbitration layer, which receives Top-K candidates, registered capability
-  definitions, sender-scoped session summary, and compressed recent-turn history.
-  History is only used to resolve references or continue prior objectives; missing,
-  ambiguous, or conflicting context returns a clarification request. Invalid JSON,
-  unregistered capability ids, LLM failure, or disabled semantic routing fall back
-  to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving
-  orchestrator trace with input hash, decision metadata, per-layer route trace,
-  candidate capabilities, and fallback reason, without storing raw channel message
-  text in the trace. The
-  LLM orchestrator can return either one executable runtime task or a capability-id
-  plan preview with generated `CapabilityPlan` steps for later Planner execution. It may only return
+- Natural language first passes through deterministic/lightweight capability routing before legacy orchestrator fallback. High-confidence capability decisions can produce executable `CapabilityPlan` steps, and Gateway dispatches those steps as RuntimeTasks instead of returning a preview-only response. Low-confidence, close-score, multi-capability, or context-dependent candidates can enter the LLM Router arbitration layer, which receives Top-K candidates, registered capability definitions, sender-scoped session summary, and compressed recent-turn history. History is only used to resolve references or continue prior objectives; missing, ambiguous, or conflicting context returns a clarification request. Invalid JSON, unregistered capability ids, LLM failure, or disabled semantic routing fall back to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving orchestrator trace with input hash, decision metadata, per-layer route trace, candidate capabilities, and fallback reason, without storing raw channel message text in the trace. Normal replies hide the trace; HTTP `/message` exposes it only when explicitly requested with `?trace=1`, `x-omni-route-trace: 1`, or `routeTraceDebug: true`. The LLM orchestrator can return either one executable runtime task or a capability-id plan that Gateway dispatches through RuntimeTask steps. It may only return
   `schedule.create` when the message has explicit time or recurrence evidence and
   the JSON includes `payload.schedule`; durable goal-like requests must route to
   `goal.create` or a capability plan instead. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`

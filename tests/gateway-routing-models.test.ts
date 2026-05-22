@@ -42,6 +42,13 @@ describe('Gateway request routing models', () => {
       args: 'repo :: fix bug',
     });
     expect(routeRule(toUnifiedRequest(message('帮我分析仓库并生成报告')))).toEqual({ kind: 'continue' });
+    expect(routeRule({
+      ...toUnifiedRequest(message('@Omni /status')),
+      metadata: { mentionedBot: true },
+    })).toMatchObject({
+      kind: 'command',
+      command: '/status',
+    });
   });
 
   it('blocks empty, oversized, and unsafe system-control input', () => {

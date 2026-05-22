@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
 import { createCapabilityPlan, type CapabilityPlan } from './capability-planner';
-import { routeDeterministicCapability, routeLightweightCapability } from './capabilities';
-import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
+import { routeDeterministicCapability, routeLightweightCapability, type RouterResult } from './capabilities';
+import type { RouterTrace } from './decision-trace';
+import type { ChannelMessage, ChannelTarget, RouteCapabilitySelection, UnifiedRequest } from '../../gateway/types';
+import { toUnifiedRequest } from '../../gateway/types';
 
 const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
 
@@ -71,6 +73,51 @@ export type OrchestratorDecision =
       confidence: number;
       reason: string;
     };
+
+export type RuntimeCapabilityRoutingResult = {
+  request: UnifiedRequest;
+  deterministic: RouterResult;
+  lightweight: RouterResult;
+  candidates: RouteCapabilitySelection[];
+  previous: RouterResult;
+  routeTrace: RouterTrace[];
+};
+
+export function routeRuntimeCapabilities(
+  messageOrRequest: ChannelMessage | UnifiedRequest,
+  previousReason = 'No deterministic runtime intent matched.',
+): RuntimeCapabilityRoutingResult {
+  const request = isUnifiedRequest(messageOrRequest) ? messageOrRequest : toUnifiedRequest(messageOrRequest);
+  const deterministic = routeDeterministicCapability(request);
+  const lightweight = routeLightweightCapability(request, 5);
+  const candidates = mergeCapabilitySelections(deterministic.capabilities, lightweight.capabilities);
+  return {
+    request,
+    deterministic,
+    lightweight,
+    candidates,
+    previous: {
+      capabilities: candidates,
+      confidence: candidates[0]?.score ?? 0,
+      source: 'lightweight',
+      reason: previousReason,
+    },
+    routeTrace: [
+      {
+        layer: 'deterministic',
+        candidates: deterministic.capabilities,
+        confidence: deterministic.confidence,
+        reason: deterministic.reason,
+      },
+      {
+        layer: 'lightweight',
+        candidates: lightweight.capabilities,
+        confidence: lightweight.confidence,
+        reason: lightweight.reason,
+      },
+    ],
+  };
+}
 
 export function orchestrateChannelMessage(message: ChannelMessage): OrchestratorDecision {
   const text = message.text.trim();
@@ -194,16 +241,14 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
-  const unifiedRequest = {
+  const capabilityRouting = routeRuntimeCapabilities({
     source: message.channel,
     userId: message.senderId,
     sessionId: [message.channel, message.accountId, message.conversationId, message.senderId].join(':'),
     content: message.text,
     metadata: channelSourceFromMessage(message),
-  };
-  const deterministicCapabilities = routeDeterministicCapability(unifiedRequest);
-  const lightweightCapabilities = routeLightweightCapability(unifiedRequest, 5);
-  const candidateCapabilities = mergeCapabilitySelections(deterministicCapabilities.capabilities, lightweightCapabilities.capabilities);
+  });
+  const candidateCapabilities = capabilityRouting.candidates;
 
   if (looksLikeScheduleRequest(text)) {
     return {
@@ -337,6 +382,10 @@ export function channelSourceFromMessage(message: ChannelMessage) {
     messageId: message.messageId,
     messageType: message.messageType,
   };
+}
+
+function isUnifiedRequest(value: ChannelMessage | UnifiedRequest): value is UnifiedRequest {
+  return 'source' in value && 'userId' in value && 'sessionId' in value && 'content' in value;
 }
 
 function mergeCapabilitySelections(

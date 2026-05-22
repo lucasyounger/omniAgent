@@ -1,12 +1,13 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { capabilityRegistry, routeLightweightCapability, type CapabilityDefinition } from '../mastra/runtime/capabilities';
 import type { GatewayConfig } from './config';
 import { readRuntimeDashboardData } from '../mastra/runtime/dashboard';
 import { sendOutbound } from './delivery';
 import { listDeadLetterDeliveries, listDeliveries } from './gateway-store';
-import { handleChannelMessage } from './message-handler';
+import { processRequest } from './gateway';
 import { getQQBotAdapterStatus } from './qqbot-adapter';
-import type { ChannelMessage } from './types';
+import { toUnifiedRequest, type ChannelMessage } from './types';
 
 export function startGatewayHttpServer(config: GatewayConfig) {
   const server = http.createServer(async (req, res) => {
@@ -36,10 +37,63 @@ export function startGatewayHttpServer(config: GatewayConfig) {
         return;
       }
 
-      if (req.method === 'POST' && req.url === '/message') {
+      if (req.method === 'GET' && req.url === '/capabilities') {
+        if (!routerAdminEnabled()) {
+          sendJson(res, 404, { ok: false, error: 'not found' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, capabilities: capabilityRegistry.getAll() });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/capabilities') {
+        if (!routerAdminEnabled()) {
+          sendJson(res, 404, { ok: false, error: 'not found' });
+          return;
+        }
         const body = await readJson(req);
-        const message = normalizeHttpMessage(body);
-        const outbound = await handleChannelMessage(message, config);
+        const capability = capabilityFromBody(body);
+        sendJson(res, 200, { ok: true, capability: capabilityRegistry.upsert(capability) });
+        return;
+      }
+
+      if (req.method === 'DELETE' && req.url?.startsWith('/capabilities/')) {
+        if (!routerAdminEnabled()) {
+          sendJson(res, 404, { ok: false, error: 'not found' });
+          return;
+        }
+        const capabilityId = decodeURIComponent(req.url.slice('/capabilities/'.length));
+        sendJson(res, 200, { ok: true, deleted: capabilityRegistry.delete(capabilityId) });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/router/eval') {
+        if (!routerAdminEnabled()) {
+          sendJson(res, 404, { ok: false, error: 'not found' });
+          return;
+        }
+        const body = await readJson(req);
+        const query = String(body.query || body.text || '');
+        const expectedCapability = typeof body.expectedCapability === 'string' ? body.expectedCapability : undefined;
+        const result = routeLightweightCapability({
+          source: 'router-eval',
+          userId: 'debug',
+          sessionId: 'router-eval:debug',
+          content: query,
+        }, Number(body.topK || 5));
+        sendJson(res, 200, {
+          ok: true,
+          result,
+          expectedCapability,
+          matched: expectedCapability ? result.capabilities.some(capability => capability.capabilityId === expectedCapability) : undefined,
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url?.startsWith('/message')) {
+        const body = await readJson(req);
+        const message = normalizeHttpMessage(body, routeTraceDebug(req, body));
+        const outbound = await processRequest(toUnifiedRequest(message), config, { message });
         for (const item of outbound) {
           await sendOutbound(item, config);
         }
@@ -54,7 +108,7 @@ export function startGatewayHttpServer(config: GatewayConfig) {
           sendJson(res, 200, { ok: true, ignored: true });
           return;
         }
-        const outbound = await handleChannelMessage(message, config);
+        const outbound = await processRequest(toUnifiedRequest(message), config, { message });
         for (const item of outbound) {
           await sendOutbound(item, config);
         }
@@ -76,7 +130,37 @@ export function startGatewayHttpServer(config: GatewayConfig) {
   return server;
 }
 
-function normalizeHttpMessage(body: Record<string, unknown>): ChannelMessage {
+function routerAdminEnabled(): boolean {
+  return process.env.OMNI_ROUTER_ADMIN === '1';
+}
+
+function capabilityFromBody(body: Record<string, unknown>): CapabilityDefinition {
+  const taskTypes = Array.isArray(body.taskTypes) ? body.taskTypes.map(String) : [];
+  const examples = Array.isArray(body.examples) ? body.examples.map(String) : [];
+  const safetyLevel = body.safetyLevel === 'medium' || body.safetyLevel === 'high' ? body.safetyLevel : 'low';
+  return {
+    id: String(body.id || '').trim(),
+    name: String(body.name || body.id || '').trim(),
+    description: String(body.description || '').trim(),
+    category: String(body.category || 'custom').trim(),
+    taskTypes: taskTypes as CapabilityDefinition['taskTypes'],
+    examples,
+    requiredTools: Array.isArray(body.requiredTools) ? body.requiredTools.map(String) : undefined,
+    safetyLevel,
+    standalone: body.standalone !== false,
+    inputHints: Array.isArray(body.inputHints) ? body.inputHints.map(String) : undefined,
+    outputHints: Array.isArray(body.outputHints) ? body.outputHints.map(String) : undefined,
+  };
+}
+
+function routeTraceDebug(req: http.IncomingMessage, body: Record<string, unknown>): boolean {
+  if (body.routeTraceDebug === true) return true;
+  if (req.headers['x-omni-route-trace'] === '1') return true;
+  const url = new URL(req.url || '/', 'http://localhost');
+  return url.searchParams.get('trace') === '1';
+}
+
+function normalizeHttpMessage(body: Record<string, unknown>, routeTraceDebug = false): ChannelMessage {
   return {
     channel: String(body.channel || 'http'),
     accountId: String(body.accountId || 'default'),
@@ -87,6 +171,7 @@ function normalizeHttpMessage(body: Record<string, unknown>): ChannelMessage {
     text: String(body.text || ''),
     messageType: body.messageType === 'group' || body.messageType === 'guild' || body.messageType === 'system' ? body.messageType : 'dm',
     receivedAt: new Date().toISOString(),
+    routeTraceDebug,
   };
 }
 

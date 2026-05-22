@@ -46,11 +46,13 @@ prompt instead of executing commands.
 
 ## Gateway Routing Pipeline
 
-HTTP, QQBot, and other channel adapters normalize inbound messages to `ChannelMessage`; Gateway now converts each message to a stable `UnifiedRequest` before routing. The initial `sessionId` is derived from `channel:accountId:conversationId:senderId`, so repeated messages from the same source/user/thread share routing context without removing the legacy `ChannelMessage` contract.
+HTTP, QQBot, and other channel adapters normalize inbound messages to `ChannelMessage`; Gateway then enters the shared `processRequest(UnifiedRequest, config, context)` path before command, semantic, or legacy routing. The initial `sessionId` is derived from `channel:accountId:conversationId:senderId`, so repeated messages from the same source/user/thread share routing context without removing the legacy `ChannelMessage` compatibility wrapper.
 
-Rule Router is intentionally narrow: it handles deterministic slash commands (`/pair`, `/help`, `/status`, `/goal`, `/task`, `/pr`, `/reset`), empty messages, oversized messages, and obvious system-control injection attempts. Business natural language such as repo analysis, PR reports, schedules, and goals must continue into semantic/capability routing or legacy fallback instead of being added as rule keywords.
+Rule Router is intentionally narrow: it handles deterministic slash commands (`/pair`, `/help`, `/status`, `/goal`, `/task`, `/pr`, `/reset`), mention/wake control, empty messages, oversized messages, and obvious system-control injection attempts. `/reset` clears the current sender-scoped semantic routing context without deleting durable goals or tasks. Business natural language such as repo analysis, PR reports, schedules, and goals must continue into semantic/capability routing or legacy fallback instead of being added as rule keywords.
 
-Messages that continue past Rule Router are evaluated by deterministic/lightweight Capability routing for internal decision evidence. Capability candidates use stable capability ids such as `repository_analysis`, `architecture_modeling`, `report_generation`, `schedule_management`, `goal_management`, and `pr_management`. When candidate confidence is low, top scores are close, multiple capabilities are likely, or the request depends on prior context, Gateway can call the LLM Router arbitration layer. That layer receives the user request, Top-K candidates, registered capability definitions, a session summary, and a compressed recent-turn history summary scoped by `channel:accountId:conversationId:senderId`. It only uses history to resolve references or continue a prior objective, then returns schema-validated capability ids or a clarification request. Invalid JSON, unregistered capabilities, LLM failures, and disabled semantic routing fall back to the previous router result and then the legacy LLM/OmniRouter path; the LLM Router never selects Agents or taskTypes directly and cannot use history to bypass safety, approval, permission, or Registry boundaries.
+Messages that continue past Rule Router are evaluated by the Runtime Orchestrator's reusable `routeRuntimeCapabilities()` step, which runs deterministic/lightweight Capability routing before the legacy regex/LLM orchestrator fallback. High-confidence single-capability results can become a `capability_plan` directly; low-confidence, close-scored, multi-capability, or context-dependent requests can call the LLM Router arbitration layer. That layer receives the user request, Top-K candidates, registered capability definitions, a session summary, and a compressed recent-turn history summary scoped by `channel:accountId:conversationId:senderId`. It only uses history to resolve references or continue a prior objective, then returns schema-validated capability ids or a clarification request. Invalid JSON, unregistered capabilities, LLM failures, and disabled semantic routing fall back to the previous router result and then the legacy LLM/OmniRouter path; the LLM Router never selects Agents or taskTypes directly and cannot use history to bypass safety, approval, permission, or Registry boundaries.
+
+When Gateway receives a `capability_plan` with executable steps, it dispatches the plan through `dispatchCapabilityPlan()`, creating RuntimeTasks for each step in dependency order. Replies include the plan summary plus per-step `taskId`, `taskType`, dispatch status, and failure/approval reason. Existing RuntimeTask safety still applies: code and other high-risk steps can return `waiting_user_confirm` instead of executing immediately.
 
 ## Natural Language Runtime Intents
 
@@ -94,10 +96,17 @@ current and previous messages in the same channel conversation, and active Goal
 scope so continuation requests such as “顺便也看看 eventbus” can reuse the current
 topic. The gateway logs a privacy-preserving orchestrator trace with an input hash,
 decision kind/confidence, per-layer route trace, candidate capabilities when available,
-and fallback reason; it does not log the raw channel message in the trace payload. The LLM
+and fallback reason; it does not log the raw channel message in the trace payload. The
+trace is hidden from normal user replies. HTTP `/message` can expose the same sanitized
+trace only when explicitly requested with `?trace=1`, `x-omni-route-trace: 1`, or
+`routeTraceDebug: true` in the JSON body. Debug-only router administration endpoints are
+disabled unless `OMNI_ROUTER_ADMIN=1`: `GET /capabilities` lists registered capabilities,
+`POST /capabilities` upserts a capability, `DELETE /capabilities/:id` removes one, and
+`POST /router/eval` returns Top-K lightweight routing candidates plus whether an optional
+`expectedCapability` matched. These endpoints are intended for local evaluation/tuning and
+must not be exposed without external access controls. The LLM
 orchestrator may return a single executable runtime task or a multi-capability
-plan preview with `requiredCapabilities` and `executionMode` for later Planner
-execution. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable that semantic decision
+plan that Gateway dispatches through RuntimeTask steps. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable that semantic decision
 pass. If the LLM orchestrator is disabled, unavailable, or does not return a
 supported runtime task, the message falls back to OmniRouterAgent for synchronous
 response.

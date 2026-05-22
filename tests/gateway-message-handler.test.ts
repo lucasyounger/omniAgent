@@ -23,6 +23,13 @@ async function loadHandler() {
   return import('../src/gateway/message-handler');
 }
 
+async function loadGateway() {
+  vi.resetModules();
+  process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+  return import('../src/gateway/gateway');
+}
+
 function baseConfig(): GatewayConfig {
   return {
     port: 4120,
@@ -61,6 +68,31 @@ afterEach(async () => {
 });
 
 describe('Gateway message handler', () => {
+  it('processes UnifiedRequest through the unified gateway entrypoint', async () => {
+    const { processRequest } = await loadGateway();
+    const msg = message('/status', 'trusted');
+    const replies = await processRequest({
+      source: msg.channel,
+      userId: msg.senderId,
+      sessionId: 'http:local:conv-1:trusted',
+      content: msg.text,
+      metadata: {
+        accountId: msg.accountId,
+        conversationId: msg.conversationId,
+        senderDisplayName: msg.senderDisplayName,
+        messageId: msg.messageId,
+        messageType: msg.messageType,
+        receivedAt: msg.receivedAt,
+      },
+      attachments: [],
+    }, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    }, { message: msg });
+
+    expect(replies[0].text).toContain('Omni Gateway 在线');
+  });
+
   it('rejects unpaired senders', async () => {
     const { handleChannelMessage } = await loadHandler();
     const replies = await handleChannelMessage(message('/status'), baseConfig());
@@ -85,6 +117,32 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
     expect(replies[0].text).toContain('/task');
+  });
+
+  it('resets sender-scoped semantic context with /reset', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { updateConversationSemanticState, getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('/reset', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('已重置当前会话上下文');
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'trusted' })).resolves.toBeUndefined();
   });
 
   it('validates task command format before execution', async () => {
@@ -231,6 +289,40 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
 
+  it('routes migrated repository architecture report semantics without LLM arbitration', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('帮我分析仓库并生成架构报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, architecture_modeling, report_generation');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+  });
+
+  it('routes migrated PR report semantics without LLM arbitration', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message("Summarize this week's PRs and generate a report.", 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('Capabilities: pr_management, report_generation');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+  });
+
   it('uses LLM capability arbitration for ambiguous multi-capability requests', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -255,6 +347,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('已识别为复合能力请求');
     expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
     expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.claude_code_task');
+    expect(replies[0].text).toContain('Dispatch Steps:');
   });
 
   it('uses compressed history for referent capability arbitration', async () => {
@@ -545,7 +638,7 @@ describe('Gateway message handler', () => {
     expect(jobs).toHaveLength(0);
   });
 
-  it('returns a capability plan preview for multi-capability LLM decisions', async () => {
+  it('dispatches capability plans returned by legacy LLM decisions', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -567,11 +660,13 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(replies[0].text).toContain('已识别为复合能力请求');
     expect(replies[0].text).toContain('Execution Mode: composite');
     expect(replies[0].text).toContain('Capabilities: goal_management, knowledge_query, pr_management');
     expect(replies[0].text).toContain('Plan Steps: step-1:goal_management→goal.create');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+    expect(replies[0].text).toContain('step-1:goal_management');
   });
 
   it('falls back to OmniRouter when LLM orchestrator returns invalid output', async () => {
@@ -621,7 +716,7 @@ describe('Gateway message handler', () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const { handleChannelMessage } = await loadHandler();
 
-    await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+    const replies = await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
@@ -643,6 +738,26 @@ describe('Gateway message handler', () => {
       },
     });
     expect(JSON.stringify(traceCall?.[1])).not.toContain('我想长期优化 memory 模块');
+    expect(replies[0].text).not.toContain('Route Trace:');
+    expect(replies[0].text).not.toContain('inputHash');
+  });
+
+  it('returns route trace only when debug metadata is enabled', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const debugMessage = {
+      ...message('我想长期优化 memory 模块', 'trusted'),
+      routeTraceDebug: true,
+    };
+
+    const replies = await handleChannelMessage(debugMessage, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('Route Trace:');
+    expect(replies[0].text).toContain('"inputHash"');
+    expect(replies[0].text).toContain('"routeTrace"');
+    expect(replies[0].text).not.toContain('我想长期优化 memory 模块');
   });
 
   it('creates and auto-runs long-running goals from natural language', async () => {

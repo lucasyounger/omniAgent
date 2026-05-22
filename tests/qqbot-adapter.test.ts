@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { toUnifiedRequest } from '../src/gateway/types';
 import {
   getQQBotAdapterStatus,
   normalizeQQBotC2CMessage,
@@ -57,6 +58,33 @@ describe('QQBot adapter', () => {
       text: '帮我定时回复：你好',
       messageType: 'group',
       receivedAt: '2026-05-13T08:01:00.000Z',
+    });
+  });
+
+  it('preserves QQBot channel metadata when converted to UnifiedRequest', () => {
+    const message = normalizeQQBotC2CMessage(
+      {
+        id: 'msg-unified',
+        content: '/status',
+        author: {
+          user_openid: 'user-openid',
+        },
+      },
+      '2026-05-13T08:02:00.000Z',
+    );
+
+    expect(message).toBeDefined();
+    const request = toUnifiedRequest(message!);
+    expect(request).toMatchObject({
+      source: 'qqbot',
+      userId: 'user-openid',
+      sessionId: 'qqbot:default:user-openid:user-openid',
+      content: '/status',
+      metadata: {
+        conversationId: 'user-openid',
+        messageId: 'msg-unified',
+        messageType: 'dm',
+      },
     });
   });
 

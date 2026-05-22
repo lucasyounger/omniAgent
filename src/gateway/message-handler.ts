@@ -12,18 +12,17 @@ import { listGoals } from '../mastra/runtime/goal';
 import { traceOrchestratorDecision, type RouterTrace } from '../mastra/runtime/decision-trace';
 import { createCapabilityPlan } from '../mastra/runtime/capability-planner';
 import {
-  routeDeterministicCapability,
-  routeLightweightCapability,
   routeLlmCapability,
   shouldUseLlmArbitration,
   type LlmRouterClient,
   type RouterResult,
 } from '../mastra/runtime/capabilities';
-import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
-import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
+import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, routeRuntimeCapabilities, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
+import { dispatchCapabilityPlan, dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import {
+  clearConversationSemanticState,
   appendConversationTurnSummary,
   formatHistorySummary,
   getConversationSemanticState,
@@ -43,7 +42,8 @@ import { routeRule } from './rule-router';
 const ROUTER_TIMEOUT_MS = Number(process.env.OMNI_GATEWAY_ROUTER_TIMEOUT_MS || 60_000);
 
 export async function handleChannelMessage(message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
-  return handleUnifiedRequest(toUnifiedRequest(message), message, config);
+  const { processChannelMessage } = await import('./gateway');
+  return processChannelMessage(message, config);
 }
 
 export async function handleUnifiedRequest(request: UnifiedRequest, message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
@@ -82,64 +82,87 @@ export async function handleUnifiedRequest(request: UnifiedRequest, message: Cha
     if (rule.command === '/pr') {
       return [reply(message, await handlePrCommand(rule.args ?? ''))];
     }
+
+    if (rule.command === '/reset') {
+      await clearConversationSemanticState({
+        channel: message.channel,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+      });
+      return [reply(message, '已重置当前会话上下文。')];
+    }
   }
 
-  const orchestratorDecision = await resolveOrchestratorDecision(message, config);
+  const debugTrace = request.metadata?.routeTraceDebug === true;
+  const orchestratorResult = await resolveOrchestratorDecision(message, config);
+  const orchestratorDecision = orchestratorResult.decision;
   if (orchestratorDecision.kind === 'status') {
-    return [reply(message, orchestratorDecision.message)];
+    return [reply(message, withDebugTrace(orchestratorDecision.message, orchestratorResult.trace, debugTrace))];
   }
 
   if (orchestratorDecision.kind === 'clarify') {
-    return [reply(message, orchestratorDecision.question)];
+    return [reply(message, withDebugTrace(orchestratorDecision.question, orchestratorResult.trace, debugTrace))];
   }
 
   if (orchestratorDecision.kind === 'capability_plan') {
-    return [reply(message, formatCapabilityPlanDecision(orchestratorDecision))];
+    return [reply(message, withDebugTrace(await handleCapabilityPlanDecision(orchestratorDecision), orchestratorResult.trace, debugTrace))];
   }
 
   if (orchestratorDecision.kind === 'runtime_task') {
-    return [reply(message, await handleRuntimeTaskDecision(message, orchestratorDecision))];
+    return [reply(message, withDebugTrace(await handleRuntimeTaskDecision(message, orchestratorDecision), orchestratorResult.trace, debugTrace))];
   }
 
   const response = await callOmniRouter(message, config);
-  return [reply(message, response)];
+  return [reply(message, withDebugTrace(response, orchestratorResult.trace, debugTrace))];
 }
 
-async function resolveOrchestratorDecision(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision> {
-  const decision = orchestrateChannelMessage(message);
-  if (decision.kind !== 'passthrough') {
+type OrchestratorDecisionResult = {
+  decision: OrchestratorDecision;
+  trace: ReturnType<typeof traceOrchestratorDecision>;
+};
+
+async function resolveOrchestratorDecision(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecisionResult> {
+  const passthroughDecision = orchestrateChannelMessage(message);
+  const capabilityDecision = await callLlmCapabilityRouter(message, config, passthroughDecision.kind === 'passthrough'
+    ? passthroughDecision
+    : { kind: 'passthrough', confidence: passthroughDecision.confidence, reason: `legacy_candidate:${passthroughDecision.kind}` });
+  if (capabilityDecision) {
+    const trace = traceOrchestratorDecision({
+      messageText: message.text,
+      decision: capabilityDecision.decision,
+      routeTrace: capabilityDecision.routeTrace,
+    });
+    console.info('[gateway] orchestrator route source=capability_router');
+    console.info('[gateway] orchestrator trace', trace);
+    return { decision: capabilityDecision.decision, trace };
+  }
+
+  if (passthroughDecision.kind !== 'passthrough') {
+    const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision });
     console.info('[gateway] orchestrator route source=regex_match');
-    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision }));
-    return decision;
+    console.info('[gateway] orchestrator trace', trace);
+    return { decision: passthroughDecision, trace };
   }
 
   if (process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR === '0') {
+    const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision, fallbackReason: 'llm_disabled' });
     console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_disabled');
-    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision, fallbackReason: 'llm_disabled' }));
-    return decision;
-  }
-
-  const arbitration = await callLlmCapabilityRouter(message, config, decision);
-  if (arbitration) {
-    console.info('[gateway] orchestrator route source=llm_capability_router');
-    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({
-      messageText: message.text,
-      decision: arbitration.decision,
-      routeTrace: arbitration.routeTrace,
-    }));
-    return arbitration.decision;
+    console.info('[gateway] orchestrator trace', trace);
+    return { decision: passthroughDecision, trace };
   }
 
   const modelDecision = await callLlmOrchestrator(message, config);
   if (modelDecision) {
+    const trace = traceOrchestratorDecision({ messageText: message.text, decision: modelDecision });
     console.info('[gateway] orchestrator route source=llm_orchestrator');
-    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision: modelDecision }));
-    return modelDecision;
+    console.info('[gateway] orchestrator trace', trace);
+    return { decision: modelDecision, trace };
   }
 
+  const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision, fallbackReason: 'llm_unavailable' });
   console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_unavailable');
-  console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision, fallbackReason: 'llm_unavailable' }));
-  return decision;
+  console.info('[gateway] orchestrator trace', trace);
+  return { decision: passthroughDecision, trace };
 }
 
 
@@ -148,33 +171,30 @@ async function callLlmCapabilityRouter(
   config: GatewayConfig,
   previousDecision: Extract<OrchestratorDecision, { kind: 'passthrough' }>,
 ): Promise<{ decision: OrchestratorDecision; routeTrace: RouterTrace[] } | undefined> {
-  const request = toUnifiedRequest(message);
-  const deterministic = routeDeterministicCapability(request);
-  const lightweight = routeLightweightCapability(request, 5);
-  const candidates = mergeCapabilitySelections(deterministic.capabilities, lightweight.capabilities);
-  const previous: RouterResult = {
-    capabilities: candidates,
-    confidence: candidates[0]?.score ?? 0,
-    source: 'lightweight',
-    reason: previousDecision.reason,
-  };
-  const routeTrace: RouterTrace[] = [
-    {
-      layer: 'deterministic',
-      candidates: deterministic.capabilities,
-      confidence: deterministic.confidence,
-      reason: deterministic.reason,
-    },
-    {
-      layer: 'lightweight',
-      candidates: lightweight.capabilities,
-      confidence: lightweight.confidence,
-      reason: lightweight.reason,
-    },
-  ];
+  const routing = routeRuntimeCapabilities(toUnifiedRequest(message), previousDecision.reason);
+  const { request, candidates, previous, routeTrace, deterministic, lightweight } = routing;
 
-  if (!shouldUseLlmArbitration(request, candidates)) {
+  const migratedBusinessResult = migratedBusinessSemanticResult(request.content, candidates, routing);
+  if (migratedBusinessResult) {
+    const decision = capabilityRouterResultToDecision(migratedBusinessResult, message);
+    return { decision, routeTrace };
+  }
+
+  if (previousDecision.reason.startsWith('legacy_candidate:') && candidates.some(candidate => isLegacyRuntimeCapability(candidate.capabilityId))) {
     return undefined;
+  }
+
+  if (!shouldUseLlmArbitration(request, candidates) && !hasMultiCapabilityIntent(request.content, candidates)) {
+    if (!candidates.length || !shouldUseCapabilityDirectly(candidates)) return undefined;
+    const direct: RouterResult = {
+      capabilities: candidates,
+      confidence: candidates[0]?.score ?? 0,
+      params: deterministic.params ?? lightweight.params,
+      source: deterministic.capabilities.length ? 'deterministic' : 'lightweight',
+      reason: deterministic.capabilities.length ? deterministic.reason : lightweight.reason,
+    };
+    const decision = capabilityRouterResultToDecision(direct, message);
+    return { decision, routeTrace };
   }
 
   const semantic = await getUpdatedSemanticState(message);
@@ -328,18 +348,63 @@ function formatSessionSummary(state: ConversationSemanticState | undefined): str
   ].join('; ');
 }
 
-function mergeCapabilitySelections(
-  first: Array<{ capabilityId: string; score: number; reason?: string }>,
-  second: Array<{ capabilityId: string; score: number; reason?: string }>,
-) {
-  return [...first, ...second]
-    .reduce<Array<{ capabilityId: string; score: number; reason?: string }>>((items, selection) => {
-      const existing = items.find(item => item.capabilityId === selection.capabilityId);
-      if (!existing) return [...items, selection];
-      if (selection.score > existing.score) Object.assign(existing, selection);
-      return items;
-    }, [])
-    .sort((left, right) => right.score - left.score || left.capabilityId.localeCompare(right.capabilityId));
+function migratedBusinessSemanticResult(
+  text: string,
+  candidates: Array<{ capabilityId: string; score: number; reason?: string }>,
+  routing: ReturnType<typeof routeRuntimeCapabilities>,
+): RouterResult | undefined {
+  const migratedCapabilities = migratedBusinessCapabilities(text, candidates);
+  if (!migratedCapabilities.length) return undefined;
+  const candidateMap = new Map(candidates.map(candidate => [candidate.capabilityId, candidate]));
+  return {
+    capabilities: migratedCapabilities.map(capabilityId => candidateMap.get(capabilityId) ?? {
+      capabilityId,
+      score: 0.88,
+      reason: 'migrated business semantic pattern',
+    }),
+    confidence: Math.max(0.88, candidates[0]?.score ?? 0),
+    params: routing.deterministic.params ?? routing.lightweight.params,
+    source: routing.deterministic.capabilities.length ? 'deterministic' : 'lightweight',
+    reason: 'Migrated business semantic matched Capability Routing.',
+  };
+}
+
+function migratedBusinessCapabilities(text: string, candidates: Array<{ capabilityId: string }>): string[] {
+  const candidateIds = new Set(candidates.map(candidate => candidate.capabilityId));
+  const normalized = text.toLowerCase();
+  const hasRepoAnalysis = candidateIds.has('repository_analysis') && /(仓库|代码|repo|repository|codebase|code)/i.test(text) && /(分析|检查|review|analy[sz]e)/i.test(text);
+  const hasArchitecture = candidateIds.has('architecture_modeling') && /(架构|architecture|模块依赖|execution flow)/i.test(text);
+  const hasReport = candidateIds.has('report_generation') && /(报告|周报|汇总|总结|report|summary|summarize)/i.test(text);
+  const hasDocument = candidateIds.has('document_generation') && /(文档|docs?|documentation)/i.test(text);
+  const hasPrReport = /\bprs?\b|pull request|切片/i.test(normalized) && /(汇总|总结|周报|report|summary|summarize)/i.test(text);
+
+  if (hasRepoAnalysis && hasArchitecture && (hasReport || hasDocument)) {
+    return ['repository_analysis', 'architecture_modeling', hasDocument ? 'document_generation' : 'report_generation'];
+  }
+  if (hasPrReport) {
+    return ['pr_management', 'report_generation'];
+  }
+  if (hasDocument && hasReport) {
+    return ['document_generation', 'report_generation'];
+  }
+  return [];
+}
+
+function shouldUseCapabilityDirectly(candidates: Array<{ capabilityId: string; score: number }>): boolean {
+  const top = candidates[0];
+  return Boolean(top && top.score >= 0.85 && !isLegacyRuntimeCapability(top.capabilityId));
+}
+
+function hasMultiCapabilityIntent(text: string, candidates: Array<{ capabilityId: string; score: number }>): boolean {
+  if (candidates.filter(candidate => candidate.score >= 0.55).length > 1) return true;
+  return /(?:\band\b|\bthen\b|同时|并且|然后|再|顺便|以及|生成.*报告|检查.*报告|分析.*报告|汇总.*报告)/i.test(text);
+}
+
+function isLegacyRuntimeCapability(capabilityId: string): boolean {
+  return capabilityId === 'schedule_management'
+    || capabilityId === 'goal_management'
+    || capabilityId === 'message_delivery'
+    || capabilityId === 'pr_management';
 }
 
 async function callLlmOrchestrator(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision | undefined> {
@@ -418,9 +483,37 @@ function formatActiveGoalForPrompt(goal: Awaited<ReturnType<typeof listGoals>>[n
   return parts.join(' | ');
 }
 
+async function handleCapabilityPlanDecision(decision: Extract<OrchestratorDecision, { kind: 'capability_plan' }>): Promise<string> {
+  if (!decision.plan) {
+    return [
+      formatCapabilityPlanDecision(decision),
+      'Dispatch: skipped',
+      'Reason: no executable capability plan was produced.',
+    ].join('\n');
+  }
+
+  const dispatch = await dispatchCapabilityPlan(decision.plan);
+  const stepLines = dispatch.steps.map(step => {
+    const parts = [
+      `${step.stepId}:${step.capabilityId}`,
+      step.taskType ? `taskType=${step.taskType}` : undefined,
+      step.taskId ? `taskId=${step.taskId}` : undefined,
+      `status=${step.status}`,
+      step.reason ? `reason=${step.reason}` : undefined,
+    ];
+    return `- ${parts.filter((part): part is string => Boolean(part)).join(' | ')}`;
+  });
+
+  return [
+    formatCapabilityPlanDecision(decision),
+    'Dispatch Steps:',
+    ...stepLines,
+  ].join('\n');
+}
+
 function formatCapabilityPlanDecision(decision: Extract<OrchestratorDecision, { kind: 'capability_plan' }>): string {
   return [
-    '已识别为复合能力请求，后续将交给 Planner 编排执行。',
+    '已识别为复合能力请求，正在交给 Planner 编排并通过 RuntimeTask dispatch 执行。',
     `Execution Mode: ${decision.executionMode}`,
     `Capabilities: ${decision.requiredCapabilities.join(', ')}`,
     decision.plan ? `Plan Steps: ${decision.plan.steps.map(step => `${step.id}:${step.capabilityId}${step.taskType ? `→${step.taskType}` : ''}`).join(', ')}` : undefined,
@@ -859,6 +952,16 @@ function helpText() {
     '/pair <token> \u914d\u5bf9\u5f53\u524d\u4f1a\u8bdd',
     '',
     '\u81ea\u7136\u8bed\u8a00\u53ef\u521b\u5efa\u5b9a\u65f6\u63d0\u9192\u3001AI \u65e5\u62a5\u548c\u901a\u77e5\uff1b\u5176\u4ed6\u6d88\u606f\u4f1a\u8f6c\u53d1\u7ed9 OmniRouterAgent \u5e76\u540c\u6b65\u56de\u590d\u3002',
+  ].join('\n');
+}
+
+function withDebugTrace(text: string, trace: ReturnType<typeof traceOrchestratorDecision>, enabled: boolean): string {
+  if (!enabled) return text;
+  return [
+    text,
+    '',
+    'Route Trace:',
+    JSON.stringify(trace, undefined, 2),
   ].join('\n');
 }
 

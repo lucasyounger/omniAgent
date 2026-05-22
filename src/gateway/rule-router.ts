@@ -7,9 +7,10 @@ export type RuleRouterResult =
 
 const MAX_MESSAGE_LENGTH = 20_000;
 const COMMANDS = new Set(['/help', '/status', '/goal', '/task', '/pr', '/pair', '/reset']);
+const WAKE_PREFIX = /^@(?:omniagent|omni|bot)\b[\s,:：，-]*/i;
 
 export function routeRule(request: UnifiedRequest): RuleRouterResult {
-  const text = request.content.trim();
+  const text = normalizeWakeText(request.content.trim(), request.metadata);
 
   if (!text) {
     return { kind: 'blocked', reason: 'empty_message' };
@@ -37,6 +38,13 @@ export function routeRule(request: UnifiedRequest): RuleRouterResult {
   }
 
   return { kind: 'continue' };
+}
+
+function normalizeWakeText(text: string, metadata?: Record<string, unknown>): string {
+  if (metadata?.mentionedBot === true || metadata?.wake === true) {
+    return text.replace(WAKE_PREFIX, '').trim();
+  }
+  return text;
 }
 
 function looksLikeSystemControlInjection(text: string): boolean {

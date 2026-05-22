@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import goldenRequests from './fixtures/orchestrator/golden-requests.json';
 import { traceOrchestratorDecision } from '../src/mastra/runtime/decision-trace';
-import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput } from '../src/mastra/runtime/orchestrator';
+import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, routeRuntimeCapabilities } from '../src/mastra/runtime/orchestrator';
 import type { OrchestratorDecision } from '../src/mastra/runtime/orchestrator';
 import type { ChannelMessage } from '../src/gateway/types';
 
@@ -51,6 +51,16 @@ describe('Runtime Orchestrator', () => {
     }
   });
 
+
+  it('exposes runtime capability routing with trace for gateway reuse', () => {
+    const result = routeRuntimeCapabilities(message('分析仓库并生成架构报告'), 'test previous');
+
+    expect(result.previous.reason).toBe('test previous');
+    expect(result.routeTrace.map(trace => trace.layer)).toEqual(['deterministic', 'lightweight']);
+    expect(result.candidates.map(candidate => candidate.capabilityId)).toEqual(
+      expect.arrayContaining(['repository_analysis', 'report_generation']),
+    );
+  });
 
   it('parses one-time channel reminders into schedule.create runtime tasks', () => {
     const decision = orchestrateChannelMessage(message('帮我定一个定时任务，今天21点08分，OmniAgent给我回复一句：你好'));

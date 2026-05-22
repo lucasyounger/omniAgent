@@ -52,6 +52,7 @@ export type ChannelMessage = {
   text: string;
   messageType: ChannelMessageType;
   receivedAt: string;
+  routeTraceDebug?: boolean;
 };
 
 export type OutboundMessage = {
@@ -99,6 +100,7 @@ export function toUnifiedRequest(message: ChannelMessage): UnifiedRequest {
       messageType: message.messageType,
       receivedAt: message.receivedAt,
       senderDisplayName: message.senderDisplayName,
+      routeTraceDebug: message.routeTraceDebug,
     },
   };
 }

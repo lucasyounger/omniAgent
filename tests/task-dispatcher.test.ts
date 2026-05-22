@@ -901,6 +901,7 @@ describe('Task Dispatcher', () => {
       capabilityId: 'repository_analysis',
       taskType: 'code.claude_code_task',
       status: 'failed',
+      taskId: expect.any(String),
     });
     expect(result.steps[0].reason).toContain('workspacePath');
     expect(result.steps).toHaveLength(1);

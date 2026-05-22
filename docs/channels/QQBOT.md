@@ -20,8 +20,10 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 - `GROUP_AT_MESSAGE_CREATE` is normalized as a `group` channel message.
   - Use `group_openid` as `conversationId`.
   - Strip the bot mention from inbound text before routing.
-- Immediate replies from `handleChannelMessage` are sent through
-  `sendOutbound`.
+- Immediate replies from the shared `processRequest(UnifiedRequest, config, context)` gateway pipeline are sent through
+  `sendOutbound`. The adapter still normalizes QQ events to `ChannelMessage`, then
+  converts them to `UnifiedRequest` at the Gateway boundary so QQBot, HTTP, and
+  OneBot follow the same command/capability/legacy routing path.
 - Deferred replies and scheduled channel messages flow through Team Runtime
   inbox messages addressed to `channel-gateway`, then the delivery worker sends
   them to QQ Bot.

@@ -145,8 +145,10 @@ approval linkage.
   serial chains for repo analysis → architecture/report documentation and PR
   management → reporting → message delivery.
 - Capability plan dispatch creates RuntimeTasks from plan steps and reuses the
-  existing dispatcher handlers. This keeps direct task dispatch behavior stable
-  while providing a minimal Goal → Capability → Plan → Task closed loop.
+  existing dispatcher handlers. Dispatcher exceptions are captured as failed
+  step results so Gateway can report the failed `stepId`, task id, task type, and
+  reason without aborting the channel response. This keeps direct task dispatch
+  behavior stable while providing a minimal Goal → Capability → Plan → Task closed loop.
 
 - LLM Router provides schema-validated arbitration after deterministic/lightweight
   capability routing when candidates are low-confidence, close-scored,
@@ -164,6 +166,13 @@ approval linkage.
   multi-step execution. Workflow Run status is tracked as `pending`, `running`,
   `succeeded`, `failed`, `paused`, or `canceled`; `paused` currently means the
   run reached an approval/user-confirmation boundary.
+
+- Debug-only router administration can be enabled with `OMNI_ROUTER_ADMIN=1` on the
+  HTTP gateway. It exposes `GET /capabilities`, `POST /capabilities`,
+  `DELETE /capabilities/:id`, and `POST /router/eval` for local capability tuning and
+  lightweight router evaluation. Runtime capability changes update the in-process
+  Capability Registry immediately; production deployments should leave the flag off or
+  protect the endpoints externally.
 
 ## Low-Token Entry Point
 

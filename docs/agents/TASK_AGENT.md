@@ -125,9 +125,13 @@ work is delegated, executed, reported, and recovered across all agents.
   The old `dispatchRuntimeTask(taskId)` path remains unchanged; plan dispatch stops
   at the first failed, skipped, or approval-waiting step and returns step-level
   task/dispatch metadata.
-- Capability plan previews returned by the Gateway show selected capabilities and
-  concrete planned steps (`stepId:capability→taskType`) without executing the plan
-  automatically.
+- Gateway dispatches executable capability plans through `dispatchCapabilityPlan()`.
+  Replies include selected capabilities, concrete planned steps, and per-step
+  RuntimeTask/dispatch status. Migrated business semantics such as repository
+  architecture reports and PR report summaries now route directly through
+  Capability Routing + Planner + RuntimeTask dispatch before legacy LLM fallback.
+  This makes Gateway semantic routing a minimal Planner → RuntimeTask execution
+  loop while preserving approval gating for high-risk steps.
 - Embedding Router is an optional adapter over the Capability Registry. It accepts
   a pluggable `EmbeddingProvider`, caches capability description/example vectors,
   ranks Top-K candidates by cosine similarity, and falls back to lightweight routing
@@ -151,6 +155,10 @@ work is delegated, executed, reported, and recovered across all agents.
   `pending`, `running`, `succeeded`, `failed`, `paused`, and `canceled`; `paused`
   currently represents approval/user-confirmation waits, with explicit
   pause/resume/cancel controls reserved for later work.
+- Debug-only capability management is available through the HTTP gateway when
+  `OMNI_ROUTER_ADMIN=1`: list/upsert/delete capabilities and evaluate a query against
+  the lightweight router. The flag is off by default and these endpoints should remain
+  protected from production traffic.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

@@ -182,7 +182,11 @@ const CAPABILITIES: CapabilityDefinition[] = [
 ];
 
 export class CapabilityRegistry {
-  constructor(private readonly capabilities: CapabilityDefinition[] = CAPABILITIES) {}
+  private readonly capabilities: CapabilityDefinition[];
+
+  constructor(capabilities: CapabilityDefinition[] = CAPABILITIES) {
+    this.capabilities = [...capabilities];
+  }
 
   getAll(): CapabilityDefinition[] {
     return [...this.capabilities];
@@ -202,6 +206,23 @@ export class CapabilityRegistry {
 
   validateIds(ids: string[]): boolean {
     return ids.every(id => Boolean(this.getById(id)));
+  }
+
+  upsert(capability: CapabilityDefinition): CapabilityDefinition {
+    const existingIndex = this.capabilities.findIndex(item => item.id === capability.id);
+    if (existingIndex === -1) {
+      this.capabilities.push(capability);
+    } else {
+      this.capabilities[existingIndex] = capability;
+    }
+    return capability;
+  }
+
+  delete(id: string): boolean {
+    const existingIndex = this.capabilities.findIndex(capability => capability.id === id);
+    if (existingIndex === -1) return false;
+    this.capabilities.splice(existingIndex, 1);
+    return true;
   }
 }
 
