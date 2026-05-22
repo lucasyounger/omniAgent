@@ -37,7 +37,10 @@ describe('Runtime Orchestrator', () => {
     const trace = traceOrchestratorDecision({ messageText: fixture.message, decision });
 
     expect(decision.kind).toBe(fixture.expected.kind);
-    expect(trace.inputHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(trace.routeTrace.at(-1)).toMatchObject({
+      decision: fixture.expected.kind,
+      confidence: decision.confidence,
+    });
     expect(JSON.stringify(trace)).not.toContain(fixture.message);
     if (fixture.expected.confidenceAtLeast !== undefined) expect(decision.confidence).toBeGreaterThanOrEqual(fixture.expected.confidenceAtLeast);
     if (fixture.expected.confidenceAtMost !== undefined) expect(decision.confidence).toBeLessThanOrEqual(fixture.expected.confidenceAtMost);

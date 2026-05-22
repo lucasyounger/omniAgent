@@ -3,8 +3,23 @@ import type { CapabilityMatch } from './capabilities';
 import type { OrchestratorDecision } from './orchestrator';
 import type { ExecutionPlan } from './planner/execution-plan.schema';
 
+export type RouterTrace = {
+  layer: 'rule' | 'deterministic' | 'lightweight' | 'embedding' | 'llm' | 'legacy';
+  candidates?: Array<{
+    capabilityId: string;
+    score: number;
+    reason?: string;
+  }>;
+  decision?: string;
+  confidence?: number;
+  reason?: string;
+  durationMs?: number;
+};
+
 export type OrchestratorDecisionTrace = {
   inputHash: string;
+  requestSource?: string;
+  routeTrace: RouterTrace[];
   retrievedCapabilities: Array<{
     capabilityId: string;
     score: number;
@@ -35,14 +50,19 @@ export function traceOrchestratorDecision(input: {
   retrievedCapabilities?: CapabilityMatch[];
   decision: OrchestratorDecision;
   fallbackReason?: string;
+  routeTrace?: RouterTrace[];
+  requestSource?: string;
 }): OrchestratorDecisionTrace {
+  const retrievedCapabilities = (input.retrievedCapabilities ?? []).map(match => ({
+    capabilityId: match.capability.id,
+    score: match.score,
+    matchReason: match.matchReason,
+  }));
   return {
     inputHash: hashInput(input.messageText),
-    retrievedCapabilities: (input.retrievedCapabilities ?? []).map(match => ({
-      capabilityId: match.capability.id,
-      score: match.score,
-      matchReason: match.matchReason,
-    })),
+    requestSource: input.requestSource,
+    routeTrace: input.routeTrace ?? defaultRouteTrace(input.decision, retrievedCapabilities, input.fallbackReason),
+    retrievedCapabilities,
     decision: traceDecision(input.decision),
     fallbackReason: input.fallbackReason,
   };
@@ -59,6 +79,33 @@ export function tracePlannerDecision(plan: ExecutionPlan): PlannerDecisionTrace 
       dependsOn: step.dependencies ?? [],
     })),
   };
+}
+
+function defaultRouteTrace(
+  decision: OrchestratorDecision,
+  retrievedCapabilities: OrchestratorDecisionTrace['retrievedCapabilities'],
+  fallbackReason?: string,
+): RouterTrace[] {
+  const trace: RouterTrace[] = [];
+  if (retrievedCapabilities.length) {
+    trace.push({
+      layer: 'lightweight',
+      candidates: retrievedCapabilities.map(match => ({
+        capabilityId: match.capabilityId,
+        score: match.score,
+        reason: match.matchReason,
+      })),
+      confidence: retrievedCapabilities[0]?.score,
+      reason: 'retrieved capability candidates',
+    });
+  }
+  trace.push({
+    layer: decision.kind === 'passthrough' ? 'legacy' : 'llm',
+    decision: decision.kind,
+    confidence: decision.confidence,
+    reason: fallbackReason || ('reason' in decision ? decision.reason : undefined),
+  });
+  return trace;
 }
 
 function traceDecision(decision: OrchestratorDecision): OrchestratorDecisionTrace['decision'] {

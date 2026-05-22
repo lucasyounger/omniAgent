@@ -445,6 +445,13 @@ describe('Gateway message handler', () => {
     const traceCall = infoSpy.mock.calls.find(call => call[0] === '[gateway] orchestrator trace');
     expect(traceCall?.[1]).toMatchObject({
       inputHash: expect.stringMatching(/^[a-f0-9]{16}$/),
+      routeTrace: [
+        {
+          layer: 'llm',
+          decision: 'runtime_task',
+          confidence: expect.any(Number),
+        },
+      ],
       decision: {
         kind: 'runtime_task',
         confidence: expect.any(Number),

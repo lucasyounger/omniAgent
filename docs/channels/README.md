@@ -27,8 +27,9 @@ through Team Runtime.
   conversation context, active module/entities from current and previous
   messages in the same channel conversation, and active Goal scope injected before
   falling back to OmniRouterAgent. The gateway logs a privacy-preserving
-  orchestrator trace with input hash, decision metadata, candidate capabilities,
-  and fallback reason, without storing raw channel message text in the trace. The
+  orchestrator trace with input hash, decision metadata, per-layer route trace,
+  candidate capabilities, and fallback reason, without storing raw channel message
+  text in the trace. The
   LLM orchestrator can return either one executable runtime task or a capability-id
   plan preview with generated `CapabilityPlan` steps for later Planner execution. It may only return
   `schedule.create` when the message has explicit time or recurrence evidence and
