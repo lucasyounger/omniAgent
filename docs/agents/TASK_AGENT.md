@@ -128,6 +128,10 @@ work is delegated, executed, reported, and recovered across all agents.
 - Capability plan previews returned by the Gateway show selected capabilities and
   concrete planned steps (`stepId:capability→taskType`) without executing the plan
   automatically.
+- Embedding Router is an optional adapter over the Capability Registry. It accepts
+  a pluggable `EmbeddingProvider`, caches capability description/example vectors,
+  ranks Top-K candidates by cosine similarity, and falls back to lightweight routing
+  when no provider is configured or provider calls fail.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

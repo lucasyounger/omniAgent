@@ -148,6 +148,11 @@ approval linkage.
   existing dispatcher handlers. This keeps direct task dispatch behavior stable
   while providing a minimal Goal → Capability → Plan → Task closed loop.
 
+- Embedding Router defines a pluggable `EmbeddingProvider` plus local capability
+  embedding cache. It ranks capability descriptions/examples by cosine similarity
+  when a provider is supplied, but defaults and provider failures fall back to the
+  lightweight capability router; tests use fake providers and no network access.
+
 ## Low-Token Entry Point
 
 For future changes, read `docs/agents/TASK_AGENT.md` first. It is the compact

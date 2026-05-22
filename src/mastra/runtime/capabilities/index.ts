@@ -13,6 +13,12 @@ export type {
   RouterResult,
 } from './capability-router';
 export {
+  EmbeddingRouter,
+} from './embedding-router';
+export type {
+  EmbeddingProvider,
+} from './embedding-router';
+export {
   capabilityRetrieverBackendFromEnv,
   retrieveCapabilities,
 } from './capability-retriever';
