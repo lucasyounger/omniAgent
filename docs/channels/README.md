@@ -29,8 +29,8 @@ through Team Runtime.
   falling back to OmniRouterAgent. The gateway logs a privacy-preserving
   orchestrator trace with input hash, decision metadata, candidate capabilities,
   and fallback reason, without storing raw channel message text in the trace. The
-  LLM orchestrator can return either one executable runtime task or a
-  multi-capability plan preview for later Planner execution. It may only return
+  LLM orchestrator can return either one executable runtime task or a capability-id
+  plan preview with generated `CapabilityPlan` steps for later Planner execution. It may only return
   `schedule.create` when the message has explicit time or recurrence evidence and
   the JSON includes `payload.schedule`; durable goal-like requests must route to
   `goal.create` or a capability plan instead. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`

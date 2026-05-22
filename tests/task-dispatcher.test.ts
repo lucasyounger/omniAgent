@@ -857,4 +857,52 @@ describe('Task Dispatcher', () => {
       },
     });
   });
+
+  it('dispatches a single-step capability plan through existing runtime task handlers', async () => {
+    const { dispatchCapabilityPlan } = await loadRuntime();
+    const { createCapabilityPlan } = await import('../src/mastra/runtime/capability-planner');
+    const { listGoals } = await import('../src/mastra/runtime/goal');
+    const plan = createCapabilityPlan({
+      goal: 'Create goal from plan',
+      capabilities: ['goal_management'],
+      params: {
+        title: 'Plan goal',
+        objective: 'Create goal from plan',
+        type: 'topic_research',
+      },
+    });
+
+    const result = await dispatchCapabilityPlan(plan);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      capabilityId: 'goal_management',
+      taskType: 'goal.create',
+      status: 'dispatched',
+      dispatch: {
+        status: 'dispatched',
+        result: { goalId: expect.any(String) },
+      },
+    });
+    await expect(listGoals()).resolves.toHaveLength(1);
+  });
+
+  it('stops a multi-step capability plan when a step cannot execute', async () => {
+    const { dispatchCapabilityPlan } = await loadRuntime();
+    const { createCapabilityPlan } = await import('../src/mastra/runtime/capability-planner');
+    const plan = createCapabilityPlan({
+      goal: 'Analyze repo and write report',
+      capabilities: ['repository_analysis', 'architecture_modeling', 'document_generation'],
+    });
+
+    const result = await dispatchCapabilityPlan(plan);
+
+    expect(result.steps[0]).toMatchObject({
+      capabilityId: 'repository_analysis',
+      taskType: 'code.claude_code_task',
+      status: 'failed',
+    });
+    expect(result.steps[0].reason).toContain('workspacePath');
+    expect(result.steps).toHaveLength(1);
+  });
 });

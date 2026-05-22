@@ -246,7 +246,7 @@ describe('Runtime Orchestrator', () => {
       {
         "intent": "capability.plan",
         "confidence": 0.78,
-        "requiredCapabilities": ["goal.create", "knowledge.memory_index", "pr_pool.create", "goal.create"],
+        "requiredCapabilities": ["goal_management", "knowledge_query", "pr_management", "goal_management"],
         "executionMode": "long_running_goal",
         "shouldCreateGoal": true,
         "shouldPersistMemory": true,
@@ -260,7 +260,15 @@ describe('Runtime Orchestrator', () => {
     expect(decision).toMatchObject({
       kind: 'capability_plan',
       confidence: 0.78,
-      requiredCapabilities: ['goal.create', 'knowledge.memory_index', 'pr_pool.create'],
+      requiredCapabilities: ['goal_management', 'knowledge_query', 'pr_management'],
+      plan: {
+        executionMode: 'serial',
+        steps: [
+          { id: 'step-1', capabilityId: 'goal_management', taskType: 'goal.create' },
+          { id: 'step-2', capabilityId: 'knowledge_query', taskType: 'knowledge.task' },
+          { id: 'step-3', capabilityId: 'pr_management', taskType: 'pr_pool.create' },
+        ],
+      },
       executionMode: 'long_running_goal',
       shouldCreateGoal: true,
       shouldPersistMemory: true,

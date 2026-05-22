@@ -116,6 +116,18 @@ work is delegated, executed, reported, and recovered across all agents.
   `OMNI_CAPABILITY_RETRIEVER=embedding_evaluation` enables an evaluation-only
   path that still falls back to text retrieval and tags match reasons, so default
   routing remains deterministic without external vector storage.
+- Capability Planner converts selected capability ids into a `CapabilityPlan` with
+  ordered `PlanStep`s, dependencies, execution mode, and taskType bindings. Single
+  capability requests become one-step plans; known chains such as repository
+  analysis → architecture modeling → document/report generation are serialized.
+- Task Dispatcher exposes a plan dispatch path that creates one RuntimeTask per
+  plan step and dispatches each step through the existing direct task dispatcher.
+  The old `dispatchRuntimeTask(taskId)` path remains unchanged; plan dispatch stops
+  at the first failed, skipped, or approval-waiting step and returns step-level
+  task/dispatch metadata.
+- Capability plan previews returned by the Gateway show selected capabilities and
+  concrete planned steps (`stepId:capability→taskType`) without executing the plan
+  automatically.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

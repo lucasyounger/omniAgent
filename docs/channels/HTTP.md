@@ -82,6 +82,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 
 Natural long-running goal requests such as “我想长期优化 memory 模块” create a `goal.create` RuntimeTask with inferred scope/tags and `autoRun: true`, then persist the created Goal as the active conversation Goal for later continuation prompts. Goal-like durable objectives, phased work, and ongoing improvement requests are protected from being misrouted into schedules unless explicit timing is present.
 
+Capability plan decisions now use capability ids rather than taskType ids. For example, “帮我分析仓库并生成架构报告” can select `repository_analysis`, `architecture_modeling`, and `report_generation`; Gateway previews generated plan steps and taskType bindings but does not auto-execute the plan in the channel response.
+
 Runtime tasks for unsupported targets or handlers that are registered but not executable are marked failed with a visible reason instead of remaining indefinitely queued.
 
 Incomplete schedule-like messages return a clarification question. Other

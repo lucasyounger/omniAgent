@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
+import { createCapabilityPlan, type CapabilityPlan } from './capability-planner';
 import { routeDeterministicCapability, routeLightweightCapability } from './capabilities';
 import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
 
@@ -21,7 +22,7 @@ export const orchestratorModelSchema = z.object({
   objective: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
   notifyTarget: channelTargetSchema.optional(),
-  requiredCapabilities: z.array(z.enum(orchestratorTaskTypes)).optional(),
+  requiredCapabilities: z.array(z.string().min(1)).optional(),
   executionMode: z.enum(['single_step', 'composite', 'long_running_goal', 'passthrough']).optional(),
   shouldCreateGoal: z.boolean().optional(),
   shouldPersistMemory: z.boolean().optional(),
@@ -45,13 +46,14 @@ export type OrchestratorDecision =
   | {
       kind: 'capability_plan';
       confidence: number;
-      requiredCapabilities: RuntimeTaskType[];
+      requiredCapabilities: string[];
       executionMode: 'composite' | 'long_running_goal' | 'passthrough';
       shouldCreateGoal: boolean;
       shouldPersistMemory: boolean;
       objective: string;
       reason: string;
       source: Record<string, unknown>;
+      plan?: CapabilityPlan;
     }
   | {
       kind: 'status';
@@ -256,16 +258,19 @@ export function orchestratorModelOutputToDecision(output: OrchestratorModelOutpu
   }
 
   if (output.requiredCapabilities?.length) {
+    const requiredCapabilities = Array.from(new Set(output.requiredCapabilities));
+    const objective = output.objective || message.text.trim().slice(0, 120);
     return {
       kind: 'capability_plan',
       confidence: output.confidence,
-      requiredCapabilities: Array.from(new Set(output.requiredCapabilities)),
+      requiredCapabilities,
       executionMode: output.executionMode === 'long_running_goal' ? 'long_running_goal' : output.executionMode === 'passthrough' ? 'passthrough' : 'composite',
       shouldCreateGoal: output.shouldCreateGoal ?? output.executionMode === 'long_running_goal',
       shouldPersistMemory: output.shouldPersistMemory ?? false,
-      objective: output.objective || message.text.trim().slice(0, 120),
+      objective,
       reason: output.reason || 'LLM orchestrator returned a multi-capability plan.',
       source: channelSourceFromMessage(message),
+      plan: createCapabilityPlan({ goal: objective, capabilities: requiredCapabilities, params: output.payload }),
     };
   }
 

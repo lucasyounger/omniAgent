@@ -10,7 +10,8 @@ import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
 import { applyGoalFeedback, createGoalService, getGoalStatus, listGoals } from './goal';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
-import { runtimeTaskTypes } from './task-types';
+import { runtimeTaskTypes, defaultTargetAgentIdForTaskType } from './task-types';
+import type { CapabilityPlan } from './capability-planner';
 
 const dispatchCodeTaskPolicy = {
   risk: 'dangerous',
@@ -46,6 +47,81 @@ export type DispatchResult =
       targetAgentId: string;
       reason: string;
     };
+
+export type CapabilityPlanDispatchResult = {
+  plan: CapabilityPlan;
+  steps: Array<{
+    stepId: string;
+    capabilityId: string;
+    taskId?: string;
+    taskType?: string;
+    dispatch?: DispatchResult;
+    status: 'dispatched' | 'waiting_user_confirm' | 'skipped' | 'failed';
+    reason?: string;
+  }>;
+};
+
+export async function dispatchCapabilityPlan(plan: CapabilityPlan): Promise<CapabilityPlanDispatchResult> {
+  const completed = new Set<string>();
+  const results: CapabilityPlanDispatchResult['steps'] = [];
+
+  for (const step of plan.steps) {
+    const blockers = plan.dependencies[step.id] ?? [];
+    const missingBlocker = blockers.find(blocker => !completed.has(blocker));
+    if (missingBlocker) {
+      results.push({
+        stepId: step.id,
+        capabilityId: step.capabilityId,
+        taskType: step.taskType,
+        status: 'failed',
+        reason: `Dependency ${missingBlocker} did not complete.`,
+      });
+      break;
+    }
+
+    if (!step.taskType) {
+      results.push({
+        stepId: step.id,
+        capabilityId: step.capabilityId,
+        status: 'failed',
+        reason: `Capability ${step.capabilityId} has no executable task type.`,
+      });
+      break;
+    }
+
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'capability-planner',
+      targetAgentId: defaultTargetAgentIdForTaskType(step.taskType) || 'omni-router-agent',
+      objective: String(step.params.objective || plan.goal),
+      metadata: {
+        taskType: step.taskType,
+        capabilityId: step.capabilityId,
+        capabilityPlan: {
+          goal: plan.goal,
+          stepId: step.id,
+          requiredCapabilities: plan.requiredCapabilities,
+          executionMode: plan.executionMode,
+        },
+        payload: step.params,
+      },
+    });
+    const dispatch = await dispatchRuntimeTask(task.id);
+    results.push({
+      stepId: step.id,
+      capabilityId: step.capabilityId,
+      taskId: task.id,
+      taskType: step.taskType,
+      dispatch,
+      status: dispatch.status === 'dispatched' ? 'dispatched' : dispatch.status,
+      reason: 'reason' in dispatch ? dispatch.reason : undefined,
+    });
+
+    if (dispatch.status !== 'dispatched') break;
+    completed.add(step.id);
+  }
+
+  return { plan, steps: results };
+}
 
 export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResult> {
   const task = await taskRuntime.getTask(taskId);

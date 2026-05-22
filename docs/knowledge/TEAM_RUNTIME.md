@@ -139,6 +139,15 @@ approval linkage.
   handler placeholders transition to runtime `failed` with the dispatcher reason
   rather than staying queued for repeated polling.
 
+- Capability Planner turns selected capabilities into a `CapabilityPlan`: a goal,
+  ordered steps, dependencies, required capabilities, and `single`/`serial`/`parallel`/`mixed`
+  execution mode. The initial planner supports single-step plans and deterministic
+  serial chains for repo analysis → architecture/report documentation and PR
+  management → reporting → message delivery.
+- Capability plan dispatch creates RuntimeTasks from plan steps and reuses the
+  existing dispatcher handlers. This keeps direct task dispatch behavior stable
+  while providing a minimal Goal → Capability → Plan → Task closed loop.
+
 ## Low-Token Entry Point
 
 For future changes, read `docs/agents/TASK_AGENT.md` first. It is the compact

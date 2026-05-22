@@ -162,7 +162,7 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     'Only return schedule.create when the message explicitly asks for a timed, recurring, reminder, or cron-style task and payload.schedule is present.',
     'For durable objectives, long-running improvements, phased work, or goal-like requests, return goal.create or capability.plan instead of schedule.create; if unsure, return clarifyingQuestion.',
     'Return shape for executable single-step tasks: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
-    'Return shape for composite or long-running requests: {"intent":"capability.plan","confidence":0-1,"requiredCapabilities":["goal.create","pr_pool.create"],"executionMode":"composite|long_running_goal","shouldCreateGoal":false,"shouldPersistMemory":false,"objective":"...","reason":"..."}',
+    'Return shape for composite or long-running requests: {"intent":"capability.plan","confidence":0-1,"requiredCapabilities":["goal_management","pr_management"],"executionMode":"composite|long_running_goal","shouldCreateGoal":false,"shouldPersistMemory":false,"objective":"...","reason":"..."}',
     '',
     'Conversation context:',
     `- conversationId: ${message.conversationId}`,
@@ -197,10 +197,11 @@ function formatCapabilityPlanDecision(decision: Extract<OrchestratorDecision, { 
     '已识别为复合能力请求，后续将交给 Planner 编排执行。',
     `Execution Mode: ${decision.executionMode}`,
     `Capabilities: ${decision.requiredCapabilities.join(', ')}`,
+    decision.plan ? `Plan Steps: ${decision.plan.steps.map(step => `${step.id}:${step.capabilityId}${step.taskType ? `→${step.taskType}` : ''}`).join(', ')}` : undefined,
     `Create Goal: ${decision.shouldCreateGoal ? 'yes' : 'no'}`,
     `Persist Memory: ${decision.shouldPersistMemory ? 'yes' : 'no'}`,
     `Objective: ${decision.objective}`,
-  ].join('\n');
+  ].filter((line): line is string => Boolean(line)).join('\n');
 }
 
 async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extract<OrchestratorDecision, { kind: 'runtime_task' }>) {
