@@ -222,4 +222,19 @@ describe('Cron store', () => {
       },
     });
   });
+
+  it('creates daily goal scan job only once when enabled', async () => {
+    process.env.OMNI_GOAL_DAILY_SCAN_ENABLED = 'true';
+    process.env.OMNI_GOAL_DAILY_SCAN_CRON = '0 0 * * *';
+    process.env.OMNI_GOAL_DAILY_SCAN_TIMEZONE = 'UTC';
+    const { ensureGoalDailyScanCronJob, listCronJobs } = await loadCronStore();
+
+    const first = await ensureGoalDailyScanCronJob();
+    const second = await ensureGoalDailyScanCronJob();
+    const jobs = await listCronJobs();
+
+    expect(first?.id).toBe(second?.id);
+    expect(jobs.filter(job => job.taskType === 'goal.cron_scan')).toHaveLength(1);
+    expect(first?.payload).toMatchObject({ goalType: 'module_improvement', action: 'scan_due_goals', timezone: 'UTC' });
+  });
 });

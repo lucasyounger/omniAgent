@@ -12,7 +12,8 @@ TaskRuntime controls runtime status transitions such as
 
 Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
 handler execution primarily by `taskType`, with `targetAgentId` retained as an
-executor hint and compatibility field.
+executor hint and compatibility field. It includes Goal handlers for `goal.*`
+and Req handlers for `req.*` confirmation/import workflows.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be

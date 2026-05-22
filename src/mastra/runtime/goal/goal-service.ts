@@ -44,6 +44,19 @@ export type GoalServiceCreateResult = {
   run?: GoalRun;
 };
 
+export type GoalScanDueInput = {
+  goalType?: GoalType;
+  now?: Date;
+  timezone?: string;
+  scheduleWindow?: string;
+};
+
+export type GoalScanDueResult = {
+  scanned: number;
+  enqueued: GoalRun[];
+  skipped: Array<{ goalId: string; reason: string }>;
+};
+
 export async function createGoalService(input: GoalCreateServiceInput): Promise<GoalServiceCreateResult> {
   const idempotencyKey = cleanString(input.idempotencyKey);
   if (idempotencyKey) {
@@ -149,6 +162,45 @@ export async function applyGoalFeedback(input: GoalFeedbackInput) {
   }
 
   return { goal, event, action, run };
+}
+
+export async function scanDueGoals(input: GoalScanDueInput = {}): Promise<GoalScanDueResult> {
+  const now = input.now || new Date();
+  const today = formatDay(now, input.timezone);
+  const goals = await listGoals({ status: 'active', type: input.goalType || 'module_improvement' });
+  const enqueued: GoalRun[] = [];
+  const skipped: GoalScanDueResult['skipped'] = [];
+
+  for (const goal of goals) {
+    const runs = await listGoalRuns(goal.id);
+    if (runs.some(run => ['running', 'succeeded'].includes(run.status) && run.startedAt && formatDay(new Date(run.startedAt), input.timezone) === today)) {
+      skipped.push({ goalId: goal.id, reason: 'already running or succeeded today' });
+      continue;
+    }
+    if (!isGoalDue(goal, runs, now)) {
+      skipped.push({ goalId: goal.id, reason: 'not due' });
+      continue;
+    }
+    enqueued.push(await enqueueGoalRun(goal.id, { plan: { source: 'goal.cron_scan', scheduleWindow: input.scheduleWindow, timezone: input.timezone || 'local' } }));
+  }
+
+  return { scanned: goals.length, enqueued, skipped };
+}
+
+function isGoalDue(goal: Goal, runs: GoalRun[], now: Date): boolean {
+  if (!goal.cadence) return true;
+  const cadence = goal.cadence.toLowerCase();
+  const latest = runs.at(-1);
+  if (!latest?.startedAt) return true;
+  const elapsedMs = now.getTime() - new Date(latest.startedAt).getTime();
+  if (cadence.includes('weekly') || cadence.includes('每周')) return elapsedMs >= 7 * 24 * 60 * 60 * 1000;
+  if (cadence.includes('monthly') || cadence.includes('每月')) return elapsedMs >= 28 * 24 * 60 * 60 * 1000;
+  return elapsedMs >= 24 * 60 * 60 * 1000;
+}
+
+function formatDay(date: Date, timezone?: string): string {
+  if (!timezone || timezone === 'local') return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 function createGoalId(title: string) {

@@ -39,6 +39,7 @@ export const prPoolRunsRoot = path.join(runsRoot, 'pr-pool');
 export const cronRunsRoot = path.join(runsRoot, 'cron-runs');
 export const memoryRunsRoot = path.join(runsRoot, 'memory-runs');
 export const requirementE2ERunsRoot = path.join(runsRoot, 'requirement-e2e');
+export const reqsRoot = path.join(omniRoot, 'reqs');
 export const runtimeTasksRoot = path.join(runsRoot, 'runtime-tasks');
 export const teamRunsRoot = path.join(runsRoot, 'team');
 export const workflowRunsRoot = path.join(runsRoot, 'workflow');

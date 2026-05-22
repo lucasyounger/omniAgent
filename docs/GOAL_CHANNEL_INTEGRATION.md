@@ -7,7 +7,7 @@
 | 层 | 现有 | 缺失 |
 |---|---|---|
 | 自然语言意图 | schedule / notify / research / status 共 10 种 | `goal.create` / `goal.run` / `goal.list` / `goal.feedback` |
-| 斜杠命令 | `/task` / `/pr` / `/pair` / `/help` / `/status` | `/goal` 命令族 |
+| 斜杠命令 | `/task` / `/pr` / `/pair` / `/help` / `/status` | `/goal` and `/req` 命令族 |
 | Task Type | 20 种 runtimeTaskType | `goal.*` 系列 |
 | Task Dispatcher | 9 个 handler 分支 | `goal-handler` handles `goal.create/list/status/run/feedback` through GoalService |
 | Agent Tool | 24 个 tool，0 个 goal 相关 | `goalTools` exported and attached to OmniRouterAgent |
@@ -18,6 +18,10 @@
 ---
 
 ## 1. Logical View（逻辑视图）
+
+## Req command integration
+
+The orchestrator also recognizes `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>`. Chinese natural-language examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”. These route to `req.*` Runtime Tasks and the Req library described in `docs/REQ_LIBRARY.md`.
 
 ### 1.1 新增抽象
 

@@ -4,6 +4,7 @@ import { cronAgent } from './cron-agent';
 import { knowledgeAgent } from './knowledge-agent';
 import { createAgentMemory } from '../runtime';
 import { goalTools } from '../tools/goal-tools';
+import { reqTools } from '../tools/req-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 import { teamTools } from '../tools/team-tools';
 import { taskOrchestrationWorkflow } from '../workflows';
@@ -27,6 +28,7 @@ Routing rules:
 - Check listAgentInboxTool for completed delegated work and use getRunResultTool to read durable results.
 - For scheduled tasks, create a Runtime task with taskType=schedule.create, targetAgentId=scheduler-runtime, and payload containing name, schedule, task, taskType, targetAgentId, payload, and notifyTarget when available. Do not target cron-agent directly.
 - For durable goals, use goal tools for create/list/status/run/feedback. Ambiguous analysis requests should ask for confirmation before creating a Goal.
+- For requirements, use Req tools. Req documents enter pending_user_confirmation first; users may confirm or reject a whole document or a single item. Conversation imports stay pending unless the user explicitly asks to confirm and archive.
 - High-risk capabilities are executed by specialist handlers through Tool Gateway.
 
 Memory rules:
@@ -41,6 +43,7 @@ Memory rules:
     ...teamTools,
     ...teamRuntimeTools,
     ...goalTools,
+    ...reqTools,
   },
   agents: {
     codeAgent,

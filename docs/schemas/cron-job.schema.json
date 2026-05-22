@@ -40,6 +40,16 @@
       "type": "string",
       "enum": ["dispatched", "waiting_user_confirm", "skipped", "failed"]
     },
-    "lastDispatchError": { "type": "string" }
+    "lastDispatchError": { "type": "string" },
+    "goalDailyScan": {
+      "type": "object",
+      "description": "Optional goal.cron_scan payload shape used by the daily Goal scan helper.",
+      "properties": {
+        "goalType": { "type": "string" },
+        "action": { "type": "string" },
+        "timezone": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
   }
 }

@@ -71,12 +71,15 @@ export {
   enqueueGoalRun,
   getGoalStatus,
   listGoals,
+  scanDueGoals,
 } from './goal-service';
 export type {
   GoalCreateServiceInput,
   GoalFeedbackAction,
   GoalFeedbackInput,
   GoalListFilters,
+  GoalScanDueInput,
+  GoalScanDueResult,
   GoalServiceCreateResult,
   GoalStatusSummary,
 } from './goal-service';

@@ -7,7 +7,19 @@ import type { ChannelTarget } from '../../gateway/types';
 import type { RuntimeTask } from './types';
 import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
-import { applyGoalFeedback, createGoalService, getGoalStatus, listGoals } from './goal';
+import { applyGoalFeedback, createGoalService, getGoalStatus, listGoals, scanDueGoals } from './goal';
+import {
+  confirmReqDocument,
+  confirmReqItem,
+  createReqDraft,
+  getReqStatus,
+  importReqFromFile,
+  importReqFromMarkdown,
+  listReqs,
+  rejectReqDocument,
+  rejectReqItem,
+  updateReqItemStatus,
+} from './req';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType } from './task-types';
@@ -194,6 +206,10 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
   if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
     return dispatchResearchAiDailyDigestTask(leased);
+  }
+
+  if (taskType?.startsWith('req.')) {
+    return dispatchReqTask(leased);
   }
 
   if (taskType?.startsWith('goal.')) {
@@ -1123,6 +1139,14 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
         artifactCount: output.artifacts.length,
         prCandidateCount: output.prCandidates?.length || 0,
       };
+    } else if (taskType === runtimeTaskTypes.goalCronScan) {
+      const result = await scanDueGoals({
+        goalType: (stringValue(payload.goalType) as NonNullable<Parameters<typeof scanDueGoals>[0]>['goalType']) || 'module_improvement',
+        timezone: stringValue(payload.timezone) || process.env.OMNI_GOAL_DAILY_SCAN_TIMEZONE || 'local',
+        scheduleWindow: stringValue(payload.scheduleWindow),
+      });
+      summary = `Goal cron scan enqueued ${result.enqueued.length} run(s).`;
+      goalResult = { ...result, enqueuedRunIds: result.enqueued.map(run => run.id) };
     } else if (taskType === runtimeTaskTypes.goalFeedback) {
       const goalId = stringValue(payload.goalId) || stringValue(payload.id);
       const text = stringValue(payload.text) || stringValue(payload.feedback);
@@ -1185,6 +1209,119 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
       reason: error instanceof Error ? error.message : String(error),
       sourceAgentId: 'task-dispatcher',
     });
+    throw error;
+  }
+}
+
+async function dispatchReqTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const taskType = readTaskType(task);
+
+  await taskRuntime.transition({
+    taskId: task.id,
+    nextStatus: 'running',
+    reason: 'Dispatching Req task.',
+    sourceAgentId: 'task-dispatcher',
+  });
+
+  const run = await startTeamTaskRun({ taskId: task.id, executorAgentId: 'req-handler' });
+
+  try {
+    let summary = 'Req task completed.';
+    let reqResult: Record<string, unknown> = {};
+
+    if (taskType === runtimeTaskTypes.reqCreate) {
+      const title = stringValue(payload.title);
+      const reqMarkdown = stringValue(payload.reqMarkdown) || stringValue(payload.markdown);
+      if (!title || !reqMarkdown) throw new Error('req.create requires payload.title and payload.reqMarkdown.');
+      const req = await createReqDraft({
+        id: stringValue(payload.id),
+        title,
+        summary: stringValue(payload.summary),
+        reqMarkdown,
+        designMarkdown: stringValue(payload.designMarkdown),
+        source: { type: 'manual_import', artifactPaths: stringArrayValue(payload.artifactPaths) },
+      });
+      summary = `Req created: ${req.id}`;
+      reqResult = { reqId: req.id, req };
+    } else if (taskType === runtimeTaskTypes.reqList) {
+      const reqs = await listReqs({ status: stringValue(payload.status) as NonNullable<Parameters<typeof listReqs>[0]>['status'], sourceType: stringValue(payload.sourceType) as NonNullable<Parameters<typeof listReqs>[0]>['sourceType'] });
+      summary = `Req documents listed: ${reqs.length}`;
+      reqResult = { reqCount: reqs.length, reqs };
+    } else if (taskType === runtimeTaskTypes.reqStatus) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      if (!reqId) throw new Error('req.status requires payload.reqId.');
+      const req = await getReqStatus(reqId);
+      summary = `Req status: ${req.id}`;
+      reqResult = { reqId: req.id, req };
+    } else if (taskType === runtimeTaskTypes.reqConfirmDocument) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      if (!reqId) throw new Error('req.confirm_document requires payload.reqId.');
+      const req = await confirmReqDocument(reqId, stringValue(payload.feedback));
+      summary = `Req confirmed: ${req.id}`;
+      reqResult = { reqId: req.id, req };
+    } else if (taskType === runtimeTaskTypes.reqRejectDocument) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      const reason = stringValue(payload.reason);
+      if (!reqId || !reason) throw new Error('req.reject_document requires payload.reqId and payload.reason.');
+      const req = await rejectReqDocument(reqId, reason);
+      summary = `Req rejected: ${req.id}`;
+      reqResult = { reqId: req.id, req };
+    } else if (taskType === runtimeTaskTypes.reqConfirmItem) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      const itemId = stringValue(payload.itemId);
+      if (!reqId || !itemId) throw new Error('req.confirm_item requires payload.reqId and payload.itemId.');
+      const req = await confirmReqItem(reqId, itemId, stringValue(payload.feedback));
+      summary = `Req item confirmed: ${req.id}/${itemId}`;
+      reqResult = { reqId: req.id, itemId, req };
+    } else if (taskType === runtimeTaskTypes.reqRejectItem) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      const itemId = stringValue(payload.itemId);
+      const reason = stringValue(payload.reason);
+      if (!reqId || !itemId || !reason) throw new Error('req.reject_item requires payload.reqId, payload.itemId and payload.reason.');
+      const req = await rejectReqItem(reqId, itemId, reason);
+      summary = `Req item rejected: ${req.id}/${itemId}`;
+      reqResult = { reqId: req.id, itemId, req };
+    } else if (taskType === runtimeTaskTypes.reqUpdateItemStatus) {
+      const reqId = stringValue(payload.reqId) || stringValue(payload.id);
+      const itemId = stringValue(payload.itemId);
+      const status = stringValue(payload.status);
+      if (!reqId || !itemId || !status) throw new Error('req.update_item_status requires payload.reqId, payload.itemId and payload.status.');
+      const req = await updateReqItemStatus(reqId, itemId, status as Parameters<typeof updateReqItemStatus>[2]);
+      summary = `Req item status updated: ${req.id}/${itemId}`;
+      reqResult = { reqId: req.id, itemId, req };
+    } else if (taskType === runtimeTaskTypes.reqImport) {
+      const filePath = stringValue(payload.filePath);
+      const req = filePath
+        ? await importReqFromFile({ filePath, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType) as Parameters<typeof importReqFromFile>[0]['sourceType'], confirmAndArchive: booleanValue(payload.confirmAndArchive) })
+        : await importReqFromMarkdown({ markdown: stringValue(payload.markdown) || task.objective, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType) as Parameters<typeof importReqFromMarkdown>[0]['sourceType'], confirmAndArchive: booleanValue(payload.confirmAndArchive) });
+      summary = `Req imported: ${req.id}`;
+      reqResult = { reqId: req.id, req };
+    } else {
+      throw new Error(`Unsupported Req task type: ${taskType}`);
+    }
+
+    const result = await completeTeamRun({
+      taskId: task.id,
+      runId: run.runId,
+      executorAgentId: 'req-handler',
+      summary,
+      output: JSON.stringify(reqResult, null, 2),
+      metadata: { taskType, ...reqResult },
+    });
+
+    await taskRuntime.transition({
+      taskId: task.id,
+      nextStatus: 'succeeded',
+      reason: summary,
+      sourceAgentId: 'task-dispatcher',
+      metadata: { resultRef: result.resultRef, ...reqResult },
+    });
+
+    return { taskId: task.id, status: 'dispatched', targetAgentId: task.targetAgentId, handler: 'req-handler', runId: run.runId, result: reqResult };
+  } catch (error) {
+    await failTeamRun({ taskId: task.id, runId: run.runId, executorAgentId: 'req-handler', error: error instanceof Error ? error.message : String(error) });
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'failed', reason: error instanceof Error ? error.message : String(error), sourceAgentId: 'task-dispatcher' });
     throw error;
   }
 }

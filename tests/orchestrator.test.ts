@@ -281,6 +281,20 @@ describe('Runtime Orchestrator', () => {
     });
   });
 
+  it('parses req commands and Chinese confirmation intent', () => {
+    expect(orchestrateChannelMessage(message('/req list'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'req.list',
+      targetAgentId: 'req-runtime',
+    });
+
+    expect(orchestrateChannelMessage(message('确认 REQ-20260523-001 里的 R1'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'req.confirm_item',
+      payload: { reqId: 'REQ-20260523-001', itemId: 'R1' },
+    });
+  });
+
   it('converts LLM orchestrator output into runtime decisions with channel context', () => {
     const output = parseOrchestratorModelOutput(`
       {

@@ -159,6 +159,23 @@ export async function runCronJobNow(id: string) {
   return job;
 }
 
+export async function ensureGoalDailyScanCronJob() {
+  if (process.env.OMNI_GOAL_DAILY_SCAN_ENABLED !== 'true') return undefined;
+  const schedule = process.env.OMNI_GOAL_DAILY_SCAN_CRON || '0 0 * * *';
+  const timezone = process.env.OMNI_GOAL_DAILY_SCAN_TIMEZONE || 'local';
+  const jobs = await readJobs();
+  const existing = jobs.find(job => job.taskType === runtimeTaskTypes.goalCronScan && job.name === 'Daily Goal scan');
+  if (existing) return existing;
+  return createCronJob({
+    name: 'Daily Goal scan',
+    schedule,
+    task: 'Scan due module improvement Goals',
+    taskType: runtimeTaskTypes.goalCronScan,
+    targetAgentId: 'goal-runtime',
+    payload: { goalType: 'module_improvement', action: 'scan_due_goals', timezone },
+  });
+}
+
 export function startCronScheduler() {
   if (schedulerStarted) {
     return;

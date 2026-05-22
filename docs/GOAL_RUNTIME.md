@@ -31,7 +31,13 @@ Set `OMNI_HOME` to override the `~/.omni` runtime asset root.
 
 The workspace manager rejects invalid goal IDs and rejects relative paths that escape the goal root.
 
-## Goal runs and proof of work
+## Req drafts and daily scanning
+
+`module_improvement` runs now create `req-list.md` and `reqs.json` alongside the existing repo/gap/design artifacts, then create a pending Req document in `.omni/reqs`. The Req source records the Goal ID, run ID, and artifact paths so the requirement can be confirmed before implementation.
+
+Repository research is provider-backed. `OMNI_REPO_PROVIDER=github` uses the GitHub API and requires `GITHUB_TOKEN`; `mock` remains available for tests and local dry runs. GitHub reads repository metadata and text contents only.
+
+Daily scans are opt-in: set `OMNI_GOAL_DAILY_SCAN_ENABLED=true`, optionally override `OMNI_GOAL_DAILY_SCAN_CRON` (default `0 0 * * *`) and `OMNI_GOAL_DAILY_SCAN_TIMEZONE` (default `local`). The `goal.cron_scan` task enqueues due active `module_improvement` goals and skips goals that already have a running or succeeded run that day.
 
 Each execution attempt is a GoalRun under `~/.omni/goals/{goalId}/runs/{runId}/`:
 

@@ -132,6 +132,20 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
+  const req = parseReqIntent(text);
+  if (req) {
+    return {
+      kind: 'runtime_task',
+      confidence: req.confidence,
+      taskType: req.taskType,
+      targetAgentId: defaultTargetAgentIdForTaskType(req.taskType) || 'req-runtime',
+      objective: req.objective,
+      notifyTarget,
+      source,
+      payload: req.payload,
+    };
+  }
+
   const goal = parseGoalIntent(text, source);
   if (goal) {
     if ('kind' in goal) return goal;
@@ -567,6 +581,57 @@ function cleanGoalTitle(raw: string): string {
 function isGoalScopeStopWord(value: string): boolean {
   return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'module', 'repo', 'runtime']).has(value);
 }
+function parseReqIntent(text: string):
+  | {
+      taskType:
+        | typeof runtimeTaskTypes.reqList
+        | typeof runtimeTaskTypes.reqStatus
+        | typeof runtimeTaskTypes.reqConfirmDocument
+        | typeof runtimeTaskTypes.reqRejectDocument
+        | typeof runtimeTaskTypes.reqConfirmItem
+        | typeof runtimeTaskTypes.reqRejectItem
+        | typeof runtimeTaskTypes.reqImport;
+      confidence: number;
+      objective: string;
+      payload: Record<string, unknown>;
+    }
+  | undefined {
+  if (/^\/req\s+list$/i.test(text) || /查看待确认需求/.test(text)) {
+    return { taskType: runtimeTaskTypes.reqList, confidence: 0.9, objective: 'List req documents', payload: /待确认/.test(text) ? { status: 'pending_user_confirmation' } : {} };
+  }
+
+  const status = text.match(/^\/req\s+status\s+(REQ-\d{8}-\d{3})$/i);
+  if (status) return { taskType: runtimeTaskTypes.reqStatus, confidence: 0.9, objective: 'Get req status', payload: { reqId: status[1] } };
+
+  const confirm = text.match(/^(?:\/req\s+confirm|确认需求)\s+(REQ-\d{8}-\d{3})/i);
+  if (confirm) return { taskType: runtimeTaskTypes.reqConfirmDocument, confidence: 0.9, objective: 'Confirm req document', payload: { reqId: confirm[1] } };
+
+  const reject = text.match(/^(?:\/req\s+reject|拒绝需求)\s+(REQ-\d{8}-\d{3})\s*(?:因为|because)?\s*(.*)$/i);
+  if (reject) return { taskType: runtimeTaskTypes.reqRejectDocument, confidence: 0.88, objective: 'Reject req document', payload: { reqId: reject[1], reason: cleanText(reject[2]) || 'Rejected by user.' } };
+
+  const confirmItem = text.match(/^(?:\/req\s+confirm-item\s+|确认\s*)(REQ-\d{8}-\d{3})(?:\s+里的|\s+)?\s*(R\d+)/i);
+  if (confirmItem) return { taskType: runtimeTaskTypes.reqConfirmItem, confidence: 0.88, objective: 'Confirm req item', payload: { reqId: confirmItem[1], itemId: confirmItem[2] } };
+
+  const rejectItem = text.match(/^(?:\/req\s+reject-item\s+|拒绝\s*)(REQ-\d{8}-\d{3})(?:\s+里的|\s+)?\s*(R\d+)\s*(?:因为|because)?\s*(.*)$/i);
+  if (rejectItem) return { taskType: runtimeTaskTypes.reqRejectItem, confidence: 0.86, objective: 'Reject req item', payload: { reqId: rejectItem[1], itemId: rejectItem[2], reason: cleanText(rejectItem[3]) || 'Rejected by user.' } };
+
+  const importReq = text.match(/^\/req\s+import\s+([\s\S]+)$/i);
+  if (importReq || /把这份.*(?:claudecode|opencode).*需求文档导入需求库|确认并归档这份需求/.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.reqImport,
+      confidence: 0.82,
+      objective: 'Import req markdown',
+      payload: {
+        markdown: importReq ? importReq[1] : text,
+        sourceType: /opencode/i.test(text) ? 'opencode_conversation' : /claudecode/i.test(text) ? 'claudecode_conversation' : 'manual_import',
+        confirmAndArchive: /确认并归档/.test(text),
+      },
+    };
+  }
+
+  return undefined;
+}
+
 function parseSchedule(text: string, receivedAt: string): { value: string; kind: 'once' | 'daily' } | undefined {
   const daily = text.match(/(?:每天|每日|天天|daily|every day).*?(\d{1,2})\s*(?:点|:|：)\s*(\d{1,2})?\s*(?:分)?/i);
   if (daily) {

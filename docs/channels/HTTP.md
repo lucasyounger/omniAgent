@@ -39,6 +39,8 @@ prompt instead of executing commands.
   `/goal run <goalId>`, and `/goal feedback <goalId> <text>` for listing,
   status, executable GoalRun workflow execution, and feedback-driven pause/resume/cancel or
   priority updates.
+- `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation.
+- Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
 - `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
   RuntimeTask and dispatches it through Task Dispatcher. Direct Claude Code
   startup normally returns `Dispatch: waiting_user_confirm` until Tool Gateway

@@ -906,4 +906,22 @@ describe('Task Dispatcher', () => {
     expect(result.steps[0].reason).toContain('workspacePath');
     expect(result.steps).toHaveLength(1);
   });
+
+  it('dispatches req list tasks', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'req-runtime',
+      objective: 'list reqs',
+      metadata: { taskType: 'req.list', payload: { status: 'pending_user_confirmation' } },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      handler: 'req-handler',
+      result: { reqCount: 0 },
+    });
+  });
 });

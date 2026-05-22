@@ -21,7 +21,8 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   `taskType`, with `targetAgentId` kept as the executor hint and compatibility
   field. It uses a short lease, a max-concurrency guard, and the same Tool
   Gateway approval boundary used by tools and workflows. The schedule handler
-  covers create/list/delete/pause/resume/run-now maintenance tasks.
+  covers create/list/delete/pause/resume/run-now maintenance tasks. Goal and Req
+  handlers cover durable goals plus pending requirement confirmation workflows.
 - **Runtime Orchestrator** (`src/mastra/runtime/orchestrator.ts`): converts
   channel natural language into structured runtime intents. The current
   deterministic parser covers one-time reminders, daily AI digests, immediate
@@ -59,8 +60,10 @@ used only by unregistered workflows:
 - **PR Pool** (`src/mastra/runtime/pr-pool/`): patch-proposal pool management
   with `pr-pool-runtime.ts` and `pr-pool-store.ts`. Has registered task types
   (`pr_pool.create/list/confirm/develop/archive/cron_scan`) but no agent card.
-- **Artifact Store** (`src/mastra/runtime/artifacts/`): generic artifact storage
-  with versioning, wiki-diff generation, and markdown import/export.
+- **Req Runtime** (`src/mastra/runtime/req/`): `.omni/reqs` requirement library
+  with path-safe document IDs, `reqs.json` index, per-document markdown/design
+  files, source metadata, and append-only status events for document and item
+  confirmation.
 - **Connectors** (`src/mastra/runtime/connectors/`): external system connector
   registry with audit trails. Defines `Connector`, `ConnectorRegistry`, and
   tool definitions for future integrations.

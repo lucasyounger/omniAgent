@@ -24,12 +24,23 @@ export const runtimeTaskTypes = {
   goalStatus: 'goal.status',
   goalRun: 'goal.run',
   goalFeedback: 'goal.feedback',
+  goalCronScan: 'goal.cron_scan',
+  reqCreate: 'req.create',
+  reqList: 'req.list',
+  reqStatus: 'req.status',
+  reqConfirmDocument: 'req.confirm_document',
+  reqRejectDocument: 'req.reject_document',
+  reqConfirmItem: 'req.confirm_item',
+  reqRejectItem: 'req.reject_item',
+  reqUpdateItemStatus: 'req.update_item_status',
+  reqImport: 'req.import',
 } as const;
 
 export type RuntimeTaskType = (typeof runtimeTaskTypes)[keyof typeof runtimeTaskTypes];
 
 export type RuntimeTaskCapabilityCategory =
   | 'goal'
+  | 'req'
   | 'memory'
   | 'repo'
   | 'workflow'
@@ -214,6 +225,66 @@ const baseRuntimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDefini
     handler: 'goal-handler',
     description: 'Apply feedback to a Goal.',
   },
+  [runtimeTaskTypes.goalCronScan]: {
+    taskType: runtimeTaskTypes.goalCronScan,
+    defaultTargetAgentId: 'goal-runtime',
+    handler: 'goal-handler',
+    description: 'Cron-triggered scan for due module improvement Goals.',
+  },
+  [runtimeTaskTypes.reqCreate]: {
+    taskType: runtimeTaskTypes.reqCreate,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Create a pending Req document draft.',
+  },
+  [runtimeTaskTypes.reqList]: {
+    taskType: runtimeTaskTypes.reqList,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'List Req documents.',
+  },
+  [runtimeTaskTypes.reqStatus]: {
+    taskType: runtimeTaskTypes.reqStatus,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Read Req document status.',
+  },
+  [runtimeTaskTypes.reqConfirmDocument]: {
+    taskType: runtimeTaskTypes.reqConfirmDocument,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Confirm a whole Req document.',
+  },
+  [runtimeTaskTypes.reqRejectDocument]: {
+    taskType: runtimeTaskTypes.reqRejectDocument,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Reject a whole Req document.',
+  },
+  [runtimeTaskTypes.reqConfirmItem]: {
+    taskType: runtimeTaskTypes.reqConfirmItem,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Confirm one Req item.',
+  },
+  [runtimeTaskTypes.reqRejectItem]: {
+    taskType: runtimeTaskTypes.reqRejectItem,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Reject one Req item.',
+  },
+  [runtimeTaskTypes.reqUpdateItemStatus]: {
+    taskType: runtimeTaskTypes.reqUpdateItemStatus,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Update one Req item status.',
+  },
+  [runtimeTaskTypes.reqImport]: {
+    taskType: runtimeTaskTypes.reqImport,
+    defaultTargetAgentId: 'req-runtime',
+    handler: 'req-handler',
+    description: 'Import a markdown Req document into the Req library.',
+  },
 };
 
 export const runtimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeRegistryEntry> = Object.fromEntries(
@@ -263,6 +334,7 @@ function titleCaseCapabilityName(taskType: RuntimeTaskType): string {
 
 function categoryForTaskType(taskType: RuntimeTaskType): RuntimeTaskCapabilityCategory {
   if (taskType.startsWith('goal.')) return 'goal';
+  if (taskType.startsWith('req.')) return 'req';
   if (taskType.startsWith('knowledge.')) return 'memory';
   if (taskType.startsWith('schedule.')) return 'workflow';
   if (taskType.startsWith('research.')) return 'research';
@@ -299,13 +371,21 @@ function examplesForTaskType(taskType: RuntimeTaskType): string[] {
     [runtimeTaskTypes.goalStatus]: ['show goal status', '目标状态 goal-1'],
     [runtimeTaskTypes.goalRun]: ['run a goal', '运行目标 goal-1'],
     [runtimeTaskTypes.goalFeedback]: ['apply goal feedback', '反馈目标 goal-1 暂停'],
+    [runtimeTaskTypes.goalCronScan]: ['scan due goals', '扫描到期目标'],
+    [runtimeTaskTypes.reqList]: ['list req documents', '查看待确认需求'],
+    [runtimeTaskTypes.reqStatus]: ['show req status', '查看需求 REQ-20260523-001'],
+    [runtimeTaskTypes.reqConfirmDocument]: ['confirm req document', '确认需求 REQ-20260523-001'],
+    [runtimeTaskTypes.reqRejectDocument]: ['reject req document', '拒绝需求 REQ-20260523-001 因为范围过大'],
+    [runtimeTaskTypes.reqConfirmItem]: ['confirm req item', '确认 REQ-20260523-001 里的 R1'],
+    [runtimeTaskTypes.reqRejectItem]: ['reject req item', '拒绝 REQ-20260523-001 里的 R2'],
+    [runtimeTaskTypes.reqImport]: ['import req markdown', '导入这份需求文档'],
   };
   return examples[taskType] ?? [taskType];
 }
 
 function requiresForTaskType(taskType: RuntimeTaskType): string[] | undefined {
   if (taskType === runtimeTaskTypes.prPoolDevelop) return [runtimeTaskTypes.prPoolConfirm];
-  if (taskType === runtimeTaskTypes.goalRun) return [runtimeTaskTypes.goalCreate];
+  if (taskType === runtimeTaskTypes.goalRun || taskType === runtimeTaskTypes.goalCronScan) return [runtimeTaskTypes.goalCreate];
   if (taskType === runtimeTaskTypes.goalFeedback) return [runtimeTaskTypes.goalCreate];
   return undefined;
 }
@@ -313,6 +393,7 @@ function requiresForTaskType(taskType: RuntimeTaskType): string[] | undefined {
 function outputsForTaskType(taskType: RuntimeTaskType): string[] | undefined {
   if (taskType.startsWith('schedule.')) return ['schedule'];
   if (taskType.startsWith('goal.')) return ['goal'];
+  if (taskType.startsWith('req.')) return ['req'];
   if (taskType.startsWith('pr_pool.')) return ['pr_pool_item'];
   if (taskType === runtimeTaskTypes.notifySendChannelMessage || taskType === runtimeTaskTypes.channelMessage) return ['channel_delivery'];
   if (taskType === runtimeTaskTypes.codeClaudeCodeTask) return ['code_task_result'];
@@ -321,7 +402,7 @@ function outputsForTaskType(taskType: RuntimeTaskType): string[] | undefined {
 
 function safetyLevelForTaskType(taskType: RuntimeTaskType): RuntimeTaskCapability['safetyLevel'] {
   if (taskType === runtimeTaskTypes.codeClaudeCodeTask || taskType === runtimeTaskTypes.prPoolDevelop) return 'high';
-  if (taskType.startsWith('schedule.') || taskType.startsWith('goal.') || taskType.startsWith('pr_pool.')) return 'medium';
+  if (taskType.startsWith('schedule.') || taskType.startsWith('goal.') || taskType.startsWith('pr_pool.') || taskType.startsWith('req.')) return 'medium';
   return 'low';
 }
 

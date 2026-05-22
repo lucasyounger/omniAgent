@@ -27,7 +27,7 @@ exist, then continues the requested create/list/update/delete operation.
   synchronously execute a run.
 - `lastDispatchStatus`, `lastDispatchError`: immediate Task Dispatcher outcome.
 
-## Execution
+Daily Goal scan can be provisioned by `ensureGoalDailyScanCronJob()` when `OMNI_GOAL_DAILY_SCAN_ENABLED=true`. It creates a single `goal.cron_scan` job named `Daily Goal scan`, using `OMNI_GOAL_DAILY_SCAN_CRON` (default `0 0 * * *`) and `OMNI_GOAL_DAILY_SCAN_TIMEZONE` (default `local`).
 
 OmniAgent starts an in-process scheduler on Mastra startup. It scans active jobs
 every `OMNI_CRON_POLL_INTERVAL_MS` milliseconds, defaulting to 30000.

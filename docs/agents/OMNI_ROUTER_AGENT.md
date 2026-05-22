@@ -56,6 +56,8 @@ Router chooses one of these intents:
 - `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
 - Goal: use goal tools for durable create/list/status/run/feedback workflows.
   Ambiguous analysis requests should ask for confirmation before creating a Goal.
+- Req: use Req tools for list/status/confirm/reject/import. Imported Req documents
+  stay pending unless the user explicitly asks to confirm and archive.
 - `mixed`: split into explicit sub-tasks.
 
 Router should keep final replies short, include task ids for long-running work,
