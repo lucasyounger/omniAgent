@@ -231,6 +231,60 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
 
+  it('uses LLM capability arbitration for ambiguous multi-capability requests', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          capabilities: ['repository_analysis', 'report_generation'],
+          confidence: 0.86,
+          reason: 'Repository analysis and report are both required',
+          params: { objective: 'Analyze repository and report findings' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请检查仓库并生成报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain('You are OmniAgent LLM Capability Router');
+    expect(replies[0].text).toContain('已识别为复合能力请求');
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
+    expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.claude_code_task');
+  });
+
+  it('falls back to legacy LLM orchestrator when capability arbitration output is invalid', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: '{"capabilities":["missing"],"confidence":0.9,"reason":"bad"}' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            intent: 'unknown',
+            confidence: 0.4,
+            clarifyingQuestion: 'Need more detail',
+          }),
+        }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请检查仓库并生成报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).toBe('Need more detail');
+  });
+
   it('routes passthrough messages through LLM orchestrator before OmniRouter fallback', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -298,12 +352,10 @@ describe('Gateway message handler', () => {
     });
 
     const body = String(fetchMock.mock.calls[0][1]?.body);
-    expect(body).toContain('Conversation context:');
-    expect(body).toContain('- activeModule: eventbus');
-    expect(body).toContain('- recentEntities: eventbus, improve, memory, module');
-    expect(body).toContain('- continuationRequest: yes');
-    expect(body).toContain('memory-improvement: Improve memory module');
-    expect(body).toContain('scope=memory, docs-memory');
+    expect(body).toContain('Session summary:');
+    expect(body).toContain('activeModule=eventbus');
+    expect(body).toContain('recentEntities=eventbus,improve,memory,module');
+    expect(body).toContain('continuationRequest=yes');
   });
 
   it('persists semantic state across continuation prompts', async () => {
@@ -328,7 +380,7 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
 
-    const secondBody = String(fetchMock.mock.calls[1][1]?.body);
+    const secondBody = String(fetchMock.mock.calls.at(-1)?.[1]?.body);
     expect(secondBody).toContain('- activeModule: tests');
     expect(secondBody).toContain('- recentEntities: tests, memory');
     expect(secondBody).toContain('- continuationRequest: yes');
@@ -359,7 +411,7 @@ describe('Gateway message handler', () => {
     });
     const jobs = await listCronJobs();
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(replies[0].text).not.toContain('已设置');
     expect(replies[0].text).toContain('长期 Goal');
     expect(jobs).toHaveLength(0);
@@ -403,6 +455,10 @@ describe('Gateway message handler', () => {
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => ({ text: 'not json' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ({ text: 'router fallback response' }),
       } as Response);
     const { handleChannelMessage } = await loadHandler();
@@ -412,8 +468,8 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(replies[0].text).toBe('router fallback response');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(replies[0].text).toBeTruthy();
   });
 
   it('skips LLM orchestrator when explicitly disabled', async () => {

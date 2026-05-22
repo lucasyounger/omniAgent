@@ -132,6 +132,14 @@ work is delegated, executed, reported, and recovered across all agents.
   a pluggable `EmbeddingProvider`, caches capability description/example vectors,
   ranks Top-K candidates by cosine similarity, and falls back to lightweight routing
   when no provider is configured or provider calls fail.
+- LLM Router is a schema-validated arbitration layer for ambiguous capability
+  routing. It triggers only after deterministic/lightweight candidates are low
+  confidence, close-scored, multi-capability, or context-dependent; it receives
+  Top-K candidates plus registered capability definitions and can only return
+  registered capability ids or a clarification request. Invalid JSON,
+  unregistered capabilities, or LLM failures fall back to the previous router
+  result and then legacy OmniRouter behavior; Agents and task types remain
+  execution bindings, not LLM-selected route subjects.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

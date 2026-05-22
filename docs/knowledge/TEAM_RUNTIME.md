@@ -148,10 +148,14 @@ approval linkage.
   existing dispatcher handlers. This keeps direct task dispatch behavior stable
   while providing a minimal Goal → Capability → Plan → Task closed loop.
 
-- Embedding Router defines a pluggable `EmbeddingProvider` plus local capability
-  embedding cache. It ranks capability descriptions/examples by cosine similarity
-  when a provider is supplied, but defaults and provider failures fall back to the
-  lightweight capability router; tests use fake providers and no network access.
+- LLM Router provides schema-validated arbitration after deterministic/lightweight
+  capability routing when candidates are low-confidence, close-scored,
+  multi-capability, or context-dependent. It receives the user request, Top-K
+  capability candidates, registered capability definitions, and session summary;
+  it may only return registered capability ids or a clarification request. Invalid
+  JSON, unregistered ids, or provider failures fall back to the previous router
+  result and then legacy OmniRouter behavior, so taskType/Agent/Tool bindings stay
+  behind the Capability Registry and Planner.
 
 ## Low-Token Entry Point
 

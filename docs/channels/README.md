@@ -23,10 +23,12 @@ through Team Runtime.
   business natural language continues to capability routing or legacy fallback.
 - Natural language first passes through the Runtime Orchestrator. Supported
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
-  messages call the LLM orchestrator by default, with persisted semantic
-  conversation context, active module/entities from current and previous
-  messages in the same channel conversation, and active Goal scope injected before
-  falling back to OmniRouterAgent. The gateway logs a privacy-preserving
+  messages are evaluated by deterministic/lightweight capability routing. Low-confidence,
+  close-score, multi-capability, or context-dependent candidates can enter the LLM
+  Router arbitration layer, which receives Top-K candidates plus registered capability
+  definitions and may only return validated capability ids or a clarification request.
+  Invalid JSON, unregistered capability ids, LLM failure, or disabled semantic routing
+  fall back to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving
   orchestrator trace with input hash, decision metadata, per-layer route trace,
   candidate capabilities, and fallback reason, without storing raw channel message
   text in the trace. The

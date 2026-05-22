@@ -19,6 +19,17 @@ export type {
   EmbeddingProvider,
 } from './embedding-router';
 export {
+  routeLlmCapability,
+  parseLlmRouterOutput,
+  shouldUseLlmArbitration,
+} from './llm-router';
+export type {
+  LlmArbitrationOptions,
+  LlmRouterClient,
+  LlmRouterInput,
+  LlmRouterOutput,
+} from './llm-router';
+export {
   capabilityRetrieverBackendFromEnv,
   retrieveCapabilities,
 } from './capability-retriever';

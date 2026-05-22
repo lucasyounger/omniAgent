@@ -9,7 +9,16 @@ import {
   type GoalChannelRequest,
 } from '../mastra/runtime/goal-channel';
 import { listGoals } from '../mastra/runtime/goal';
-import { traceOrchestratorDecision } from '../mastra/runtime/decision-trace';
+import { traceOrchestratorDecision, type RouterTrace } from '../mastra/runtime/decision-trace';
+import { createCapabilityPlan } from '../mastra/runtime/capability-planner';
+import {
+  routeDeterministicCapability,
+  routeLightweightCapability,
+  routeLlmCapability,
+  shouldUseLlmArbitration,
+  type LlmRouterClient,
+  type RouterResult,
+} from '../mastra/runtime/capabilities';
 import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
@@ -100,6 +109,17 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
     return decision;
   }
 
+  const arbitration = await callLlmCapabilityRouter(message, config, decision);
+  if (arbitration) {
+    console.info('[gateway] orchestrator route source=llm_capability_router');
+    console.info('[gateway] orchestrator trace', traceOrchestratorDecision({
+      messageText: message.text,
+      decision: arbitration.decision,
+      routeTrace: arbitration.routeTrace,
+    }));
+    return arbitration.decision;
+  }
+
   const modelDecision = await callLlmOrchestrator(message, config);
   if (modelDecision) {
     console.info('[gateway] orchestrator route source=llm_orchestrator');
@@ -110,6 +130,150 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
   console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_unavailable');
   console.info('[gateway] orchestrator trace', traceOrchestratorDecision({ messageText: message.text, decision, fallbackReason: 'llm_unavailable' }));
   return decision;
+}
+
+
+async function callLlmCapabilityRouter(
+  message: ChannelMessage,
+  config: GatewayConfig,
+  previousDecision: Extract<OrchestratorDecision, { kind: 'passthrough' }>,
+): Promise<{ decision: OrchestratorDecision; routeTrace: RouterTrace[] } | undefined> {
+  const request = toUnifiedRequest(message);
+  const deterministic = routeDeterministicCapability(request);
+  const lightweight = routeLightweightCapability(request, 5);
+  const candidates = mergeCapabilitySelections(deterministic.capabilities, lightweight.capabilities);
+  const previous: RouterResult = {
+    capabilities: candidates,
+    confidence: candidates[0]?.score ?? 0,
+    source: 'lightweight',
+    reason: previousDecision.reason,
+  };
+  const routeTrace: RouterTrace[] = [
+    {
+      layer: 'deterministic',
+      candidates: deterministic.capabilities,
+      confidence: deterministic.confidence,
+      reason: deterministic.reason,
+    },
+    {
+      layer: 'lightweight',
+      candidates: lightweight.capabilities,
+      confidence: lightweight.confidence,
+      reason: lightweight.reason,
+    },
+  ];
+
+  if (!shouldUseLlmArbitration(request, candidates)) {
+    return undefined;
+  }
+
+  const start = Date.now();
+  const result = await routeLlmCapability({
+    request,
+    candidates,
+    previous,
+    sessionSummary: formatSessionSummary(await getUpdatedSemanticState(message)),
+  }, createGatewayLlmRouterClient(config));
+
+  routeTrace.push({
+    layer: 'llm',
+    candidates: result.capabilities,
+    decision: result.source === 'llm' ? (result.needsClarification ? 'clarify' : 'capability_plan') : 'fallback',
+    confidence: result.confidence,
+    reason: result.reason,
+    durationMs: Date.now() - start,
+  });
+
+  if (result.source !== 'llm') {
+    return undefined;
+  }
+
+  return {
+    decision: capabilityRouterResultToDecision(result, message),
+    routeTrace,
+  };
+}
+
+function createGatewayLlmRouterClient(config: GatewayConfig): LlmRouterClient {
+  return {
+    async generate(prompt: string) {
+      const response = await fetch(`${config.omniApiBaseUrl}/agents/omni-router-agent/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+        signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        throw new Error(`LLM capability router returned HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as { text?: string };
+      if (!data.text) {
+        throw new Error('LLM capability router returned empty text.');
+      }
+      return data.text;
+    },
+  };
+}
+
+function capabilityRouterResultToDecision(result: RouterResult, message: ChannelMessage): OrchestratorDecision {
+  if (result.needsClarification) {
+    return {
+      kind: 'clarify',
+      confidence: result.confidence,
+      question: result.reason || '我需要更多信息才能继续。',
+      reason: result.reason || 'LLM capability router requested clarification.',
+    };
+  }
+
+  const requiredCapabilities = result.capabilities.map(capability => capability.capabilityId);
+  const objective = typeof result.params?.objective === 'string' ? result.params.objective : message.text.trim().slice(0, 120);
+  return {
+    kind: 'capability_plan',
+    confidence: result.confidence,
+    requiredCapabilities,
+    executionMode: requiredCapabilities.length > 1 ? 'composite' : 'passthrough',
+    shouldCreateGoal: false,
+    shouldPersistMemory: false,
+    objective,
+    reason: result.reason || 'LLM capability router selected capabilities.',
+    source: channelSourceFromMessage(message),
+    plan: createCapabilityPlan({ goal: objective, capabilities: requiredCapabilities, params: result.params }),
+  };
+}
+
+async function getUpdatedSemanticState(message: ChannelMessage): Promise<Awaited<ReturnType<typeof getConversationSemanticState>>> {
+  const goals = (await listGoals({ status: 'active' })).slice(0, 5);
+  const previousContext = await getConversationSemanticState(message);
+  const inferredContext = inferConversationContext(message.text, goals, previousContext);
+  return updateConversationSemanticState({
+    channel: message.channel,
+    conversationId: message.conversationId,
+    senderId: message.senderId,
+    inference: inferredContext,
+  });
+}
+
+function formatSessionSummary(state: Awaited<ReturnType<typeof getConversationSemanticState>>): string {
+  return [
+    `activeGoalId=${state?.activeGoalId ?? 'none'}`,
+    `activeModule=${state?.activeModule ?? 'unknown'}`,
+    `recentEntities=${state?.recentEntities.length ? state.recentEntities.join(',') : 'none'}`,
+    `continuationRequest=${state?.continuationRequest ? 'yes' : 'no'}`,
+  ].join('; ');
+}
+
+function mergeCapabilitySelections(
+  first: Array<{ capabilityId: string; score: number; reason?: string }>,
+  second: Array<{ capabilityId: string; score: number; reason?: string }>,
+) {
+  return [...first, ...second]
+    .reduce<Array<{ capabilityId: string; score: number; reason?: string }>>((items, selection) => {
+      const existing = items.find(item => item.capabilityId === selection.capabilityId);
+      if (!existing) return [...items, selection];
+      if (selection.score > existing.score) Object.assign(existing, selection);
+      return items;
+    }, [])
+    .sort((left, right) => right.score - left.score || left.capabilityId.localeCompare(right.capabilityId));
 }
 
 async function callLlmOrchestrator(message: ChannelMessage, config: GatewayConfig): Promise<OrchestratorDecision | undefined> {

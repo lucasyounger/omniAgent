@@ -6,8 +6,9 @@ export type RouterResult = {
   capabilities: RouteCapabilitySelection[];
   confidence: number;
   params?: Record<string, unknown>;
-  source: 'deterministic' | 'lightweight';
+  source: 'deterministic' | 'lightweight' | 'embedding' | 'llm';
   reason?: string;
+  needsClarification?: boolean;
 };
 
 const LOW_CONFIDENCE_THRESHOLD = 0.35;
