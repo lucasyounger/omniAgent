@@ -257,6 +257,133 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.claude_code_task');
   });
 
+  it('uses compressed history for referent capability arbitration', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            capabilities: ['repository_analysis', 'report_generation'],
+            confidence: 0.86,
+            reason: 'Repository analysis and report are both required',
+            params: { objective: `Analyze memory ${'sensitive raw detail '.repeat(8)}` },
+          }),
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            capabilities: ['repository_analysis'],
+            confidence: 0.82,
+            reason: 'Continue prior repository analysis',
+            params: { objective: 'Analyze memory follow-up' },
+          }),
+        }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const first = message('请检查 memory 仓库并生成报告', 'trusted');
+    first.messageId = 'msg-context-1';
+    const second = message('分析一下这个', 'trusted');
+    second.messageId = 'msg-context-2';
+
+    await handleChannelMessage(first, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await handleChannelMessage(second, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const secondPrompt = String(fetchMock.mock.calls[1][1]?.body);
+    expect(secondPrompt).toContain('History summary:');
+    expect(secondPrompt).toContain('capabilities=repository_analysis,report_generation');
+    expect(secondPrompt).toContain('Use History summary only to resolve references');
+    expect(secondPrompt).not.toContain('sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail');
+  });
+
+  it('clarifies referent capability requests without usable context before calling LLM', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('分析一下这个', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('我需要更多上下文');
+  });
+
+  it('clarifies conflicting continuation context before calling LLM', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { updateConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('另外 inspect eventbus', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('上下文里有多个可能对象');
+  });
+
+  it('merges prior capabilities into continuation capability plans', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          capabilities: ['report_generation'],
+          confidence: 0.83,
+          reason: 'Generate a follow-up report',
+          params: { objective: 'Analyze prior repository context and report findings' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { appendConversationTurnSummary } = await import('../src/gateway/conversation-semantic-state');
+    await appendConversationTurnSummary({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      messageId: 'prior-msg',
+      text: 'Analyze repository',
+      entities: ['repository'],
+      capabilities: ['repository_analysis'],
+    });
+
+    const replies = await handleChannelMessage(message('分析一下这个', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
+    expect(replies[0].text).toContain('Execution Mode: composite');
+  });
+
   it('falls back to legacy LLM orchestrator when capability arbitration output is invalid', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -346,16 +473,17 @@ describe('Gateway message handler', () => {
       priority: 'high',
     });
 
-    await handleChannelMessage(message('顺便也看看 eventbus', 'trusted'), {
+    await handleChannelMessage(message('顺便分析 eventbus', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
 
-    const body = String(fetchMock.mock.calls[0][1]?.body);
-    expect(body).toContain('Session summary:');
-    expect(body).toContain('activeModule=eventbus');
-    expect(body).toContain('recentEntities=eventbus,improve,memory,module');
-    expect(body).toContain('continuationRequest=yes');
+    expect(fetchMock).not.toHaveBeenCalled();
+    const { getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    const state = await getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'trusted' });
+    expect(state?.activeModule).toBe('eventbus');
+    expect(state?.continuationRequest).toBe(true);
+    expect(state?.recentEntities.slice(0, 4)).toEqual(['eventbus', 'improve', 'memory', 'module']);
   });
 
   it('persists semantic state across continuation prompts', async () => {
@@ -375,15 +503,15 @@ describe('Gateway message handler', () => {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
-    await handleChannelMessage(message('继续看看 tests', 'trusted'), {
+    await handleChannelMessage(message('继续分析 tests', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
 
     const secondBody = String(fetchMock.mock.calls.at(-1)?.[1]?.body);
-    expect(secondBody).toContain('- activeModule: tests');
-    expect(secondBody).toContain('- recentEntities: tests, memory');
-    expect(secondBody).toContain('- continuationRequest: yes');
+    expect(secondBody).toContain('- activeModule: memory');
+    expect(secondBody).toContain('- recentEntities: memory');
+    expect(secondBody).toContain('History summary:');
   });
 
   it('does not create schedules from LLM-misrouted goal-like messages without time evidence', async () => {
@@ -463,12 +591,12 @@ describe('Gateway message handler', () => {
       } as Response);
     const { handleChannelMessage } = await loadHandler();
 
-    const replies = await handleChannelMessage(message('请随便处理一下这个模糊请求', 'trusted'), {
+    const replies = await handleChannelMessage(message('请处理一个模糊请求', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(replies[0].text).toBeTruthy();
   });
 

@@ -194,15 +194,6 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
-  if (looksLikeScheduleRequest(text)) {
-    return {
-      kind: 'clarify',
-      confidence: 0.48,
-      question: '我需要明确时间和要执行的内容。可以这样说：今天 21:08 回复一句：你好，或 每天 09:00 给我发 AI Agents 日报。',
-      reason: 'Schedule-like message is missing a supported time or task payload.',
-    };
-  }
-
   const unifiedRequest = {
     source: message.channel,
     userId: message.senderId,
@@ -213,6 +204,15 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
   const deterministicCapabilities = routeDeterministicCapability(unifiedRequest);
   const lightweightCapabilities = routeLightweightCapability(unifiedRequest, 5);
   const candidateCapabilities = mergeCapabilitySelections(deterministicCapabilities.capabilities, lightweightCapabilities.capabilities);
+
+  if (looksLikeScheduleRequest(text)) {
+    return {
+      kind: 'clarify',
+      confidence: 0.48,
+      question: '我需要明确时间和要执行的内容。可以这样说：今天 21:08 回复一句：你好，或 每天 09:00 给我发 AI Agents 日报。',
+      reason: 'Schedule-like message is missing a supported time or task payload.',
+    };
+  }
 
   return {
     kind: 'passthrough',
@@ -458,7 +458,7 @@ function parseGoalIntent(text: string, source: Record<string, unknown>):
   }
 
   const ambiguous = text.match(/^(?:帮我分析|分析一下|研究一下)\s*(.+)$/);
-  if (ambiguous) {
+  if (ambiguous && !/^(?:一下|这个|它|上面那个|刚才|之前|前面|this one|that one|it)$/i.test(cleanText(ambiguous[1]))) {
     const objective = cleanText(ambiguous[1]);
     return {
       kind: 'clarify',

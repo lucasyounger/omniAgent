@@ -153,18 +153,10 @@ describe('Runtime Orchestrator', () => {
     });
   });
 
-  it('recognizes long-running natural language goal requests', () => {
-    expect(orchestrateChannelMessage(message('我想长期优化 memory 模块'))).toMatchObject({
-      kind: 'runtime_task',
-      taskType: 'goal.create',
-      targetAgentId: 'goal-runtime',
-      payload: {
-        title: 'memory',
-        type: 'module_improvement',
-        scope: ['memory'],
-        tags: ['memory'],
-        autoRun: true,
-      },
+
+  it('passes referent analysis requests through semantic routing', () => {
+    expect(orchestrateChannelMessage(message('帮我分析一下'))).toMatchObject({
+      kind: 'passthrough',
     });
   });
   it('recognizes broader natural language goal creation requests', () => {

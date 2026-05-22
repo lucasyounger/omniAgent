@@ -25,10 +25,12 @@ through Team Runtime.
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
   messages are evaluated by deterministic/lightweight capability routing. Low-confidence,
   close-score, multi-capability, or context-dependent candidates can enter the LLM
-  Router arbitration layer, which receives Top-K candidates plus registered capability
-  definitions and may only return validated capability ids or a clarification request.
-  Invalid JSON, unregistered capability ids, LLM failure, or disabled semantic routing
-  fall back to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving
+  Router arbitration layer, which receives Top-K candidates, registered capability
+  definitions, sender-scoped session summary, and compressed recent-turn history.
+  History is only used to resolve references or continue prior objectives; missing,
+  ambiguous, or conflicting context returns a clarification request. Invalid JSON,
+  unregistered capability ids, LLM failure, or disabled semantic routing fall back
+  to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving
   orchestrator trace with input hash, decision metadata, per-layer route trace,
   candidate capabilities, and fallback reason, without storing raw channel message
   text in the trace. The
@@ -38,6 +40,12 @@ through Team Runtime.
   the JSON includes `payload.schedule`; durable goal-like requests must route to
   `goal.create` or a capability plan instead. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
   to disable the semantic decision pass.
+- Semantic conversation state is short-lived and sender-isolated by
+  `channel:accountId:conversationId:senderId`. It stores bounded compressed turn
+  summaries, inferred entities, selected capability ids, and active goal/module
+  metadata, not full raw prior conversation text. Referent phrases such as “帮我分析一下”
+  or “this one” require usable prior context; otherwise Gateway clarifies before
+  LLM arbitration or execution.
 - Deterministic Goal intents support explicit creation (`创建目标：...`),
   natural long-running creation with auto-run (`我想长期优化 memory 模块`),
   list/status/run/feedback phrases, and confirmation prompts for ambiguous

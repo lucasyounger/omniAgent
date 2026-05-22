@@ -135,11 +135,14 @@ work is delegated, executed, reported, and recovered across all agents.
 - LLM Router is a schema-validated arbitration layer for ambiguous capability
   routing. It triggers only after deterministic/lightweight candidates are low
   confidence, close-scored, multi-capability, or context-dependent; it receives
-  Top-K candidates plus registered capability definitions and can only return
-  registered capability ids or a clarification request. Invalid JSON,
-  unregistered capabilities, or LLM failures fall back to the previous router
-  result and then legacy OmniRouter behavior; Agents and task types remain
-  execution bindings, not LLM-selected route subjects.
+  Top-K candidates, registered capability definitions, sender-scoped session
+  summary, and compressed recent-turn history. History may resolve references or
+  continue prior objectives but cannot override safety, approval, permission, or
+  Registry constraints. Missing, ambiguous, or conflicting context returns a
+  clarification request. Invalid JSON, unregistered capabilities, or LLM failures
+  fall back to the previous router result and then legacy OmniRouter behavior;
+  Agents and task types remain execution bindings, not LLM-selected route
+  subjects.
 - Execution Engine is the unified workflow orchestration entry point for PRS-13.
   `executeRuntimeTask` preserves single-step dispatcher behavior by calling
   `dispatchRuntimeTask`, while `executeExecutionPlan` and `executeCapabilityPlan`
@@ -157,7 +160,7 @@ work is delegated, executed, reported, and recovered across all agents.
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
   `pr_pool.cron_scan`, `goal.create`, `goal.list`, `goal.status`,
   `goal.run`, `goal.feedback`.
-- Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.
+- Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it. ConversationSemanticState is keyed by channel/conversation/sender and stores bounded compressed turn summaries, inferred entities, selected capability ids, and active goal/module metadata rather than full raw prior messages.
 - `goal.run` Runtime Tasks target `goal-runtime`. The dispatcher reserves a
   run ID, executes the routed goal workflow, writes standard Goal artifacts,
   and marks the RuntimeTask succeeded only after execution completes.

@@ -23,7 +23,17 @@ import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrch
 import { dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
-import { getConversationSemanticState, inferConversationContext, setConversationActiveGoal, updateConversationSemanticState } from './conversation-semantic-state';
+import {
+  appendConversationTurnSummary,
+  formatHistorySummary,
+  getConversationSemanticState,
+  hasUsableContext,
+  inferConversationContext,
+  setConversationActiveGoal,
+  updateConversationSemanticState,
+  type ConversationContextInference,
+  type ConversationSemanticState,
+} from './conversation-semantic-state';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage, UnifiedRequest } from './types';
@@ -167,12 +177,37 @@ async function callLlmCapabilityRouter(
     return undefined;
   }
 
+  const semantic = await getUpdatedSemanticState(message);
+  if ((semantic.inference.referentRequest || semantic.inference.continuationRequest) && !hasUsableContext(semantic.previousState)) {
+    return {
+      decision: {
+        kind: 'clarify',
+        confidence: semantic.inference.contextConfidence,
+        question: '我需要更多上下文才能继续。请明确要分析或处理的对象。',
+        reason: 'Context-dependent request has no usable context.',
+      },
+      routeTrace,
+    };
+  }
+  if (semantic.inference.conflictingContext) {
+    return {
+      decision: {
+        kind: 'clarify',
+        confidence: semantic.inference.contextConfidence,
+        question: '上下文里有多个可能对象，请明确你想继续处理哪一个。',
+        reason: 'Context-dependent request conflicts with current entities.',
+      },
+      routeTrace,
+    };
+  }
+
   const start = Date.now();
   const result = await routeLlmCapability({
     request,
     candidates,
     previous,
-    sessionSummary: formatSessionSummary(await getUpdatedSemanticState(message)),
+    sessionSummary: formatSessionSummary(semantic.state),
+    historySummary: formatHistorySummary(semantic.state),
   }, createGatewayLlmRouterClient(config));
 
   routeTrace.push({
@@ -188,8 +223,21 @@ async function callLlmCapabilityRouter(
     return undefined;
   }
 
+  const decision = capabilityRouterResultToDecision(result, message, semantic.state, semantic.inference);
+  if (decision.kind === 'capability_plan') {
+    await appendConversationTurnSummary({
+      channel: message.channel,
+      conversationId: message.conversationId,
+      senderId: message.senderId,
+      messageId: message.messageId,
+      text: decision.objective,
+      entities: semantic.inference.resolvedEntities,
+      capabilities: decision.requiredCapabilities,
+    });
+  }
+
   return {
-    decision: capabilityRouterResultToDecision(result, message),
+    decision,
     routeTrace,
   };
 }
@@ -215,7 +263,12 @@ function createGatewayLlmRouterClient(config: GatewayConfig): LlmRouterClient {
   };
 }
 
-function capabilityRouterResultToDecision(result: RouterResult, message: ChannelMessage): OrchestratorDecision {
+function capabilityRouterResultToDecision(
+  result: RouterResult,
+  message: ChannelMessage,
+  state?: ConversationSemanticState,
+  inference?: ConversationContextInference,
+): OrchestratorDecision {
   if (result.needsClarification) {
     return {
       kind: 'clarify',
@@ -225,8 +278,16 @@ function capabilityRouterResultToDecision(result: RouterResult, message: Channel
     };
   }
 
-  const requiredCapabilities = result.capabilities.map(capability => capability.capabilityId);
-  const objective = typeof result.params?.objective === 'string' ? result.params.objective : message.text.trim().slice(0, 120);
+  const priorCapabilities = inference && (inference.referentRequest || inference.continuationRequest)
+    ? state?.recentTurns.flatMap(turn => turn.capabilities || []) ?? []
+    : [];
+  const requiredCapabilities = Array.from(new Set([
+    ...priorCapabilities,
+    ...result.capabilities.map(capability => capability.capabilityId),
+  ]));
+  const objective = typeof result.params?.objective === 'string'
+    ? result.params.objective
+    : [...(inference?.resolvedEntities || []), message.text.trim()].filter(Boolean).join(' ').slice(0, 120);
   return {
     kind: 'capability_plan',
     confidence: result.confidence,
@@ -241,19 +302,24 @@ function capabilityRouterResultToDecision(result: RouterResult, message: Channel
   };
 }
 
-async function getUpdatedSemanticState(message: ChannelMessage): Promise<Awaited<ReturnType<typeof getConversationSemanticState>>> {
+async function getUpdatedSemanticState(message: ChannelMessage): Promise<{
+  state: ConversationSemanticState;
+  previousState?: ConversationSemanticState;
+  inference: ConversationContextInference;
+}> {
   const goals = (await listGoals({ status: 'active' })).slice(0, 5);
   const previousContext = await getConversationSemanticState(message);
   const inferredContext = inferConversationContext(message.text, goals, previousContext);
-  return updateConversationSemanticState({
+  const state = await updateConversationSemanticState({
     channel: message.channel,
     conversationId: message.conversationId,
     senderId: message.senderId,
     inference: inferredContext,
   });
+  return { state, previousState: previousContext, inference: inferredContext };
 }
 
-function formatSessionSummary(state: Awaited<ReturnType<typeof getConversationSemanticState>>): string {
+function formatSessionSummary(state: ConversationSemanticState | undefined): string {
   return [
     `activeGoalId=${state?.activeGoalId ?? 'none'}`,
     `activeModule=${state?.activeModule ?? 'unknown'}`,
@@ -308,14 +374,7 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
   const activeGoals = goals.length
     ? goals.map(goal => formatActiveGoalForPrompt(goal)).join('\n')
     : '- none';
-  const previousContext = await getConversationSemanticState(message);
-  const inferredContext = inferConversationContext(message.text, goals, previousContext);
-  const semanticState = await updateConversationSemanticState({
-    channel: message.channel,
-    conversationId: message.conversationId,
-    senderId: message.senderId,
-    inference: inferredContext,
-  });
+  const semanticState = (await getUpdatedSemanticState(message)).state;
 
   return [
     'You are OmniAgent runtime orchestrator. Return strict JSON only.',
@@ -336,6 +395,9 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     `- activeModule: ${semanticState.activeModule ?? 'unknown'}`,
     `- recentEntities: ${semanticState.recentEntities.length ? semanticState.recentEntities.join(', ') : 'none'}`,
     `- continuationRequest: ${semanticState.continuationRequest ? 'yes' : 'no'}`,
+    '',
+    'History summary:',
+    formatHistorySummary(semanticState),
     '',
     'Active goals:',
     activeGoals,
