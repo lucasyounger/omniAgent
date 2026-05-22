@@ -140,6 +140,14 @@ work is delegated, executed, reported, and recovered across all agents.
   unregistered capabilities, or LLM failures fall back to the previous router
   result and then legacy OmniRouter behavior; Agents and task types remain
   execution bindings, not LLM-selected route subjects.
+- Execution Engine is the unified workflow orchestration entry point for PRS-13.
+  `executeRuntimeTask` preserves single-step dispatcher behavior by calling
+  `dispatchRuntimeTask`, while `executeExecutionPlan` and `executeCapabilityPlan`
+  persist workflow run state under `${OMNI_HOME}/runs/workflow` and reuse the
+  existing composite task workflow for multi-step plans. Workflow run statuses are
+  `pending`, `running`, `succeeded`, `failed`, `paused`, and `canceled`; `paused`
+  currently represents approval/user-confirmation waits, with explicit
+  pause/resume/cancel controls reserved for later work.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

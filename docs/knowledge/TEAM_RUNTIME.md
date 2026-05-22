@@ -157,6 +157,14 @@ approval linkage.
   result and then legacy OmniRouter behavior, so taskType/Agent/Tool bindings stay
   behind the Capability Registry and Planner.
 
+- Execution Engine (`src/mastra/runtime/execution-engine.ts`) is the unified
+  workflow orchestration facade. Single RuntimeTasks still use the low-level Task
+  Dispatcher directly; ExecutionPlan and CapabilityPlan inputs persist Workflow Run
+  records under `~/.omni/runs/workflow` and reuse `composite-task-workflow.ts` for
+  multi-step execution. Workflow Run status is tracked as `pending`, `running`,
+  `succeeded`, `failed`, `paused`, or `canceled`; `paused` currently means the
+  run reached an approval/user-confirmation boundary.
+
 ## Low-Token Entry Point
 
 For future changes, read `docs/agents/TASK_AGENT.md` first. It is the compact

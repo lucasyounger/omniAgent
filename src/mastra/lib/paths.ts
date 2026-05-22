@@ -41,6 +41,7 @@ export const memoryRunsRoot = path.join(runsRoot, 'memory-runs');
 export const requirementE2ERunsRoot = path.join(runsRoot, 'requirement-e2e');
 export const runtimeTasksRoot = path.join(runsRoot, 'runtime-tasks');
 export const teamRunsRoot = path.join(runsRoot, 'team');
+export const workflowRunsRoot = path.join(runsRoot, 'workflow');
 export const gatewayRunsRoot = path.join(runsRoot, 'gateway');
 export const gatewayRoot = path.join(omniRoot, 'gateway');
 export const storageRoot = path.join(omniRoot, 'storage');
