@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
-import { retrieveCapabilities } from './capabilities';
+import { routeDeterministicCapability, routeLightweightCapability } from './capabilities';
 import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
 
 const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
@@ -86,23 +86,7 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
   const goal = parseGoalIntent(text, source);
   if (goal) {
     if ('kind' in goal) return goal;
-    return {
-      kind: 'runtime_task',
-      confidence: goal.confidence,
-      taskType: goal.taskType,
-      targetAgentId: defaultTargetAgentIdForTaskType(goal.taskType) || 'goal-runtime',
-      objective: goal.objective,
-      notifyTarget,
-      source,
-      payload: {
-        ...goal.payload,
-        notifyTarget,
-        source,
-        actorId: message.senderId,
-        channelId: `${message.channel}:${message.conversationId}`,
-        idempotencyKey: goal.taskType === runtimeTaskTypes.goalCreate ? `goal:${message.messageId}` : undefined,
-      },
-    };
+    return goalIntentToRuntimeDecision(goal, message, notifyTarget, source);
   }
 
   const scheduleMaintenance = parseScheduleMaintenance(text);
@@ -217,13 +201,22 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
-  const retrievedCapabilities = retrieveCapabilities(message.text, { topK: 5 });
+  const unifiedRequest = {
+    source: message.channel,
+    userId: message.senderId,
+    sessionId: [message.channel, message.accountId, message.conversationId, message.senderId].join(':'),
+    content: message.text,
+    metadata: channelSourceFromMessage(message),
+  };
+  const deterministicCapabilities = routeDeterministicCapability(unifiedRequest);
+  const lightweightCapabilities = routeLightweightCapability(unifiedRequest, 5);
+  const candidateCapabilities = mergeCapabilitySelections(deterministicCapabilities.capabilities, lightweightCapabilities.capabilities);
 
   return {
     kind: 'passthrough',
     confidence: 0.2,
-    reason: retrievedCapabilities.length
-      ? `No deterministic runtime intent matched. Candidate capabilities: ${retrievedCapabilities.map(match => `${match.capability.id}:${match.score}`).join(', ')}`
+    reason: candidateCapabilities.length
+      ? `No deterministic runtime intent matched. Candidate capabilities: ${candidateCapabilities.map(match => `${match.capabilityId}:${match.score}`).join(', ')}`
       : 'No deterministic runtime intent matched.',
   };
 }
@@ -287,6 +280,20 @@ export function orchestratorModelOutputToDecision(output: OrchestratorModelOutpu
   const notifyTarget = output.notifyTarget || targetFromMessage(message);
   const source = channelSourceFromMessage(message);
 
+  if (output.taskType === runtimeTaskTypes.scheduleCreate && !isValidScheduleCreateOutput(output, message)) {
+    const goal = parseGoalIntent(message.text.trim(), source);
+    if (goal && !('kind' in goal)) {
+      return goalIntentToRuntimeDecision(goal, message, notifyTarget, source);
+    }
+
+    return {
+      kind: 'clarify',
+      confidence: Math.min(output.confidence, 0.6),
+      question: '你是想创建长期 Goal，还是创建定时任务？如需创建 Goal，请回复：创建目标：<目标内容>；如需定时任务，请补充明确时间。',
+      reason: 'LLM returned schedule.create without explicit schedule evidence.',
+    };
+  }
+
   return {
     kind: 'runtime_task',
     confidence: output.confidence,
@@ -325,6 +332,50 @@ export function channelSourceFromMessage(message: ChannelMessage) {
     messageId: message.messageId,
     messageType: message.messageType,
   };
+}
+
+function mergeCapabilitySelections(
+  first: Array<{ capabilityId: string; score: number; reason?: string }>,
+  second: Array<{ capabilityId: string; score: number; reason?: string }>,
+) {
+  return [...first, ...second]
+    .reduce<Array<{ capabilityId: string; score: number; reason?: string }>>((items, selection) => {
+      const existing = items.find(item => item.capabilityId === selection.capabilityId);
+      if (!existing) return [...items, selection];
+      if (selection.score > existing.score) Object.assign(existing, selection);
+      return items;
+    }, [])
+    .sort((left, right) => right.score - left.score || left.capabilityId.localeCompare(right.capabilityId));
+}
+
+function goalIntentToRuntimeDecision(
+  goal: Exclude<ReturnType<typeof parseGoalIntent>, Extract<OrchestratorDecision, { kind: 'clarify' }> | undefined>,
+  message: ChannelMessage,
+  notifyTarget: ChannelTarget,
+  source: Record<string, unknown>,
+): Extract<OrchestratorDecision, { kind: 'runtime_task' }> {
+  return {
+    kind: 'runtime_task',
+    confidence: goal.confidence,
+    taskType: goal.taskType,
+    targetAgentId: defaultTargetAgentIdForTaskType(goal.taskType) || 'goal-runtime',
+    objective: goal.objective,
+    notifyTarget,
+    source,
+    payload: {
+      ...goal.payload,
+      notifyTarget,
+      source,
+      actorId: message.senderId,
+      channelId: `${message.channel}:${message.conversationId}`,
+      idempotencyKey: goal.taskType === runtimeTaskTypes.goalCreate ? `goal:${message.messageId}` : undefined,
+    },
+  };
+}
+
+function isValidScheduleCreateOutput(output: OrchestratorModelOutput, message: ChannelMessage) {
+  const schedule = typeof output.payload?.schedule === 'string' ? output.payload.schedule.trim() : '';
+  return Boolean(schedule && (looksLikeScheduleRequest(message.text) || parseSchedule(message.text, message.receivedAt)));
 }
 
 function parseGoalIntent(text: string, source: Record<string, unknown>):
@@ -370,6 +421,24 @@ function parseGoalIntent(text: string, source: Record<string, unknown>):
         title: objective.slice(0, 80),
         objective,
         type: inferGoalType(objective),
+      },
+    };
+  }
+
+  const goalLikeCreate = text.match(/^(?:我想|我要|帮我|请帮我)?(?:定个|定一个|创建|新建|建立|设一个)?(?:长期目标|持续目标|长期任务|长期计划|目标)[:：]?\s*(.+)$/);
+  if (goalLikeCreate && !looksLikeScheduleRequest(text)) {
+    const objective = cleanText(goalLikeCreate[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.86,
+      objective: `Create goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: cleanGoalTitle(objective),
+        objective,
+        type: inferGoalType(objective),
+        scope: inferGoalScope(objective),
+        tags: inferGoalScope(objective),
+        autoRun: /(?:长期|持续|逐步|分阶段|接下来长期)/.test(text) || undefined,
       },
     };
   }
@@ -533,7 +602,7 @@ function parseScheduleMaintenance(text: string):
       payload: Record<string, unknown>;
     }
   | undefined {
-  if (/(列出|查看|查询|list|show).*(定时任务|计划任务|schedule|cron)/i.test(text)) {
+  if (/(列出|查看|查询|有哪些|有什么|多少|list|show).*(定时任务|计划任务|schedule|cron)/i.test(text)) {
     return {
       taskType: runtimeTaskTypes.scheduleList,
       confidence: 0.9,

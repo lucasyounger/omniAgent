@@ -119,10 +119,14 @@ approval linkage.
   research, schedule-handler, PR pool, and Goal task types. The task type
   registry also exposes capability metadata for each existing task type
   (category, examples, handler tools, dependencies, outputs, and safety level)
-  without changing dispatch behavior or default target agent IDs. A lightweight
-  capability retriever can rank these capabilities from a natural-language
-  message using metadata text and semantic keyword boosts, without embeddings or
-  a vector database. Code tasks without approval move to `waiting_user_confirm`.
+  without changing dispatch behavior or default target agent IDs. A dedicated
+  Capability Registry groups existing task types into coarse routing capabilities
+  such as `repository_analysis`, `architecture_modeling`, `report_generation`,
+  `schedule_management`, `goal_management`, and `pr_management`; every runtime
+  task type maps to at least one capability while agents/tools remain execution
+  bindings. Deterministic and lightweight capability routers rank candidates from
+  examples, descriptions, and simple bilingual synonyms without embeddings or a
+  vector database. Code tasks without approval move to `waiting_user_confirm`.
 - Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.
 - `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
@@ -131,7 +135,9 @@ approval linkage.
   not require Tool Gateway approval. `schedule.run_now` dynamically requires
   approval when it would trigger direct code execution.
 - Dispatcher uses `dispatchLeaseId` and `dispatchLeaseExpiresAt` metadata to
-  reduce duplicate dispatch.
+  reduce duplicate dispatch. Unsupported targets and registered-but-nonexecutable
+  handler placeholders transition to runtime `failed` with the dispatcher reason
+  rather than staying queued for repeated polling.
 
 ## Low-Token Entry Point
 

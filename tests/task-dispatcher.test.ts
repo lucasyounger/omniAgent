@@ -805,4 +805,56 @@ describe('Task Dispatcher', () => {
       result: { goalId: 'dispatcher-goal', action: 'pause', goal: { status: 'paused' } },
     });
   });
+
+  it('fails unsupported dispatcher targets instead of leaving them queued', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'missing-agent',
+      objective: 'unsupported target',
+      metadata: {
+        taskType: 'missing.task',
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      status: 'skipped',
+      targetAgentId: 'missing-agent',
+      reason: 'No dispatcher handler for target agent: missing-agent',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'failed',
+      metadata: {
+        runtimeStatusReason: 'No dispatcher handler for target agent: missing-agent',
+      },
+    });
+  });
+
+  it('fails pending implementation handlers instead of leaving them queued', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'research-agent',
+      objective: 'future research task',
+      metadata: {
+        taskType: 'research.future_task',
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      status: 'skipped',
+      targetAgentId: 'research-agent',
+      reason: 'Handler for research-agent is registered as pending implementation.',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'failed',
+      metadata: {
+        runtimeStatusReason: 'Handler for research-agent is registered as pending implementation.',
+      },
+    });
+  });
 });

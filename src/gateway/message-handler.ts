@@ -17,43 +17,52 @@ import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import { getConversationSemanticState, inferConversationContext, setConversationActiveGoal, updateConversationSemanticState } from './conversation-semantic-state';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
-import type { ChannelMessage, OutboundMessage } from './types';
+import type { ChannelMessage, OutboundMessage, UnifiedRequest } from './types';
+import { toUnifiedRequest } from './types';
+import { routeRule } from './rule-router';
 
 const ROUTER_TIMEOUT_MS = Number(process.env.OMNI_GATEWAY_ROUTER_TIMEOUT_MS || 60_000);
 
 export async function handleChannelMessage(message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
-  const text = message.text.trim();
+  return handleUnifiedRequest(toUnifiedRequest(message), message, config);
+}
+
+export async function handleUnifiedRequest(request: UnifiedRequest, message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
+  const text = request.content.trim();
   const auth = await authorizeMessage(message, config);
   if (!auth.allowed) {
     return [reply(message, auth.reason)];
   }
 
-  if (text.startsWith('/pair ')) {
-    return [reply(message, auth.reason)];
+  const rule = routeRule(request);
+  if (rule.kind === 'blocked') {
+    return [reply(message, rule.reason === 'empty_message' ? '收到空消息，发送 /help 查看可用命令。' : `请求已拦截：${rule.reason}`)];
   }
 
-  if (!text) {
-    return [reply(message, '\u6536\u5230\u7a7a\u6d88\u606f\uff0c\u53d1\u9001 /help \u67e5\u770b\u53ef\u7528\u547d\u4ee4\u3002')];
-  }
+  if (rule.kind === 'command') {
+    if (rule.command === '/pair') {
+      return [reply(message, auth.reason)];
+    }
 
-  if (text === '/help') {
-    return [reply(message, helpText())];
-  }
+    if (rule.command === '/help') {
+      return [reply(message, helpText())];
+    }
 
-  if (text === '/status') {
-    return [reply(message, 'Omni Gateway \u5728\u7ebf\u3002\u53ef\u4ee5\u4f7f\u7528 /task <workspace> :: <objective> \u521b\u5efa\u5f02\u6b65\u4efb\u52a1\u3002')];
-  }
+    if (rule.command === '/status') {
+      return [reply(message, 'Omni Gateway 在线。可以使用 /task <workspace> :: <objective> 创建异步任务。')];
+    }
 
-  if (text.startsWith('/goal')) {
-    return [reply(message, await handleGoalCommand(message, config))];
-  }
+    if (rule.command === '/goal') {
+      return [reply(message, await handleGoalCommand(message, config))];
+    }
 
-  if (text.startsWith('/task ')) {
-    return [reply(message, await handleTaskCommand(message, text.slice('/task '.length)))];
-  }
+    if (rule.command === '/task') {
+      return [reply(message, await handleTaskCommand(message, rule.args ?? ''))];
+    }
 
-  if (text.startsWith('/pr ')) {
-    return [reply(message, await handlePrCommand(text.slice('/pr '.length)))];
+    if (rule.command === '/pr') {
+      return [reply(message, await handlePrCommand(rule.args ?? ''))];
+    }
   }
 
   const orchestratorDecision = await resolveOrchestratorDecision(message, config);
@@ -150,6 +159,8 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     'Use taskType for executable runtime tasks and include objective plus payload.',
     'If the message is a continuation such as "also", "顺便", "再看看", or "继续", reuse the conversation context and active goal/module instead of treating it as isolated.',
     'Supported taskType values: code.claude_code_task, knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
+    'Only return schedule.create when the message explicitly asks for a timed, recurring, reminder, or cron-style task and payload.schedule is present.',
+    'For durable objectives, long-running improvements, phased work, or goal-like requests, return goal.create or capability.plan instead of schedule.create; if unsure, return clarifyingQuestion.',
     'Return shape for executable single-step tasks: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
     'Return shape for composite or long-running requests: {"intent":"capability.plan","confidence":0-1,"requiredCapabilities":["goal.create","pr_pool.create"],"executionMode":"composite|long_running_goal","shouldCreateGoal":false,"shouldPersistMemory":false,"objective":"...","reason":"..."}',
     '',

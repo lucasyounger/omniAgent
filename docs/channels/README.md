@@ -16,6 +16,11 @@ through Team Runtime.
 - `/task <workspacePath> :: <objective>` for async CodeAgent execution
 - `/goal create/list/status/run/feedback` for durable Goal Runtime management
   from paired or allowlisted channels
+- Adapters still emit `ChannelMessage`, but Gateway converts each message into a
+  `UnifiedRequest` with stable `source`, `userId`, `sessionId`, `content`, and
+  metadata before invoking the shared request pipeline.
+- Rule Router only handles deterministic slash commands and safety boundaries;
+  business natural language continues to capability routing or legacy fallback.
 - Natural language first passes through the Runtime Orchestrator. Supported
   intents create RuntimeTasks with `taskType + payload + notifyTarget`; unmatched
   messages call the LLM orchestrator by default, with persisted semantic
@@ -25,8 +30,11 @@ through Team Runtime.
   orchestrator trace with input hash, decision metadata, candidate capabilities,
   and fallback reason, without storing raw channel message text in the trace. The
   LLM orchestrator can return either one executable runtime task or a
-  multi-capability plan preview for later Planner execution. Set
-  `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable the semantic decision pass.
+  multi-capability plan preview for later Planner execution. It may only return
+  `schedule.create` when the message has explicit time or recurrence evidence and
+  the JSON includes `payload.schedule`; durable goal-like requests must route to
+  `goal.create` or a capability plan instead. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
+  to disable the semantic decision pass.
 - Deterministic Goal intents support explicit creation (`创建目标：...`),
   natural long-running creation with auto-run (`我想长期优化 memory 模块`),
   list/status/run/feedback phrases, and confirmation prompts for ambiguous

@@ -1,5 +1,39 @@
 export type ChannelMessageType = 'dm' | 'group' | 'guild' | 'system';
 
+export type UnifiedAttachment = {
+  type: 'image' | 'file' | 'audio' | 'video';
+  url?: string;
+  base64?: string;
+  name?: string;
+  mimeType?: string;
+};
+
+export type UnifiedRequest = {
+  source: string;
+  userId: string;
+  sessionId: string;
+  content: string;
+  attachments?: UnifiedAttachment[];
+  metadata?: Record<string, unknown>;
+};
+
+export type RouteDecisionType = 'command' | 'blocked' | 'capability' | 'clarification' | 'legacy_fallback' | 'no_match';
+
+export type RouteCapabilitySelection = {
+  capabilityId: string;
+  score: number;
+  reason?: string;
+};
+
+export type RouteDecision = {
+  type: RouteDecisionType;
+  capabilities?: RouteCapabilitySelection[];
+  command?: string;
+  params?: Record<string, unknown>;
+  confidence?: number;
+  reason?: string;
+};
+
 export type ChannelTarget = {
   channel: string;
   accountId: string;
@@ -51,3 +85,20 @@ export type DeliveryRecord = {
   createdAt: string;
   updatedAt: string;
 };
+
+export function toUnifiedRequest(message: ChannelMessage): UnifiedRequest {
+  return {
+    source: message.channel,
+    userId: message.senderId,
+    sessionId: [message.channel, message.accountId, message.conversationId, message.senderId].join(':'),
+    content: message.text,
+    metadata: {
+      accountId: message.accountId,
+      conversationId: message.conversationId,
+      messageId: message.messageId,
+      messageType: message.messageType,
+      receivedAt: message.receivedAt,
+      senderDisplayName: message.senderDisplayName,
+    },
+  };
+}

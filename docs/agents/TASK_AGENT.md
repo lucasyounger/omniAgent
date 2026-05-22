@@ -95,19 +95,27 @@ work is delegated, executed, reported, and recovered across all agents.
   not require approval. `schedule.run_now` dynamically requires approval when
   the target schedule would trigger direct code execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
-  working on a task.
+  working on a task. Unsupported target agents and handler placeholders that are
+  not executable are transitioned to runtime `failed` with a visible reason
+  instead of remaining indefinitely `pending`/queued.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,
   dependencies, outputs, and safety level for semantic orchestration.
-- Capability retriever provides a lightweight message → top-k capability match
-  over runtime task capability metadata. It uses task IDs, names, categories,
-  descriptions, examples, tools, and semantic keyword boosts; it does not require
-  embeddings or a vector database. `OMNI_CAPABILITY_RETRIEVER=embedding_evaluation`
-  enables an evaluation-only path that still falls back to text retrieval and tags
-  match reasons, so default routing remains deterministic without external vector
-  storage.
+- Capability Registry groups those task types into coarse routeable capabilities
+  (for example `repository_analysis`, `architecture_modeling`,
+  `report_generation`, `schedule_management`, `goal_management`, and
+  `pr_management`). Every existing task type maps to at least one capability;
+  agents, tools, and workflows remain execution bindings rather than routing
+  identities.
+- Capability retriever and routers provide lightweight message → top-k capability
+  matches over runtime task capability metadata. They use task IDs, names,
+  categories, descriptions, examples, tools, deterministic patterns, and simple
+  bilingual synonym boosts; they do not require embeddings or a vector database.
+  `OMNI_CAPABILITY_RETRIEVER=embedding_evaluation` enables an evaluation-only
+  path that still falls back to text retrieval and tags match reasons, so default
+  routing remains deterministic without external vector storage.
 - Supported runtime task types: `code.claude_code_task`,
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,

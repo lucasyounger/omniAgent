@@ -334,6 +334,37 @@ describe('Gateway message handler', () => {
     expect(secondBody).toContain('- continuationRequest: yes');
   });
 
+  it('does not create schedules from LLM-misrouted goal-like messages without time evidence', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'schedule.create',
+          confidence: 0.91,
+          taskType: 'schedule.create',
+          objective: 'Create schedule for memory improvement',
+          payload: {
+            name: 'memory improvement',
+            task: '持续优化 memory 模块',
+          },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+
+    const replies = await handleChannelMessage(message('请给我规划 memory 模块的长期推进', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const jobs = await listCronJobs();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).not.toContain('已设置');
+    expect(replies[0].text).toContain('长期 Goal');
+    expect(jobs).toHaveLength(0);
+  });
+
   it('returns a capability plan preview for multi-capability LLM decisions', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

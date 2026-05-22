@@ -127,6 +127,7 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
   }
 
   if (leased.targetAgentId === 'notify-agent' || leased.targetAgentId === 'research-agent') {
+    const reason = `Handler for ${leased.targetAgentId} is registered as pending implementation.`;
     await appendTeamEvent({
       taskId,
       sourceAgentId: 'task-dispatcher',
@@ -134,33 +135,46 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
       type: 'runtime.task.dispatch.queued',
       payload: {
         taskType: leased.metadata?.taskType,
-        reason: 'No executable handler yet; task kept pending for future specialist.',
+        reason: 'No executable handler yet; task failed instead of remaining queued.',
       },
+    });
+    await taskRuntime.transition({
+      taskId,
+      nextStatus: 'failed',
+      reason,
+      sourceAgentId: 'task-dispatcher',
     });
     return {
       taskId,
       status: 'skipped',
       targetAgentId: leased.targetAgentId,
-      reason: `Handler for ${leased.targetAgentId} is registered as pending implementation.`,
+      reason,
     };
   }
 
+  const reason = `No dispatcher handler for target agent: ${task.targetAgentId}`;
   await appendTeamEvent({
     taskId,
     sourceAgentId: 'task-dispatcher',
     targetAgentId: task.targetAgentId,
     type: 'runtime.task.dispatch.skipped',
     payload: {
-      reason: `No dispatcher handler for target agent: ${task.targetAgentId}`,
+      reason,
       taskType: task.metadata?.taskType,
     },
+  });
+  await taskRuntime.transition({
+    taskId,
+    nextStatus: 'failed',
+    reason,
+    sourceAgentId: 'task-dispatcher',
   });
 
   return {
     taskId,
     status: 'skipped',
     targetAgentId: task.targetAgentId,
-    reason: `No dispatcher handler for target agent: ${task.targetAgentId}`,
+    reason,
   };
 }
 

@@ -89,6 +89,12 @@ describe('Runtime Orchestrator', () => {
       targetAgentId: 'scheduler-runtime',
     });
 
+    expect(orchestrateChannelMessage(message('当前有哪些定时任务'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.list',
+      targetAgentId: 'scheduler-runtime',
+    });
+
     expect(orchestrateChannelMessage(message('删除前两个定时任务'))).toMatchObject({
       kind: 'runtime_task',
       taskType: 'schedule.delete',
@@ -158,6 +164,62 @@ describe('Runtime Orchestrator', () => {
       },
     });
   });
+  it('recognizes broader natural language goal creation requests', () => {
+    expect(orchestrateChannelMessage(message('帮我定个长期目标：持续优化 gateway 模块'))).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'goal.create',
+      targetAgentId: 'goal-runtime',
+      payload: {
+        type: 'module_improvement',
+        scope: ['gateway'],
+        tags: ['gateway'],
+        autoRun: true,
+      },
+    });
+  });
+
+  it('rejects LLM schedule.create output without explicit schedule evidence', () => {
+    const output = parseOrchestratorModelOutput(`
+      {
+        "intent": "schedule.create",
+        "confidence": 0.91,
+        "taskType": "schedule.create",
+        "objective": "Create schedule",
+        "payload": { "name": "memory goal", "task": "持续优化 memory 模块" }
+      }
+    `);
+
+    const decision = orchestratorModelOutputToDecision(output, message('帮我定个长期目标：持续优化 memory 模块'));
+
+    expect(decision).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'goal.create',
+      targetAgentId: 'goal-runtime',
+    });
+  });
+
+  it('accepts LLM schedule.create output with explicit schedule evidence', () => {
+    const output = parseOrchestratorModelOutput(`
+      {
+        "intent": "schedule.create",
+        "confidence": 0.91,
+        "taskType": "schedule.create",
+        "objective": "Create reminder",
+        "payload": { "name": "reply hello", "schedule": "2026-05-13 21:08", "task": "你好" }
+      }
+    `);
+
+    const decision = orchestratorModelOutputToDecision(output, message('今天21点08分提醒我回复你好'));
+
+    expect(decision).toMatchObject({
+      kind: 'runtime_task',
+      taskType: 'schedule.create',
+      payload: {
+        schedule: '2026-05-13 21:08',
+      },
+    });
+  });
+
   it('validates strict JSON orchestrator model output', () => {
     const output = parseOrchestratorModelOutput(`
       \`\`\`json

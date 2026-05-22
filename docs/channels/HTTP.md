@@ -44,6 +44,14 @@ prompt instead of executing commands.
   startup normally returns `Dispatch: waiting_user_confirm` until Tool Gateway
   approval is granted.
 
+## Gateway Routing Pipeline
+
+HTTP, QQBot, and other channel adapters normalize inbound messages to `ChannelMessage`; Gateway now converts each message to a stable `UnifiedRequest` before routing. The initial `sessionId` is derived from `channel:accountId:conversationId:senderId`, so repeated messages from the same source/user/thread share routing context without removing the legacy `ChannelMessage` contract.
+
+Rule Router is intentionally narrow: it handles deterministic slash commands (`/pair`, `/help`, `/status`, `/goal`, `/task`, `/pr`, `/reset`), empty messages, oversized messages, and obvious system-control injection attempts. Business natural language such as repo analysis, PR reports, schedules, and goals must continue into semantic/capability routing or legacy fallback instead of being added as rule keywords.
+
+Messages that continue past Rule Router are evaluated by deterministic/lightweight Capability routing for internal decision evidence. Capability candidates use stable capability ids such as `repository_analysis`, `architecture_modeling`, `report_generation`, `schedule_management`, `goal_management`, and `pr_management`; low-confidence requests remain on the legacy LLM/OmniRouter fallback path.
+
 ## Natural Language Runtime Intents
 
 Supported runtime intents are parsed before OmniRouterAgent fallback:
@@ -56,10 +64,12 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
   `反馈目标 <goalId> 暂停` map to `goal.list`, `goal.status`, `goal.run`, and
   `goal.feedback` RuntimeTasks.
 - `今天21点08分回复一句：你好` creates a one-time `schedule.create` task for
-  a `channel.message` reminder.
+  a `channel.message` reminder. Natural-language `schedule.create` requires explicit
+  time or recurrence evidence and a concrete `payload.schedule`; the LLM
+  orchestrator must not create schedules from goal-like messages that lack timing.
 - `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for
   `research.ai_daily_digest`.
-- `列出我的定时任务` creates a `schedule.list` RuntimeTask.
+- `列出我的定时任务` or `当前有哪些定时任务` creates a `schedule.list` RuntimeTask.
 - `删除前两个定时任务` creates a `schedule.delete` RuntimeTask with `first: 2`.
 - `暂停 AI Agents 日报任务` creates a `schedule.pause` RuntimeTask using a
   name/query selector.
@@ -70,7 +80,9 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 - `通知我：hello` creates a `notify.send_channel_message` task.
 - `状态` returns Gateway runtime status.
 
-Natural long-running goal requests such as “我想长期优化 memory 模块” create a `goal.create` RuntimeTask with inferred scope/tags and `autoRun: true`, then persist the created Goal as the active conversation Goal for later continuation prompts.
+Natural long-running goal requests such as “我想长期优化 memory 模块” create a `goal.create` RuntimeTask with inferred scope/tags and `autoRun: true`, then persist the created Goal as the active conversation Goal for later continuation prompts. Goal-like durable objectives, phased work, and ongoing improvement requests are protected from being misrouted into schedules unless explicit timing is present.
+
+Runtime tasks for unsupported targets or handlers that are registered but not executable are marked failed with a visible reason instead of remaining indefinitely queued.
 
 Incomplete schedule-like messages return a clarification question. Other
 normal text is first offered to the LLM orchestrator by default; that prompt
