@@ -62,7 +62,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - Overdue runs should be marked `timed_out`.
 - Runtime status transitions must follow the TaskRuntime state machine. Do not
   write `metadata.runtimeStatus` directly from feature code.
-- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher handlers
+- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher core now resolves executable handlers through `src/mastra/runtime/task-dispatcher/handler-registry.ts`, which centralizes exact taskType, taskType prefix, and targetAgentId routing while preserving the public `dispatchRuntimeTask(taskId)` entry point. Dispatcher handlers
   must use the same Tool Gateway policies as user-facing tools.
 - Approval-required tasks should create durable approval requests. Approving a
   request injects an approval token into linked task payload metadata and moves

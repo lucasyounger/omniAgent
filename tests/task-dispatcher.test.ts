@@ -858,6 +858,45 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('resolves dispatcher handlers through the registry boundary', async () => {
+    const { createRuntimeTaskHandlerRegistry, resolveRuntimeTaskHandler } = await import('../src/mastra/runtime/task-dispatcher/handler-registry');
+    const calls: string[] = [];
+    const makeHandler = (name: string) => async () => {
+      calls.push(name);
+      return { taskId: 'task-1', status: 'dispatched' as const, targetAgentId: 'test-agent', handler: name };
+    };
+    const registry = createRuntimeTaskHandlerRegistry({
+      dispatchScheduleCreateTask: makeHandler('schedule-create'),
+      dispatchScheduleListTask: makeHandler('schedule-list'),
+      dispatchScheduleDeleteTask: makeHandler('schedule-delete'),
+      dispatchSchedulePauseTask: makeHandler('schedule-pause'),
+      dispatchScheduleResumeTask: makeHandler('schedule-resume'),
+      dispatchScheduleRunNowTask: makeHandler('schedule-run-now'),
+      dispatchChannelGatewayTask: makeHandler('channel-gateway'),
+      dispatchNotifySendChannelMessageTask: makeHandler('notify'),
+      dispatchResearchAiDailyDigestTask: makeHandler('research'),
+      dispatchGoalTask: makeHandler('goal'),
+      dispatchPrPoolTask: makeHandler('pr-pool'),
+      dispatchCodeTask: makeHandler('code'),
+      dispatchKnowledgeTask: makeHandler('knowledge'),
+    });
+    const baseTask = {
+      id: 'task-1',
+      sourceAgentId: 'test',
+      targetAgentId: 'code-agent',
+      objective: 'test',
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      metadata: {},
+    };
+
+    await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: 'schedule.create', registry })?.(baseTask)).resolves.toMatchObject({ handler: 'schedule-create' });
+    await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: 'goal.run', registry })?.(baseTask)).resolves.toMatchObject({ handler: 'goal' });
+    await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: undefined, registry })?.(baseTask)).resolves.toMatchObject({ handler: 'code' });
+    expect(calls).toEqual(['schedule-create', 'goal', 'code']);
+  });
+
   it('fails unsupported dispatcher targets instead of leaving them queued', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({
