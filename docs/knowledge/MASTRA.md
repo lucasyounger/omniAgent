@@ -26,5 +26,6 @@ orchestrator traces store an input hash, candidate capability IDs/scores, decisi
 kind/confidence, and fallback reason without storing raw message text; planner
 traces store plan ID, mode, step count, capabilities, and dependency edges for
 golden regression tests. `src/mastra/index.ts` registers `compositeTaskWorkflow`
-alongside the existing Task, Code, and memory workflows so ExecutionPlan dispatch
-is available through Mastra workflow registration.
+alongside the existing Task, Code, memory, and research daily digest workflows so
+ExecutionPlan dispatch and research digest generation are available through
+Mastra workflow registration.

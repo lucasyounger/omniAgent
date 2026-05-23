@@ -19,7 +19,10 @@ confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle
 while invoking the matching Mastra Req Tools for document create/list/status,
 confirmation, item updates, and imports. Knowledge dispatch preserves the same
 compatibility handler and RuntimeTask lifecycle while invoking Mastra memory tools
-for memory index refreshes, episodic logs, and doc update proposals.
+for memory index refreshes, episodic logs, and doc update proposals. Research
+AI daily digest dispatch generates content through the Mastra Workflow
+`research-daily-digest-workflow` before writing the existing Team Run result and
+optional notify child task.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be

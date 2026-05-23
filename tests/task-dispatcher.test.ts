@@ -338,6 +338,24 @@ describe('Task Dispatcher', () => {
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'goals', 'dispatcher-goal-run', 'runs', 'dispatcher-run-001', 'output.json'), 'utf8')).resolves.toContain('daily-digest.md');
   });
 
+  it('exposes research daily digest generation as a Mastra Workflow', async () => {
+    const { researchDailyDigestWorkflow, runResearchDailyDigestWorkflow } = await import('../src/mastra/workflows/research-daily-digest-workflow');
+
+    expect(researchDailyDigestWorkflow.id).toBe('research-daily-digest-workflow');
+    await expect(
+      runResearchDailyDigestWorkflow({
+        topic: 'AI Agents',
+        date: '2026-05-13',
+        items: ['Runtime routing'],
+      }),
+    ).resolves.toMatchObject({
+      date: '2026-05-13',
+      topic: 'AI Agents',
+      summary: 'AI Agents daily digest for 2026-05-13',
+      text: expect.stringContaining('Runtime routing'),
+    });
+  });
+
   it('dispatches research.ai_daily_digest tasks and queues notification through notify handler', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { listDeliveries } = await import('../src/gateway/gateway-store');

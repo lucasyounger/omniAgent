@@ -4,6 +4,8 @@ export { compositeTaskWorkflow, executeCompositePlan } from './composite-task-wo
 export type { CompositeTaskStepResult, CompositeTaskWorkflowResult } from './composite-task-workflow';
 export { runCodeTaskWorkflow } from './code-task-workflow';
 export { memoryMaintenanceWorkflow } from './memory-maintenance-workflow';
+export { researchDailyDigestWorkflow, runResearchDailyDigestWorkflow } from './research-daily-digest-workflow';
+export type { ResearchDailyDigestInput, ResearchDailyDigestOutput } from './research-daily-digest-workflow';
 export { taskOrchestrationWorkflow } from './task-orchestration-workflow';
 export { runModuleImprovementGoalWorkflow } from './module-improvement-goal-workflow';
 export type { ModuleImprovementGoalWorkflowInput, ModuleImprovementGoalWorkflowResult } from './module-improvement-goal-workflow';

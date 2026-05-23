@@ -25,6 +25,7 @@ work is delegated, executed, reported, and recovered across all agents.
 
 - Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler`, execute the corresponding Mastra Req Tools, and write to `.omni/reqs`.
 - Knowledge task types `knowledge.memory_index`, `knowledge.episode`, and `knowledge.doc_update_proposal` are handled by Task Dispatcher through `knowledge-agent` compatibility dispatch while executing the corresponding Mastra memory tools.
+- `research.ai_daily_digest` Runtime Tasks generate digest content through the Mastra Workflow `research-daily-digest-workflow`, then preserve the existing Team Run result and optional notify child-task behavior.
 - Goal cron scan: `goal.cron_scan` scans active module improvement Goals and enqueues due runs while avoiding same-day duplicates.
 - `~/.omni/runs/team/tasks.json`
 - `~/.omni/runs/team/runs.json`

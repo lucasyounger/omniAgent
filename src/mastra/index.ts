@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { Mastra } from '@mastra/core/mastra';
 import { codeAgent, cronAgent, knowledgeAgent, omniRouterAgent, plannerAgent } from './agents';
 import { bootstrapRuntimeCompatibility, omniStorage } from './runtime';
-import { memoryMaintenanceWorkflow, runCodeTaskWorkflow, taskOrchestrationWorkflow, compositeTaskWorkflow } from './workflows';
+import { memoryMaintenanceWorkflow, researchDailyDigestWorkflow, runCodeTaskWorkflow, taskOrchestrationWorkflow, compositeTaskWorkflow } from './workflows';
 
 bootstrapRuntimeCompatibility();
 
@@ -20,6 +20,7 @@ export const mastra = new Mastra({
     compositeTaskWorkflow,
     runCodeTaskWorkflow,
     memoryMaintenanceWorkflow,
+    researchDailyDigestWorkflow,
   },
   storage: omniStorage,
   backgroundTasks: {

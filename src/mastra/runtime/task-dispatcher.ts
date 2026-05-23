@@ -20,6 +20,7 @@ import {
   rejectReqItemTool,
   updateReqItemStatusTool,
 } from '../tools/req-tools';
+import { runResearchDailyDigestWorkflow } from '../workflows/research-daily-digest-workflow';
 import type { RuntimeTask } from './types';
 import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
@@ -386,7 +387,7 @@ async function dispatchResearchAiDailyDigestTask(task: RuntimeTask): Promise<Dis
   });
 
   try {
-    const digest = buildAiDailyDigest({
+    const digest = await runResearchDailyDigestWorkflow({
       topic: stringValue(payload.topic) || stringValue(payload.query) || 'AI Agents',
       date: stringValue(payload.date),
       items: arrayValue(payload.items),
@@ -1642,77 +1643,6 @@ function resolveScheduleRunNowPolicy(job: CronJob) {
 
 function readChannelTarget(value: unknown): ChannelTarget | undefined {
   return isChannelTargetLike(value) ? value : undefined;
-}
-
-function buildAiDailyDigest(input: { topic: string; date?: string; items?: unknown[]; note?: string }) {
-  const date = input.date || new Date().toISOString().slice(0, 10);
-  const items = normalizeDigestItems(input.items);
-  const highlights = items.length
-    ? items
-    : [
-        {
-          title: `${input.topic} landscape check`,
-          summary: 'MVP digest generated from structured task payload. External feeds are not connected yet.',
-          action: 'Connect arXiv, GitHub, or PapersWithCode sources in a later iteration.',
-        },
-      ];
-
-  const lines = [
-    `AI Daily Digest - ${date}`,
-    `Topic: ${input.topic}`,
-    '',
-    'Highlights:',
-    ...highlights.map((item, index) => `${index + 1}. ${item.title} - ${item.summary}`),
-    '',
-    'Suggested Actions:',
-    ...highlights.map((item, index) => `${index + 1}. ${item.action}`),
-  ];
-
-  if (input.note) {
-    lines.push('', `Note: ${input.note}`);
-  }
-
-  return {
-    date,
-    topic: input.topic,
-    summary: `${input.topic} daily digest for ${date}`,
-    highlights,
-    text: lines.join('\n'),
-  };
-}
-
-function normalizeDigestItems(items?: unknown[]) {
-  if (!items) {
-    return [];
-  }
-
-  return items
-    .map(item => {
-      if (typeof item === 'string' && item.trim()) {
-        return {
-          title: item.trim(),
-          summary: 'Provided digest item.',
-          action: 'Review and decide whether to track this item.',
-        };
-      }
-
-      if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        return undefined;
-      }
-
-      const record = item as Record<string, unknown>;
-      const title = stringValue(record.title) || stringValue(record.name);
-      if (!title) {
-        return undefined;
-      }
-
-      return {
-        title,
-        summary: stringValue(record.summary) || stringValue(record.description) || 'No summary provided.',
-        action: stringValue(record.action) || 'Review and decide whether to track this item.',
-      };
-    })
-    .filter((item): item is { title: string; summary: string; action: string } => Boolean(item));
 }
 
 function createNotifyIdempotencyKey(taskId: string, target: ChannelTarget) {
