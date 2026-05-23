@@ -58,8 +58,10 @@ describe('PR pool store', () => {
     const archiveDir = path.join(tempRoot, '.omni', 'pr-pool', 'archive', archiveItem.id);
     expect(archiveEntry).toMatchObject({ prItemId: archiveItem.id, archiveReason: 'completed' });
     await expect(fs.readdir(archiveDir)).resolves.toEqual(
-      expect.arrayContaining(['archive-entry.json', 'item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-run-summary.md', 'final-summary.md']),
+      expect.arrayContaining(['archive-entry.json', 'item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md']),
     );
+    await expect(fs.readFile(path.join(archiveDir, 'code-agent-pr-brief.md'), 'utf8')).resolves.toContain('## Stop Conditions');
+    expect(archiveEntry.artifacts).toContain('code-agent-pr-brief.md');
     await expect(fs.readFile(path.join(archiveDir, 'final-summary.md'), 'utf8')).resolves.toContain('Merge Recommendation');
     await expect(store.getPrPoolItem(archiveItem.id)).resolves.toBeUndefined();
     await expect(store.listArchivedItems()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ prItemId: archiveItem.id })]));
