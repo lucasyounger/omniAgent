@@ -662,6 +662,7 @@ async function dispatchScheduleListTask(task: RuntimeTask): Promise<DispatchResu
           status: job.status,
           taskType: job.taskType,
           targetAgentId: job.targetAgentId,
+          updatedAt: job.updatedAt,
         })),
       },
     };

@@ -576,7 +576,8 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
       const name = stringValue(schedule.name) || stringValue(schedule.id) || `#${index + 1}`;
       const status = stringValue(schedule.status) || 'unknown';
       const time = stringValue(schedule.schedule) || 'unknown schedule';
-      return `${index + 1}. ${name} | ${status} | ${time}`;
+      const updatedAt = stringValue(schedule.updatedAt);
+      return `${index + 1}. ${name} | ${status} | ${time}${updatedAt ? ` | 更新：${formatLocalTimestamp(updatedAt)}` : ''}`;
     });
     return [
       '\u5b9a\u65f6\u4efb\u52a1\u5217\u8868\uff1a',
@@ -957,6 +958,17 @@ async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {
     console.error(`[gateway] OmniRouterAgent call failed: ${msg}`);
     return `OmniRouterAgent \u6682\u65f6\u4e0d\u53ef\u7528\uff1a${msg}`;
   }
+}
+
+function formatLocalTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
 function helpText() {

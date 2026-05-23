@@ -150,6 +150,12 @@ describe('Task Dispatcher', () => {
       handler: 'schedule-handler',
       result: {
         scheduleCount: 2,
+        schedules: expect.arrayContaining([
+          expect.objectContaining({
+            id: job1.id,
+            updatedAt: job1.updatedAt,
+          }),
+        ]),
       },
     });
     await expect(dispatchRuntimeTask(pauseTask.id)).resolves.toMatchObject({

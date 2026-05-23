@@ -186,6 +186,7 @@ work is delegated, executed, reported, and recovered across all agents.
   registry but are pending implementation; their handlers exist in the
   dispatcher.
 - `goal-runtime` target is referenced for Goal task types; dispatcher handles create/list/status/run/feedback via GoalService and records a Team Run result.
+- Schedule list RuntimeTask results include each schedule's `updatedAt` timestamp so channel responses can render local display time without exposing raw UTC ISO strings.
 
 ## Known Pitfalls
 
