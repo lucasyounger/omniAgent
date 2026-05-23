@@ -652,6 +652,7 @@ describe('Task Dispatcher', () => {
     });
     expect(updated?.approval.developApprovalId).toEqual(expect.stringMatching(/^develop-/));
     expect(new Date(updated?.approval.developApprovalExpiresAt || 0).getTime()).toBeGreaterThan(Date.now());
+    await expect(fs.readFile(updated?.run.codeAgentBriefPath || '', 'utf8')).resolves.toContain('# CodeAgent PR Brief');
     expect(codeTask).toMatchObject({
       targetAgentId: 'code-agent',
       status: 'pending',
@@ -660,6 +661,7 @@ describe('Task Dispatcher', () => {
         payload: {
           workspacePath: tempRoot,
           objective: 'Create the implementation',
+          codeAgentBriefPath: expect.stringContaining(path.join('.omni', 'runs', 'pr-pool', item.id, 'code-agent-pr-brief.md')),
           executionMode: 'patch_proposal',
           approvalToken: 'approved',
           prItemId: item.id,

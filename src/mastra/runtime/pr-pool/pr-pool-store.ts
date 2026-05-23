@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { prPoolRoot } from '../../lib/paths';
+import { prPoolRoot, prPoolRunsRoot } from '../../lib/paths';
 
 export type PRItemStatus =
   | 'draft'
@@ -36,6 +36,7 @@ export type PRItemRun = {
   runtimeTaskId?: string;
   codeTaskId?: string;
   lastRunId?: string;
+  codeAgentBriefPath?: string;
   retryCount: number;
   maxRetries: number;
 };
@@ -281,7 +282,7 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
     },
     codeTaskId: item.run.codeTaskId || '',
     codeRunSummary: buildCodeRunSummary(item),
-    artifacts: ['item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-run-summary.md', 'final-summary.md'],
+    artifacts: ['item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md'],
     archivedAt,
     archiveReason: reason,
   };
@@ -289,6 +290,7 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
   await fs.writeFile(path.join(archiveDir, 'objective.md'), buildObjectiveMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'context-brief.md'), buildContextBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'design-4plus1.md'), buildDesignMarkdown(archiveEntry.design4Plus1), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'code-agent-pr-brief.md'), buildCodeAgentPrBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'code-run-summary.md'), archiveEntry.codeRunSummary, 'utf8');
   await fs.writeFile(path.join(archiveDir, 'final-summary.md'), buildFinalSummaryMarkdown(item, archiveEntry), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'archive-entry.json'), JSON.stringify(archiveEntry, null, 2), 'utf8');
@@ -297,6 +299,82 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
   return archiveEntry;
 }
 
+export async function writeCodeAgentPrBrief(item: PRItem): Promise<string> {
+  const runDir = path.join(prPoolRunsRoot, item.id);
+  await fs.mkdir(runDir, { recursive: true });
+  const briefPath = path.join(runDir, 'code-agent-pr-brief.md');
+  await fs.writeFile(briefPath, buildCodeAgentPrBriefMarkdown(item), 'utf8');
+  return briefPath;
+}
+
+export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
+  const workspacePath = item.workspace.worktreePath || item.workspace.repoPath;
+  const design = item.design4Plus1;
+  return [
+    '# CodeAgent PR Brief',
+    '',
+    '## PR Identity',
+    '',
+    `- PR Item: ${item.id}`,
+    `- Title: ${item.title}`,
+    `- Priority: ${item.priority}`,
+    `- Source: ${item.source}`,
+    item.goalId ? `- Goal ID: ${item.goalId}` : undefined,
+    item.proposalId ? `- Proposal ID: ${item.proposalId}` : undefined,
+    item.designArtifactId ? `- Design Artifact ID: ${item.designArtifactId}` : undefined,
+    `- Workspace: ${workspacePath}`,
+    item.workspace.branchName ? `- Branch: ${item.workspace.branchName}` : undefined,
+    '',
+    '## Objective',
+    '',
+    item.objective,
+    '',
+    '## Implementation Prompt',
+    '',
+    item.codeAgentPrompt,
+    '',
+    '## Scope And Impact',
+    '',
+    `- Risk: ${item.impact.risk}`,
+    `- Modules: ${item.impact.modules.join(', ') || 'n/a'}`,
+    item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
+    item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    '',
+    '## Design Summary',
+    '',
+    '### Logical View',
+    design?.logical || 'n/a',
+    '',
+    '### Process View',
+    design?.process || 'n/a',
+    '',
+    '### Development View',
+    design?.development || 'n/a',
+    '',
+    '### Physical View',
+    design?.physical || 'n/a',
+    '',
+    '### Scenarios',
+    ...(design?.scenarios.length ? design.scenarios.map(scenario => `- ${scenario}`) : ['- n/a']),
+    '',
+    '## Acceptance Criteria',
+    '',
+    ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+    '',
+    '## Verification',
+    '',
+    item.testCommand ? `Run: \`${item.testCommand}\`` : 'No explicit test command was provided. Select the smallest relevant test set and report it.',
+    '',
+    '## Stop Conditions',
+    '',
+    '- Stop if requirements or implementation boundaries are unclear.',
+    '- Stop if impact analysis reveals unapproved high-risk changes.',
+    '- Do not mark the PR item completed unless acceptance criteria and verification evidence are satisfied.',
+    '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
 export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
   await ensureStore();
   const entries = await fs.readdir(archiveRoot, { withFileTypes: true });

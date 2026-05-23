@@ -3,6 +3,7 @@ import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from './pr-pool-runtime';
 import { ensureWorktree } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
+import { writeCodeAgentPrBrief } from './pr-pool-store';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
 import type { DispatchResult } from '../task-dispatcher';
@@ -118,18 +119,20 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       throw new Error(`Cannot develop PR pool item in status ${developingItem.status}: ${prItemId}`);
     }
     const worktreeItem = await ensureWorktree(developingItem);
+    const codeAgentBriefPath = await writeCodeAgentPrBrief(worktreeItem);
 
     const codeTask = await taskRuntime.createTask({
       sourceAgentId: 'pr-pool-runtime',
       targetAgentId: 'code-agent',
       parentTaskId: task.id,
-      objective: buildCodeAgentPrompt(worktreeItem),
+      objective: buildCodeAgentPrompt(worktreeItem, codeAgentBriefPath),
       metadata: {
         taskType: runtimeTaskTypes.codeClaudeCodeTask,
         payload: {
           workspacePath: worktreeItem.workspace.worktreePath || worktreeItem.workspace.repoPath,
           objective: worktreeItem.codeAgentPrompt,
-          contextBrief: formatPrItemContext(worktreeItem),
+          contextBrief: formatPrItemContext(worktreeItem, codeAgentBriefPath),
+          codeAgentBriefPath,
           executionMode: process.env.OMNI_CODE_EXECUTION_MODE === 'direct' ? 'direct' : 'patch_proposal',
           approvalToken,
           prItemId,
@@ -142,6 +145,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
         ...worktreeItem.run,
         runtimeTaskId: task.id,
         codeTaskId: codeTask.id,
+        codeAgentBriefPath,
       },
     });
 
@@ -227,10 +231,13 @@ async function failPrPoolTask(task: RuntimeTask, reason: string): Promise<Dispat
   return { taskId: task.id, status: 'failed', targetAgentId: task.targetAgentId, reason };
 }
 
-function buildCodeAgentPrompt(item: PRItem): string {
+function buildCodeAgentPrompt(item: PRItem, codeAgentBriefPath: string): string {
   return [
     `PR Pool Item: ${item.id}`,
     `Title: ${item.title}`,
+    `CodeAgent PR Brief: ${codeAgentBriefPath}`,
+    '',
+    'Read the CodeAgent PR Brief first. It is the execution contract for this PR slice.',
     '',
     'Objective:',
     item.objective,
@@ -243,13 +250,17 @@ function buildCodeAgentPrompt(item: PRItem): string {
   ].join('\n');
 }
 
-function formatPrItemContext(item: PRItem): string {
+function formatPrItemContext(item: PRItem, codeAgentBriefPath?: string): string {
   const sections = [
     `PR Item: ${item.id}`,
     `Priority: ${item.priority}`,
     `Source: ${item.source}`,
     `Impact: ${item.impact.modules.join(', ')} (${item.impact.risk})`,
   ];
+
+  if (codeAgentBriefPath) {
+    sections.push(`CodeAgent PR Brief: ${codeAgentBriefPath}`);
+  }
 
   if (item.impact.files?.length) {
     sections.push(`Files: ${item.impact.files.join(', ')}`);

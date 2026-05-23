@@ -116,7 +116,11 @@ approval linkage.
   `approvalToken` linkage alongside the append-only runtime timeline.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
-  research, schedule-handler, PR pool, and Goal task types. The task type
+  research, schedule-handler, PR pool, and Goal task types. PR Pool develop
+  dispatch now creates a durable `code-agent-pr-brief.md` under
+  `~/.omni/runs/pr-pool/{prItemId}/`, passes `codeAgentBriefPath` to the
+  generated CodeAgent RuntimeTask, and archives the same brief with the PR Pool
+  evidence bundle so the implementation contract is traceable. The task type
   registry also exposes capability metadata for each existing task type
   (category, examples, handler tools, dependencies, outputs, and safety level)
   without changing dispatch behavior or default target agent IDs. A dedicated

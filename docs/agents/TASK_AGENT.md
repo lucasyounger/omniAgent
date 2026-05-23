@@ -168,6 +168,16 @@ work is delegated, executed, reported, and recovered across all agents.
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
   `pr_pool.cron_scan`, `goal.create`, `goal.list`, `goal.status`,
   `goal.run`, `goal.feedback`.
+- PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
+  under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
+  The CodeAgent payload includes `codeAgentBriefPath`, and the context brief
+  points to that file so CodeAgent can read the PR slice objective, impact,
+  4+1 design summary, acceptance criteria, verification command, and stop
+  conditions before implementation.
+- PR Pool archive entries include `code-agent-pr-brief.md` alongside item,
+  objective, context, 4+1 design, code-run summary, and final summary artifacts
+  so the exact implementation contract remains traceable after the active item
+  is removed.
 - Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it. ConversationSemanticState is keyed by channel/conversation/sender and stores bounded compressed turn summaries, inferred entities, selected capability ids, and active goal/module metadata rather than full raw prior messages.
 - `goal.run` Runtime Tasks target `goal-runtime`. The dispatcher reserves a
   run ID, executes the routed goal workflow, writes standard Goal artifacts,
