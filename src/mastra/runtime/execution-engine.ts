@@ -91,14 +91,19 @@ export async function executeExecutionPlan(plan: ExecutionPlan): Promise<Workflo
 
   const result = await executeCompositePlan(plan);
   const stepResults = result.stepResults.map(compositeStepToWorkflowStep);
-  return updateWorkflowRun(run.id, {
+  const completionPatch: Partial<WorkflowRunRecord> = {
     status: result.status,
-    completedAt: new Date().toISOString(),
     failureReason: result.failureReason,
     failedStepId: result.failedStepId,
     stepResults,
     output: result,
-  });
+  };
+  if (result.status === 'paused') {
+    completionPatch.pausedAt = new Date().toISOString();
+  } else {
+    completionPatch.completedAt = new Date().toISOString();
+  }
+  return updateWorkflowRun(run.id, completionPatch);
 }
 
 export async function executeCapabilityPlan(plan: CapabilityPlan): Promise<WorkflowRunRecord> {

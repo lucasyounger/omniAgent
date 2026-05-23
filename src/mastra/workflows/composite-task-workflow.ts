@@ -17,7 +17,7 @@ const compositeTaskStepResultSchema = z.object({
 
 export const compositeTaskWorkflowOutputSchema = z.object({
   planId: z.string(),
-  status: z.enum(['succeeded', 'failed']),
+  status: z.enum(['succeeded', 'failed', 'paused']),
   completedStepIds: z.array(z.string()),
   failedStepId: z.string().optional(),
   failureReason: z.string().optional(),
@@ -52,7 +52,7 @@ export async function executeCompositePlan(plan: ExecutionPlan): Promise<Composi
   for (const step of plan.steps) {
     for (const dependency of step.dependencies || []) {
       if (!stepsById.has(dependency)) {
-        return failedPlanResult(plan, stepResults, step.stepId, `Unknown dependency: ${dependency}`);
+        return incompletePlanResult(plan, stepResults, step.stepId, `Unknown dependency: ${dependency}`);
       }
     }
   }
@@ -63,7 +63,7 @@ export async function executeCompositePlan(plan: ExecutionPlan): Promise<Composi
     );
 
     if (!readySteps.length) {
-      return failedPlanResult(plan, stepResults, undefined, 'ExecutionPlan contains a dependency cycle.');
+      return incompletePlanResult(plan, stepResults, undefined, 'ExecutionPlan contains a dependency cycle.');
     }
 
     const batch = selectExecutableBatch(readySteps);
@@ -75,7 +75,7 @@ export async function executeCompositePlan(plan: ExecutionPlan): Promise<Composi
 
     const failed = batchResults.find(result => result.status !== 'dispatched');
     if (failed) {
-      return failedPlanResult(plan, stepResults, failed.stepId, failed.reason || `Step ${failed.stepId} did not dispatch.`);
+      return incompletePlanResult(plan, stepResults, failed.stepId, failed.reason || `Step ${failed.stepId} did not dispatch.`);
     }
 
     for (const result of batchResults) {
@@ -159,15 +159,16 @@ function dispatchResultToStepResult(step: ExecutionPlanStep, result: DispatchRes
   };
 }
 
-function failedPlanResult(
+function incompletePlanResult(
   plan: ExecutionPlan,
   stepResults: CompositeTaskStepResult[],
   failedStepId: string | undefined,
   failureReason: string,
 ): CompositeTaskWorkflowResult {
+  const failedStep = failedStepId ? stepResults.find(result => result.stepId === failedStepId) : undefined;
   return {
     planId: plan.planId,
-    status: 'failed',
+    status: failedStep?.status === 'waiting_user_confirm' ? 'paused' : 'failed',
     completedStepIds: stepResults.filter(result => result.status === 'dispatched').map(result => result.stepId),
     failedStepId,
     failureReason,

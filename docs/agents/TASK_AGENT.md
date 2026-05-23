@@ -157,8 +157,9 @@ work is delegated, executed, reported, and recovered across all agents.
   persist workflow run state under `${OMNI_HOME}/runs/workflow` and reuse the
   existing composite task workflow for multi-step plans. Workflow run statuses are
   `pending`, `running`, `succeeded`, `failed`, `paused`, and `canceled`; `paused`
-  currently represents approval/user-confirmation waits, with explicit
-  pause/resume/cancel controls reserved for later work.
+  represents approval/user-confirmation waits for both direct RuntimeTask dispatch
+  and multi-step composite Workflow execution, with explicit pause/resume/cancel
+  controls reserved for later work.
 - Debug-only capability management is available through the HTTP gateway when
   `OMNI_ROUTER_ADMIN=1`: list/upsert/delete capabilities and evaluate a query against
   the lightweight router. The flag is off by default and these endpoints should remain

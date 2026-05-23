@@ -149,4 +149,48 @@ describe('Composite task workflow', () => {
     });
     expect(result.stepResults).toHaveLength(2);
   });
+
+  it('pauses composite plans when a step waits for approval', async () => {
+    const { executeCompositePlan } = await loadWorkflow();
+    const plan: ExecutionPlan = {
+      planId: 'plan-paused',
+      messageId: 'msg-paused',
+      mode: 'composite',
+      steps: [
+        {
+          stepId: 'step-1',
+          capabilityId: 'goal.create',
+          taskType: 'goal.create',
+          input: { title: 'Approval gated plan' },
+          expectedOutput: 'Create a goal',
+        },
+        {
+          stepId: 'step-2',
+          capabilityId: 'code.claude_code_task',
+          taskType: 'code.claude_code_task',
+          dependencies: ['step-1'],
+          input: {
+            workspacePath: tempRoot,
+            objective: 'change files',
+            executionMode: 'direct',
+          },
+          expectedOutput: 'Run code task',
+        },
+      ],
+    };
+
+    const result = await executeCompositePlan(plan);
+
+    expect(result).toMatchObject({
+      planId: 'plan-paused',
+      status: 'paused',
+      completedStepIds: ['step-1'],
+      failedStepId: 'step-2',
+      failureReason: expect.stringContaining('Approval'),
+    });
+    expect(result.stepResults[1]).toMatchObject({
+      stepId: 'step-2',
+      status: 'waiting_user_confirm',
+    });
+  });
 });

@@ -188,8 +188,9 @@ approval linkage.
   Dispatcher directly; ExecutionPlan and CapabilityPlan inputs persist Workflow Run
   records under `~/.omni/runs/workflow` and reuse `composite-task-workflow.ts` for
   multi-step execution. Workflow Run status is tracked as `pending`, `running`,
-  `succeeded`, `failed`, `paused`, or `canceled`; `paused` currently means the
-  run reached an approval/user-confirmation boundary.
+  `succeeded`, `failed`, `paused`, or `canceled`; `paused` now covers approval or
+  user-confirmation boundaries reached by direct RuntimeTask dispatch or by a
+  multi-step composite Workflow step.
 
 - Debug-only router administration can be enabled with `OMNI_ROUTER_ADMIN=1` on the
   HTTP gateway. It exposes `GET /capabilities`, `POST /capabilities`,
