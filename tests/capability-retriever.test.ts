@@ -3,7 +3,7 @@ import { capabilityRetrieverBackendFromEnv, retrieveCapabilities } from '../src/
 
 describe('Capability retriever', () => {
   it('retrieves goal, memory, and repo capabilities for long-running memory improvement requests', () => {
-    const matches = retrieveCapabilities('长期优化 memory 模块并生成 PR', { topK: 8 });
+    const matches = retrieveCapabilities('长期优化 memory 模块并生成 PR', { topK: 10 });
     const ids = matches.map(match => match.capability.id);
     const categories = new Set(matches.map(match => match.capability.category));
 

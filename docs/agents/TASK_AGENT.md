@@ -110,7 +110,9 @@ work is delegated, executed, reported, and recovered across all agents.
   `report_generation`, `schedule_management`, `goal_management`, and
   `pr_management`). Every existing task type maps to at least one capability;
   agents, tools, and workflows remain execution bindings rather than routing
-  identities.
+  identities. Capabilities may now also record optional Mastra executable bindings
+  so migrated handlers can be traced back to concrete tools/workflows without
+  making those executable IDs the router's source of truth.
 - Capability retriever and routers provide lightweight message → top-k capability
   matches over runtime task capability metadata. They use task IDs, names,
   categories, descriptions, examples, tools, deterministic patterns, and simple

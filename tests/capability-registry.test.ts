@@ -31,6 +31,25 @@ describe('Capability Registry', () => {
     }
   });
 
+  it('records Mastra executable bindings for migrated capabilities', () => {
+    expect(capabilityRegistry.getById('message_delivery')?.executables).toEqual(
+      expect.arrayContaining([
+        { kind: 'tool', id: 'queue-channel-notification', taskTypes: [runtimeTaskTypes.notifySendChannelMessage] },
+      ]),
+    );
+    expect(capabilityRegistry.getById('research')?.executables).toEqual(
+      expect.arrayContaining([
+        { kind: 'workflow', id: 'research-daily-digest-workflow', taskTypes: [runtimeTaskTypes.researchAiDailyDigest] },
+      ]),
+    );
+    expect(capabilityRegistry.getById('req_management')?.executables?.map(executable => executable.id)).toEqual(
+      expect.arrayContaining(['create-req-draft', 'list-reqs', 'import-req-file']),
+    );
+    expect(capabilityRegistry.getById('knowledge_query')?.executables?.map(executable => executable.id)).toEqual(
+      expect.arrayContaining(['update-memory-index', 'append-episodic-log']),
+    );
+  });
+
   it('supports runtime upsert and delete for debug capability management', () => {
     const registry = new CapabilityRegistry([capabilityRegistry.getById('goal_management')!]);
     registry.upsert({

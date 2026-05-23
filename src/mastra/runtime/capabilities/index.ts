@@ -4,6 +4,7 @@ export {
 } from './capability-registry';
 export type {
   CapabilityDefinition,
+  CapabilityExecutableBinding,
 } from './capability-registry';
 export {
   routeDeterministicCapability,

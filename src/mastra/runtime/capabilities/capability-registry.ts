@@ -1,6 +1,12 @@
 import type { RuntimeTaskType } from '../task-types';
 import { runtimeTaskTypes } from '../task-types';
 
+export type CapabilityExecutableBinding = {
+  kind: 'agent' | 'tool' | 'workflow' | 'handler';
+  id: string;
+  taskTypes?: RuntimeTaskType[];
+};
+
 export type CapabilityDefinition = {
   id: string;
   name: string;
@@ -13,6 +19,7 @@ export type CapabilityDefinition = {
   standalone: boolean;
   inputHints?: string[];
   outputHints?: string[];
+  executables?: CapabilityExecutableBinding[];
 };
 
 const CAPABILITIES: CapabilityDefinition[] = [
@@ -72,6 +79,9 @@ const CAPABILITIES: CapabilityDefinition[] = [
     requiredTools: ['knowledge-agent'],
     safetyLevel: 'low',
     standalone: true,
+    executables: [
+      { kind: 'tool', id: 'propose-doc-update', taskTypes: [runtimeTaskTypes.knowledgeDocUpdateProposal] },
+    ],
   },
   {
     id: 'report_generation',
@@ -94,6 +104,10 @@ const CAPABILITIES: CapabilityDefinition[] = [
     requiredTools: ['knowledge-agent'],
     safetyLevel: 'low',
     standalone: true,
+    executables: [
+      { kind: 'tool', id: 'update-memory-index', taskTypes: [runtimeTaskTypes.knowledgeMemoryIndex] },
+      { kind: 'tool', id: 'append-episodic-log', taskTypes: [runtimeTaskTypes.knowledgeEpisode] },
+    ],
   },
   {
     id: 'research',
@@ -105,6 +119,9 @@ const CAPABILITIES: CapabilityDefinition[] = [
     requiredTools: ['research-agent'],
     safetyLevel: 'low',
     standalone: true,
+    executables: [
+      { kind: 'workflow', id: 'research-daily-digest-workflow', taskTypes: [runtimeTaskTypes.researchAiDailyDigest] },
+    ],
   },
   {
     id: 'schedule_management',
@@ -134,13 +151,16 @@ const CAPABILITIES: CapabilityDefinition[] = [
     requiredTools: ['channel-gateway', 'notify-agent'],
     safetyLevel: 'low',
     standalone: true,
+    executables: [
+      { kind: 'tool', id: 'queue-channel-notification', taskTypes: [runtimeTaskTypes.notifySendChannelMessage] },
+    ],
   },
   {
     id: 'goal_management',
     name: 'Goal Management',
     description: 'Create, list, inspect, run, and update durable goals.',
     category: 'goal',
-    taskTypes: [runtimeTaskTypes.goalCreate, runtimeTaskTypes.goalList, runtimeTaskTypes.goalStatus, runtimeTaskTypes.goalRun, runtimeTaskTypes.goalFeedback],
+    taskTypes: [runtimeTaskTypes.goalCreate, runtimeTaskTypes.goalList, runtimeTaskTypes.goalStatus, runtimeTaskTypes.goalRun, runtimeTaskTypes.goalFeedback, runtimeTaskTypes.goalCronScan],
     examples: ['create a long-running goal', '创建长期目标', 'run goal goal-1', '反馈目标暂停'],
     requiredTools: ['goal-runtime'],
     safetyLevel: 'medium',
@@ -151,11 +171,34 @@ const CAPABILITIES: CapabilityDefinition[] = [
     name: 'PR Management',
     description: 'Create, list, confirm, develop, archive, or scan PR pool items.',
     category: 'repo',
-    taskTypes: [runtimeTaskTypes.prPoolCreate, runtimeTaskTypes.prPoolList, runtimeTaskTypes.prPoolConfirm, runtimeTaskTypes.prPoolDevelop, runtimeTaskTypes.prPoolArchive, runtimeTaskTypes.prPoolCronScan],
+    taskTypes: [runtimeTaskTypes.prPoolCreate, runtimeTaskTypes.prPoolList, runtimeTaskTypes.prPoolConfirm, runtimeTaskTypes.prPoolDevelop, runtimeTaskTypes.prPoolArchive, runtimeTaskTypes.prPoolIngestProposal, runtimeTaskTypes.prPoolCronScan],
     examples: ['create PR slice', '生成 PR 切片', 'summarize PRs', '列出 PR 池'],
     requiredTools: ['pr-pool-runtime'],
     safetyLevel: 'medium',
     standalone: true,
+  },
+  {
+    id: 'req_management',
+    name: 'Req Management',
+    description: 'Create, list, confirm, reject, update, or import Req documents and items.',
+    category: 'req',
+    taskTypes: [runtimeTaskTypes.reqCreate, runtimeTaskTypes.reqList, runtimeTaskTypes.reqStatus, runtimeTaskTypes.reqConfirmDocument, runtimeTaskTypes.reqRejectDocument, runtimeTaskTypes.reqConfirmItem, runtimeTaskTypes.reqRejectItem, runtimeTaskTypes.reqUpdateItemStatus, runtimeTaskTypes.reqImport],
+    examples: ['create a req draft', '导入需求文档', 'confirm req item', '更新需求状态'],
+    requiredTools: ['req-runtime'],
+    safetyLevel: 'medium',
+    standalone: true,
+    executables: [
+      { kind: 'tool', id: 'create-req-draft', taskTypes: [runtimeTaskTypes.reqCreate] },
+      { kind: 'tool', id: 'list-reqs', taskTypes: [runtimeTaskTypes.reqList] },
+      { kind: 'tool', id: 'get-req-status', taskTypes: [runtimeTaskTypes.reqStatus] },
+      { kind: 'tool', id: 'confirm-req-document', taskTypes: [runtimeTaskTypes.reqConfirmDocument] },
+      { kind: 'tool', id: 'reject-req-document', taskTypes: [runtimeTaskTypes.reqRejectDocument] },
+      { kind: 'tool', id: 'confirm-req-item', taskTypes: [runtimeTaskTypes.reqConfirmItem] },
+      { kind: 'tool', id: 'reject-req-item', taskTypes: [runtimeTaskTypes.reqRejectItem] },
+      { kind: 'tool', id: 'update-req-item-status', taskTypes: [runtimeTaskTypes.reqUpdateItemStatus] },
+      { kind: 'tool', id: 'import-req-markdown', taskTypes: [runtimeTaskTypes.reqImport] },
+      { kind: 'tool', id: 'import-req-file', taskTypes: [runtimeTaskTypes.reqImport] },
+    ],
   },
   {
     id: 'workflow_execution',
