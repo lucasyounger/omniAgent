@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
-import { resolveGoalWorkspacePath, pauseGoal, resumeGoal } from '../goal';
+import { resolveGoalWorkspacePath } from '../goal/goal-workspace';
+import { pauseGoal, resumeGoal } from '../goal/goal-store';
 import { parseFeedbackMessage } from './feedback-parser';
 import { createFeedbackEvent, type CreateFeedbackEventInput, type FeedbackChannel, type FeedbackEvent } from './feedback.schema';
 

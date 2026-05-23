@@ -6,6 +6,7 @@ import { readRuntimeDashboardData } from '../mastra/runtime/dashboard';
 import { sendOutbound } from './delivery';
 import { listDeadLetterDeliveries, listDeliveries } from './gateway-store';
 import { processRequest } from './gateway';
+import { listRecentRouteTraces } from './message-handler';
 import { getQQBotAdapterStatus } from './qqbot-adapter';
 import { toUnifiedRequest, type ChannelMessage } from './types';
 
@@ -64,6 +65,15 @@ export function startGatewayHttpServer(config: GatewayConfig) {
         }
         const capabilityId = decodeURIComponent(req.url.slice('/capabilities/'.length));
         sendJson(res, 200, { ok: true, deleted: capabilityRegistry.delete(capabilityId) });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/router/traces') {
+        if (!routerAdminEnabled()) {
+          sendJson(res, 404, { ok: false, error: 'not found' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, traces: listRecentRouteTraces() });
         return;
       }
 

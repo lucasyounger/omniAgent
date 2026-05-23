@@ -58,6 +58,7 @@ describe('EmbeddingRouter', () => {
       reason: 'embedding cosine similarity',
     });
     expect(result.confidence).toBeGreaterThan(0);
+    expect(result.source).toBe('embedding');
   });
 
   it('updates registry embeddings', async () => {
