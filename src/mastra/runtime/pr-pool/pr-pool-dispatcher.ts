@@ -5,10 +5,30 @@ import { ensureWorktree } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import type { PRPoolProposal } from './pr-pool-proposal';
 import { writeCodeAgentPrBrief } from './pr-pool-store';
+import { executeWithToolGateway } from '../tool-gateway';
 import { taskRuntime } from '../task-runtime';
+import type { ToolGatewayPolicy } from '../types';
 import { runtimeTaskTypes } from '../task-types';
 import type { DispatchResult } from '../task-dispatcher';
 import type { RuntimeTask } from '../types';
+
+const prPoolReadPolicy = {
+  risk: 'safe',
+  capability: 'pr_pool.read',
+  audit: true,
+} as const satisfies ToolGatewayPolicy;
+
+const prPoolWritePolicy = {
+  risk: 'medium',
+  capability: 'pr_pool.write',
+  audit: true,
+} as const satisfies ToolGatewayPolicy;
+
+const prPoolDevelopPolicy = {
+  risk: 'medium',
+  capability: 'pr_pool.develop',
+  audit: true,
+} as const satisfies ToolGatewayPolicy;
 
 export async function dispatchPrPoolTask(task: RuntimeTask): Promise<DispatchResult> {
   const taskType = task.metadata?.taskType;
@@ -38,7 +58,7 @@ async function dispatchPrPoolCreateTask(task: RuntimeTask): Promise<DispatchResu
     return failPrPoolTask(task, 'pr_pool.create requires a complete PR item payload.');
   }
 
-  return runPrPoolHandler(task, 'Created PR pool item.', async () => {
+  return runPrPoolHandler(task, 'Created PR pool item.', prPoolWritePolicy, async () => {
     const item = await prPoolRuntime.create(payload);
     return { prItemId: item.id, status: item.status };
   });
@@ -52,7 +72,7 @@ async function dispatchPrPoolIngestProposalTask(task: RuntimeTask): Promise<Disp
   }
 
   const workspaceRepoPath = stringValue(payload.workspaceRepoPath) || process.env.OMNI_PROJECT_ROOT || process.cwd();
-  return runPrPoolHandler(task, 'Ingested PR pool proposal.', async () => {
+  return runPrPoolHandler(task, 'Ingested PR pool proposal.', prPoolWritePolicy, async () => {
     const item = await prPoolRuntime.ingestProposal(proposal, workspaceRepoPath);
     return { prItemId: item.id, status: item.status, origin: item.metadata.origin };
   });
@@ -60,7 +80,7 @@ async function dispatchPrPoolIngestProposalTask(task: RuntimeTask): Promise<Disp
 
 async function dispatchPrPoolListTask(task: RuntimeTask): Promise<DispatchResult> {
   const payload = readPayload(task);
-  return runPrPoolHandler(task, 'Listed PR pool items.', async () => {
+  return runPrPoolHandler(task, 'Listed PR pool items.', prPoolReadPolicy, async () => {
     const items = await prPoolRuntime.list({
       status: prItemStatusValue(payload.status),
       source: prItemSourceValue(payload.source),
@@ -77,7 +97,7 @@ async function dispatchPrPoolConfirmTask(task: RuntimeTask): Promise<DispatchRes
     return failPrPoolTask(task, 'pr_pool.confirm requires payload.prItemId.');
   }
 
-  return runPrPoolHandler(task, `Confirmed PR pool item: ${prItemId}`, async () => {
+  return runPrPoolHandler(task, `Confirmed PR pool item: ${prItemId}`, prPoolWritePolicy, async () => {
     const item = await prPoolRuntime.confirm(prItemId);
     return { prItemId: item.id, status: item.status };
   });
@@ -112,7 +132,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     };
   }
 
-  return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, async () => {
+  return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, prPoolDevelopPolicy, async () => {
     const developApproval = validateDevelopApprovalToken(item, payloadToken)
       ? undefined
       : generateDevelopApprovalToken(prItemId, stringValue(payload.approvedBy) || task.sourceAgentId || 'pr-pool-runtime');
@@ -177,17 +197,22 @@ async function dispatchPrPoolArchiveTask(task: RuntimeTask): Promise<DispatchRes
     return failPrPoolTask(task, 'pr_pool.archive requires payload.prItemId.');
   }
 
-  return runPrPoolHandler(task, `Archived PR pool item: ${prItemId}`, async () => {
+  return runPrPoolHandler(task, `Archived PR pool item: ${prItemId}`, prPoolWritePolicy, async () => {
     const entry = await prPoolRuntime.archive(prItemId, payload.reason === 'discarded' ? 'discarded' : 'completed');
     return { prItemId: entry.prItemId, archiveReason: entry.archiveReason };
   });
 }
 
 async function dispatchPrPoolCronScanTask(task: RuntimeTask): Promise<DispatchResult> {
-  return runPrPoolHandler(task, 'Scanned PR pool items for scheduled development.', () => runPrPoolCronScan());
+  return runPrPoolHandler(task, 'Scanned PR pool items for scheduled development.', prPoolDevelopPolicy, () => runPrPoolCronScan());
 }
 
-async function runPrPoolHandler(task: RuntimeTask, summary: string, action: () => Promise<Record<string, unknown>>): Promise<DispatchResult> {
+async function runPrPoolHandler(
+  task: RuntimeTask,
+  summary: string,
+  policy: ToolGatewayPolicy,
+  action: () => Promise<Record<string, unknown>>,
+): Promise<DispatchResult> {
   await taskRuntime.transition({
     taskId: task.id,
     nextStatus: 'running',
@@ -197,7 +222,10 @@ async function runPrPoolHandler(task: RuntimeTask, summary: string, action: () =
   const run = await startTeamTaskRun({ taskId: task.id, executorAgentId: 'pr-pool-handler' });
 
   try {
-    const output = await action();
+    const output = await executeWithToolGateway(`dispatcher.${String(task.metadata?.taskType || 'pr_pool.unknown')}`, policy, readPayload(task), action, {
+      actorId: task.sourceAgentId,
+      requestId: task.id,
+    });
     const result = await completeTeamRun({
       taskId: task.id,
       runId: run.runId,

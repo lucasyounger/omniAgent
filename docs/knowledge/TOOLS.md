@@ -47,6 +47,12 @@ For schedule operations, create/list/delete/pause/resume are audit-only today.
 Immediate run is dynamic: ordinary scheduled reminders do not need approval,
 while direct code execution schedules require Tool Gateway approval.
 
+PR Pool dispatcher operations now use Tool Gateway audit-only policies as the
+side-effect boundary: list uses `pr_pool.read`, create/ingest/confirm/archive use
+`pr_pool.write`, and develop/cron scan use `pr_pool.develop`. The existing PR
+Pool develop approval token remains the user-confirmation gate for starting
+CodeAgent work; this audit boundary does not change that approval flow.
+
 ## Cron Records
 
 CronAgent currently manages scheduled job records under

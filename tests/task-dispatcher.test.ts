@@ -16,6 +16,15 @@ async function loadRuntime() {
   };
 }
 
+async function readToolAuditRecords() {
+  const auditFile = path.join(tempRoot, '.omni', 'runs', 'gateway', 'tool-audit.jsonl');
+  const raw = await fs.readFile(auditFile, 'utf8');
+  return raw
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map(line => JSON.parse(line) as Record<string, unknown>);
+}
+
 beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-task-dispatcher-test-'));
   await fs.writeFile(path.join(tempRoot, 'package.json'), JSON.stringify({ name: 'omni-agent' }), 'utf8');
@@ -565,6 +574,10 @@ describe('Task Dispatcher', () => {
       handler: 'pr-pool-handler',
       result: { prItemId, status: 'ready' },
     });
+
+    const auditRecords = await readToolAuditRecords();
+    expect(auditRecords.map(record => record.toolId)).toEqual(expect.arrayContaining(['dispatcher.pr_pool.create', 'dispatcher.pr_pool.ingest_proposal', 'dispatcher.pr_pool.confirm']));
+    expect(auditRecords.map(record => record.status)).toEqual(expect.arrayContaining(['succeeded']));
   });
 
   it('dispatches PR pool cron scan tasks and respects concurrent development slots', async () => {
