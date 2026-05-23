@@ -160,6 +160,34 @@ describe('goal runtime workspace manager', () => {
     await expect(fs.readFile(getGoalRunEventLogPath('failure-goal', 'run-failed'), 'utf8')).resolves.toContain('goal_run.failed');
   });
 
+  it('queues a RuntimeTask when a goal run is enqueued', async () => {
+    const { createGoal, enqueueGoalRun } = await loadGoalRuntime();
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    await createGoal({
+      id: 'queued-goal',
+      type: 'topic_research',
+      title: 'Queued Goal',
+      objective: 'Queue goal work through RuntimeTask',
+    });
+
+    const run = await enqueueGoalRun('queued-goal', { runId: 'queued-run-001' });
+    const tasks = await taskRuntime.listTasks();
+
+    expect(run.status).toBe('pending');
+    expect(tasks).toContainEqual(expect.objectContaining({
+      sourceAgentId: 'goal-runtime',
+      targetAgentId: 'goal-runtime',
+      status: 'pending',
+      metadata: expect.objectContaining({
+        taskType: 'goal.run',
+        payload: {
+          goalId: 'queued-goal',
+          runId: 'queued-run-001',
+        },
+      }),
+    }));
+  });
+
   it('merges proof of work sections without duplicates', async () => {
     const { emptyProofOfWork, mergeProofOfWork } = await loadGoalRuntime();
 
@@ -453,5 +481,47 @@ describe('goal runtime workspace manager', () => {
     expect(feedback).toMatchObject({ action: 'pause', goal: { status: 'paused' } });
     expect(goals).toHaveLength(1);
     expect(status).toMatchObject({ goal: { id: 'service-goal', status: 'paused' }, latestRun: { id: run.id }, feedbackCount: 1 });
+  });
+
+  it('ingests confirmed Goal proposals into PR Pool draft items and links the run', async () => {
+    const { applyGoalFeedback, createGoal, createGoalRun, readGoalRun } = await loadGoalRuntime();
+    await createGoal({
+      id: 'proposal-goal',
+      type: 'topic_research',
+      title: 'Proposal Goal',
+      objective: 'Find implementation proposals',
+    });
+    await createGoalRun({ goalId: 'proposal-goal', id: 'run-proposal', status: 'waiting_feedback' });
+
+    const feedback = await applyGoalFeedback({
+      goalId: 'proposal-goal',
+      runId: 'run-proposal',
+      action: 'note',
+      text: '录入第 1 个方案到 PR Pool',
+      channel: 'cli',
+      proposal: {
+        title: 'Goal proposal',
+        objective: 'Turn confirmed goal output into a PR item',
+        source: 'goal_driven',
+        origin: { type: 'goal', artifactId: 'proposal-1' },
+        impact: { modules: ['Goal Runtime', 'PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['draft item created'],
+        codeAgentPrompt: 'Implement the confirmed goal proposal',
+        metadata: { proposalId: 'proposal-1' },
+      },
+    });
+
+    const linkedRun = await readGoalRun('proposal-goal', 'run-proposal');
+
+    expect(feedback.prItem).toMatchObject({
+      status: 'draft',
+      source: 'goal_driven',
+      metadata: {
+        origin: { type: 'goal', goalId: 'proposal-goal', runId: 'run-proposal', artifactId: 'proposal-1' },
+        goalId: 'proposal-goal',
+        runId: 'run-proposal',
+      },
+    });
+    expect(linkedRun?.prItemIds).toContain(feedback.prItem?.id);
   });
 });

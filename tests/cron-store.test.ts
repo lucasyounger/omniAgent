@@ -48,7 +48,41 @@ describe('Cron store', () => {
 
     const nextRunAt = getCronJobNextRunAt(job, new Date('2026-05-12T10:35:30.000Z'));
 
-    expect(nextRunAt).toBe('2026-05-13T01:30:00.000Z');
+    expect(nextRunAt).toBe('2026-05-13 01:30');
+  });
+
+
+  it('normalizes CST one-time schedules to UTC storage and execution', async () => {
+    const { createCronJob, getCronJobNextRunAt, runDueCronJobs } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'cst reminder',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+    });
+
+    expect(job.schedule).toBe('2026-05-12 13:08');
+    expect(getCronJobNextRunAt(job, new Date('2026-05-12T12:00:00.000Z'))).toBe('2026-05-12 13:08');
+
+    const beforeDue = await runDueCronJobs(new Date('2026-05-12T13:07:59.000Z'));
+    expect(beforeDue[0].lastRunStatus).toBeUndefined();
+
+    const due = await runDueCronJobs(new Date('2026-05-12T13:08:00.000Z'));
+    expect(due[0]).toMatchObject({
+      status: 'paused',
+      lastRunStatus: 'started',
+    });
+  });
+
+  it('normalizes CST daily schedules to UTC time of day', async () => {
+    const { createCronJob, getCronJobNextRunAt } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'daily report',
+      schedule: 'daily 09:30',
+      task: 'report',
+    });
+
+    expect(job.schedule).toBe('daily 01:30');
+    expect(getCronJobNextRunAt(job, new Date('2026-05-12T10:35:30.000Z'))).toBe('2026-05-13 01:30');
   });
 
   it('creates a runtime task instead of starting a code run', async () => {

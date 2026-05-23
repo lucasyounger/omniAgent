@@ -77,7 +77,7 @@ export async function createCronJob(input: {
   const job: CronJob = {
     id: `cron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: input.name,
-    schedule: input.schedule,
+    schedule: normalizeScheduleToUtc(input.schedule),
     task: input.task,
     taskType: input.taskType || inferTaskType(input.targetAgentId || input.targetAgent),
     targetAgent: input.targetAgent,
@@ -246,15 +246,14 @@ function isCronJobDue(job: CronJob, now: Date) {
 
   const scheduleTime = parseOneTimeSchedule(job.schedule);
   if (scheduleTime) {
-    return now >= scheduleTime && !job.lastRunAt;
+    return now.getTime() >= scheduleTime.getTime() && !job.lastRunAt;
   }
 
   const dailyTime = parseDailySchedule(job.schedule);
   if (dailyTime) {
-    const dueAt = new Date(now);
-    dueAt.setHours(dailyTime.hours, dailyTime.minutes, 0, 0);
+    const dueAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), dailyTime.hours, dailyTime.minutes, 0, 0));
     const lastRunAt = job.lastRunAt ? new Date(job.lastRunAt) : undefined;
-    return now >= dueAt && (!lastRunAt || lastRunAt < dueAt);
+    return now.getTime() >= dueAt.getTime() && (!lastRunAt || lastRunAt.getTime() < dueAt.getTime());
   }
 
   return false;
@@ -268,20 +267,65 @@ export function getCronJobNextRunAt(job: CronJob, now = new Date()) {
 
   const scheduleTime = parseOneTimeSchedule(job.schedule);
   if (scheduleTime && !job.lastRunAt) {
-    return scheduleTime.toISOString();
+    return formatUtcSchedule(scheduleTime);
   }
 
   const dailyTime = parseDailySchedule(job.schedule);
   if (dailyTime) {
-    const dueAt = new Date(now);
-    dueAt.setHours(dailyTime.hours, dailyTime.minutes, 0, 0);
-    if (dueAt <= now) {
-      dueAt.setDate(dueAt.getDate() + 1);
+    let dueAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), dailyTime.hours, dailyTime.minutes, 0, 0));
+    if (dueAt.getTime() <= now.getTime()) {
+      dueAt = new Date(dueAt.getTime() + 24 * 60 * 60 * 1000);
     }
-    return dueAt.toISOString();
+    return formatUtcSchedule(dueAt);
   }
 
   return undefined;
+}
+
+function normalizeScheduleToUtc(schedule: string) {
+  const once = parseCstOneTimeSchedule(schedule);
+  if (once) {
+    return formatUtcSchedule(once);
+  }
+
+  const daily = parseCstDailySchedule(schedule);
+  if (daily) {
+    const totalMinutes = daily.hours * 60 + daily.minutes - 8 * 60;
+    const utcMinutes = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+    return `daily ${formatTime(Math.floor(utcMinutes / 60), utcMinutes % 60)}`;
+  }
+
+  return schedule;
+}
+
+function parseCstOneTimeSchedule(schedule: string) {
+  const match = schedule.match(/(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+  if (!match) {
+    return undefined;
+  }
+
+  const [, year, month, day, hours, minutes] = match;
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours) - 8, Number(minutes), 0, 0));
+}
+
+function parseCstDailySchedule(schedule: string) {
+  const match = schedule.match(/(?:daily|every day|每天|每日).*?(\d{1,2}):(\d{2})/i);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    hours: Number(match[1]),
+    minutes: Number(match[2]),
+  };
+}
+
+function formatUtcSchedule(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')} ${formatTime(date.getUTCHours(), date.getUTCMinutes())}`;
+}
+
+function formatTime(hours: number, minutes: number) {
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function parseCronSchedule(schedule: string) {
@@ -314,7 +358,7 @@ function parseOneTimeSchedule(schedule: string) {
   }
 
   const [, year, month, day, hours, minutes] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), 0, 0);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), 0, 0));
 }
 
 function parseDailySchedule(schedule: string) {

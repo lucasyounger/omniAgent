@@ -1,0 +1,35 @@
+{
+  "title": "Add PR Pool proposal ingest",
+  "objective": "把已确认的方案录入 PR Pool，形成可追溯 PR 切片。",
+  "priority": "normal",
+  "source": "exploration",
+  "origin": {
+    "type": "claudecode",
+    "artifactPath": ".omc/plans/example.md"
+  },
+  "impact": {
+    "modules": ["PR Pool", "Goal Runtime"],
+    "files": ["src/mastra/runtime/pr-pool/pr-pool-store.ts"],
+    "risk": "medium"
+  },
+  "acceptanceCriteria": [
+    "录入后创建 draft PRItem。",
+    "PRItem 保留 origin metadata。",
+    "不绕过 confirm/develop 状态机。"
+  ],
+  "testCommand": "npx vitest run tests/pr-pool-store.test.ts tests/task-dispatcher.test.ts",
+  "codeAgentPrompt": "请按该方案实现最小闭环，保持代码、测试、文档同步。",
+  "design4Plus1": {
+    "logical": "PRPoolProposal 是外部方案进入 PR Pool 的标准中间格式。",
+    "process": "方案生成后，经用户确认录入，Runtime 创建 PRItem draft，后续由用户 confirm/develop。",
+    "development": "Runtime 负责校验和写入；CLI/skill 只负责采集和调用。",
+    "physical": "PRItem 存储在 ~/.omni/pr-pool/active/items.json。",
+    "scenarios": [
+      "Goal 定时探索产出 proposal 后录入。",
+      "ClaudeCode 方案文档录入。",
+      "OpenCode 方案文档录入。"
+    ]
+  },
+  "tags": ["pr-pool", "goal"],
+  "idempotencyKey": "file:.omc/plans/example.md:example"
+}

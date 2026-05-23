@@ -28,6 +28,7 @@ export type GoalRun = {
   plan?: unknown;
   summary?: string;
   proofOfWork?: ProofOfWork;
+  prItemIds?: string[];
   failureReason?: string;
   startedAt?: string;
   finishedAt?: string;

@@ -8,6 +8,8 @@ import {
   createGoalRun,
   getGoalRunDir,
   readGoal,
+  readGoalRun,
+  updateGoalRunStatus,
   type Goal,
   type ProofOfWork,
 } from '../runtime/goal';
@@ -44,8 +46,14 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
   if (!goal) throw new Error(`Goal not found: ${input.goalId}`);
   if (goal.type !== 'topic_research') throw new Error(`Goal is not topic_research: ${input.goalId}`);
 
-  const topic = input.topic ?? goal.objective;
-  await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { topic } });
+  const existingRun = await readGoalRun(goal.id, input.runId);
+  const topic = input.topic ?? (isTopicPlan(existingRun?.plan) ? existingRun.plan.topic : undefined) ?? goal.objective;
+  if (existingRun) {
+    if (existingRun.status !== 'pending') throw new Error(`Goal run already exists: ${input.runId}`);
+    await updateGoalRunStatus(goal.id, input.runId, 'running');
+  } else {
+    await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { topic } });
+  }
 
   const rawEvidence = [
     ...(await searchGitHubForTopic({ goalId: goal.id, topic })),
@@ -108,6 +116,10 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
   await completeGoalRun({ goalId: goal.id, runId: input.runId, summary: `Generated topic digest for ${topic}.`, proofOfWork });
 
   return { goal, evidence, artifacts };
+}
+
+function isTopicPlan(plan: unknown): plan is { topic: string } {
+  return Boolean(plan && typeof plan === 'object' && !Array.isArray(plan) && typeof (plan as { topic?: unknown }).topic === 'string');
 }
 
 function renderDailyDigest(goal: Goal, evidence: EvidenceItem[]): string {

@@ -210,6 +210,10 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
   return item;
 }
 
+export async function findPrPoolItemByIdempotencyKey(idempotencyKey: string): Promise<PRItem | undefined> {
+  return (await readItems()).find(item => item.metadata.idempotencyKey === idempotencyKey);
+}
+
 export async function getPrPoolItem(id: string): Promise<PRItem | undefined> {
   return (await readItems()).find(item => item.id === id);
 }

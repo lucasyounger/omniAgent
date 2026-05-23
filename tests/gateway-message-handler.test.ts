@@ -234,7 +234,7 @@ describe('Gateway message handler', () => {
       },
     });
     expect(jobs[0]).toMatchObject({
-      schedule: '2026-05-12 21:08',
+      schedule: '2026-05-12 13:08',
       task: '\u4f60\u597d',
       taskType: 'channel.message',
       targetAgentId: 'channel-gateway',
@@ -266,7 +266,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toBe('已设置，状态：已启用，执行时间：daily 09:00。');
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      schedule: 'daily 09:00',
+      schedule: 'daily 01:00',
       taskType: 'research.ai_daily_digest',
       targetAgentId: 'research-agent',
       payload: {
@@ -277,6 +277,34 @@ describe('Gateway message handler', () => {
         conversationId: 'conv-1',
       },
     });
+  });
+
+  it('lists stored UTC schedules as CST for channel users', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { createCronJob } = await import('../src/mastra/lib/cron-store');
+    await createCronJob({
+      name: 'reply hello',
+      schedule: '2026-05-12 21:08',
+      task: '你好',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    });
+    await createCronJob({
+      name: 'daily report',
+      schedule: 'daily 09:00',
+      task: 'AI Agents daily digest',
+      taskType: 'research.ai_daily_digest',
+    });
+
+    const replies = await handleChannelMessage(message('列出我的定时任务', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('2026-05-12 21:08');
+    expect(replies[0].text).toContain('daily 09:00');
+    expect(replies[0].text).not.toContain('2026-05-12 13:08');
+    expect(replies[0].text).not.toContain('daily 01:00');
   });
 
   it('asks a clarifying question for incomplete natural language schedules', async () => {

@@ -72,6 +72,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
   a `channel.message` reminder. Natural-language `schedule.create` requires explicit
   time or recurrence evidence and a concrete `payload.schedule`; the LLM
   orchestrator must not create schedules from goal-like messages that lack timing.
+  User-entered schedule times are interpreted as CST (UTC+8), normalized to UTC
+  in the cron store, and converted back to CST in channel schedule-list replies.
 - `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for
   `research.ai_daily_digest`.
 - `列出我的定时任务` or `当前有哪些定时任务` creates a `schedule.list` RuntimeTask;

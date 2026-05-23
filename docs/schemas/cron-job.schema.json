@@ -6,7 +6,10 @@
   "properties": {
     "id": { "type": "string" },
     "name": { "type": "string" },
-    "schedule": { "type": "string" },
+    "schedule": {
+      "type": "string",
+      "description": "Execution schedule. User-entered one-time and daily schedules are interpreted as CST (UTC+8) at creation and stored in UTC as YYYY-MM-DD HH:mm or daily HH:mm; cron expressions are stored unchanged."
+    },
     "task": { "type": "string" },
     "taskType": { "type": "string" },
     "targetAgent": { "type": "string" },

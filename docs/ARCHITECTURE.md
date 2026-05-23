@@ -59,11 +59,19 @@ used only by unregistered workflows:
   `topic-research-goal-workflow.ts` (both currently unregistered).
 - **PR Pool** (`src/mastra/runtime/pr-pool/`): patch-proposal pool management
   with `pr-pool-runtime.ts` and `pr-pool-store.ts`. Has registered task types
-  (`pr_pool.create/list/confirm/develop/archive/cron_scan`) but no agent card.
+  (`pr_pool.create/list/confirm/develop/archive/cron_scan/ingest_proposal`) but
+  no agent card. `pr_pool.ingest_proposal` turns a normalized `PRPoolProposal`
+  into a draft PR item while preserving origin metadata and idempotency keys.
+  Re-ingesting an explicit `idempotencyKey` returns the existing item and records
+  `proposal_ingest_deduplicated`. The shared CLI entrypoint is
+  `npm run prpool:ingest -- --file <proposal.json|proposal.md>` and supports
+  `--dry-run` validation.
 - **Req Runtime** (`src/mastra/runtime/req/`): `.omni/reqs` requirement library
   with path-safe document IDs, `reqs.json` index, per-document markdown/design
   files, source metadata, and append-only status events for document and item
   confirmation.
+- **Artifact Store** (`src/mastra/runtime/artifacts/`): generic artifact storage
+  with versioning, wiki-diff generation, and markdown import/export.
 - **Connectors** (`src/mastra/runtime/connectors/`): external system connector
   registry with audit trails. Defines `Connector`, `ConnectorRegistry`, and
   tool definitions for future integrations.

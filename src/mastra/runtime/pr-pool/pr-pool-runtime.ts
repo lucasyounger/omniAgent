@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { cleanupWorktree } from './worktree-manager';
+import { proposalToCreatePRItemInput, type PRPoolProposal } from './pr-pool-proposal';
 import {
   appendPrPoolEvent,
   archivePrPoolItem,
   createPrPoolItem,
   deletePrPoolItem,
+  findPrPoolItemByIdempotencyKey,
   getPrPoolItem,
   listPrPoolItems,
   updatePrPoolItem,
@@ -72,6 +74,30 @@ export class PrPoolStatusError extends Error {
 export const prPoolRuntime = {
   create(input: CreatePRItemInput): Promise<PRItem> {
     return createPrPoolItem(input);
+  },
+
+  async ingestProposal(proposal: PRPoolProposal, workspaceRepoPath: string): Promise<PRItem> {
+    if (proposal.idempotencyKey) {
+      const existing = await findPrPoolItemByIdempotencyKey(proposal.idempotencyKey);
+      if (existing) {
+        await appendPrPoolEvent({
+          prItemId: existing.id,
+          type: 'proposal_ingest_deduplicated',
+          to: existing.status,
+          detail: JSON.stringify({ origin: proposal.origin, idempotencyKey: proposal.idempotencyKey }),
+        });
+        return existing;
+      }
+    }
+
+    const item = await createPrPoolItem(proposalToCreatePRItemInput(proposal, workspaceRepoPath));
+    await appendPrPoolEvent({
+      prItemId: item.id,
+      type: 'proposal_ingested',
+      to: item.status,
+      detail: JSON.stringify({ origin: proposal.origin, idempotencyKey: proposal.idempotencyKey }),
+    });
+    return item;
   },
 
   list(filter?: ListPRItemsFilter): Promise<PRItem[]> {

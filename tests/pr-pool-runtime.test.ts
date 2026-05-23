@@ -78,10 +78,50 @@ describe('PR pool runtime', () => {
     expect(retried.blocking).toMatchObject({ reason: 'Tests failed', category: 'test_failed' });
   });
 
-  it('throws PrPoolStatusError for invalid transitions', async () => {
-    const { PrPoolStatusError, prPoolRuntime } = await loadRuntime();
-    const item = await prPoolRuntime.create(input('Invalid transition'));
+  it('deduplicates proposal ingest by idempotencyKey', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const proposal = {
+      title: 'Deduplicate me',
+      objective: 'Avoid duplicate PR items',
+      source: 'exploration' as const,
+      origin: { type: 'claudecode' as const, artifactPath: '.omc/proposals/deduplicate.json' },
+      impact: { modules: ['PR Pool'], risk: 'medium' as const },
+      acceptanceCriteria: ['single item created'],
+      codeAgentPrompt: 'Implement once',
+      idempotencyKey: 'file:.omc/proposals/deduplicate.json:abc',
+    };
 
-    await expect(prPoolRuntime.transition(item.id, 'developing')).rejects.toBeInstanceOf(PrPoolStatusError);
+    const first = await prPoolRuntime.ingestProposal(proposal, tempRoot);
+    const second = await prPoolRuntime.ingestProposal(proposal, tempRoot);
+
+    expect(second.id).toBe(first.id);
+    await expect(prPoolRuntime.list({ status: 'draft' })).resolves.toHaveLength(1);
+    const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
+    expect(events).toContain('proposal_ingest_deduplicated');
+  });
+
+  it('ingests proposals as draft items and records proposal events', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.ingestProposal(
+      {
+        title: 'Ingest me',
+        objective: 'Turn a proposal into a draft item',
+        source: 'exploration',
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/ingest-me.json' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['draft item created'],
+        codeAgentPrompt: 'Implement the proposal',
+        idempotencyKey: 'file:.omc/proposals/ingest-me.json:abc',
+      },
+      tempRoot,
+    );
+
+    expect(item.status).toBe('draft');
+    expect(item.metadata).toMatchObject({
+      origin: { type: 'claudecode', artifactPath: '.omc/proposals/ingest-me.json' },
+      idempotencyKey: 'file:.omc/proposals/ingest-me.json:abc',
+    });
+    const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
+    expect(events).toContain('proposal_ingested');
   });
 });

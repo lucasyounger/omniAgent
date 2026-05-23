@@ -166,8 +166,13 @@ work is delegated, executed, reported, and recovered across all agents.
   `schedule.run_now`, `research.ai_daily_digest`,
   `notify.send_channel_message`, `pr_pool.create`, `pr_pool.list`,
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
-  `pr_pool.cron_scan`, `goal.create`, `goal.list`, `goal.status`,
-  `goal.run`, `goal.feedback`.
+  `pr_pool.ingest_proposal`, `pr_pool.cron_scan`, `goal.create`, `goal.list`,
+  `goal.status`, `goal.run`, `goal.feedback`.
+- PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
+  `pr_pool.ingest_proposal`, creates a `draft` PR item through the runtime, and
+  preserves origin/idempotency/proposal summary metadata without confirming or
+  developing the item. Re-ingesting the same explicit `idempotencyKey` returns
+  the existing PR item and records a deduplication event.
 - PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
   under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
   The CodeAgent payload includes `codeAgentBriefPath`, and the context brief
