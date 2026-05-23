@@ -53,7 +53,7 @@ export class EmbeddingRouter {
       return {
         capabilities,
         confidence: capabilities[0]?.score ?? 0,
-        source: 'lightweight',
+        source: 'embedding',
         reason: 'embedding capability match',
       };
     } catch (error) {

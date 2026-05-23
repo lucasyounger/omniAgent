@@ -742,6 +742,44 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).not.toContain('inputHash');
   });
 
+  it('stores recent sanitized route traces for debug inspection', async () => {
+    const { handleChannelMessage, listRecentRouteTraces } = await loadHandler();
+
+    await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const traces = listRecentRouteTraces();
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({
+      inputHash: expect.stringMatching(/^[a-f0-9]{16}$/),
+      decision: {
+        kind: 'runtime_task',
+        taskType: 'goal.create',
+      },
+    });
+    expect(JSON.stringify(traces[0])).not.toContain('我想长期优化 memory 模块');
+  });
+
+  it('keeps only the most recent sanitized route traces', async () => {
+    const { listRecentRouteTraces, recordRouteTrace } = await loadHandler();
+
+    for (let index = 0; index < 51; index += 1) {
+      recordRouteTrace({
+        inputHash: index.toString(16).padStart(16, '0'),
+        routeTrace: [{ layer: 'legacy', decision: 'passthrough', confidence: 0.2 }],
+        retrievedCapabilities: [],
+        decision: { kind: 'passthrough', confidence: 0.2 },
+      });
+    }
+
+    const traces = listRecentRouteTraces();
+    expect(traces).toHaveLength(50);
+    expect(traces[0].inputHash).toBe('0000000000000001');
+    expect(traces.at(-1)?.inputHash).toBe('0000000000000032');
+  });
+
   it('returns route trace only when debug metadata is enabled', async () => {
     const { handleChannelMessage } = await loadHandler();
     const debugMessage = {

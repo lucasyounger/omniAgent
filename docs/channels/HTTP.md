@@ -101,7 +101,8 @@ trace is hidden from normal user replies. HTTP `/message` can expose the same sa
 trace only when explicitly requested with `?trace=1`, `x-omni-route-trace: 1`, or
 `routeTraceDebug: true` in the JSON body. Debug-only router administration endpoints are
 disabled unless `OMNI_ROUTER_ADMIN=1`: `GET /capabilities` lists registered capabilities,
-`POST /capabilities` upserts a capability, `DELETE /capabilities/:id` removes one, and
+`POST /capabilities` upserts a capability, `DELETE /capabilities/:id` removes one,
+`GET /router/traces` returns recent sanitized route traces kept in memory, and
 `POST /router/eval` returns Top-K lightweight routing candidates plus whether an optional
 `expectedCapability` matched. These endpoints are intended for local evaluation/tuning and
 must not be exposed without external access controls. The LLM

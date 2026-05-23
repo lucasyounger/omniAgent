@@ -1,4 +1,3 @@
-import { dispatchRuntimeTask } from '../task-dispatcher';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
 import type { Conflict, DispatchPlan } from './dependency-planner';
@@ -31,6 +30,7 @@ export async function executeDispatchPlan(plan: DispatchPlan): Promise<ScheduleR
               payload: { prItemId: item.id },
             },
           });
+          const { dispatchRuntimeTask } = await import('../task-dispatcher');
           const dispatch = await dispatchRuntimeTask(task.id);
           return { itemId: item.id, dispatched: dispatch.status === 'dispatched' };
         } catch {

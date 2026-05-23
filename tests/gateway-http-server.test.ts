@@ -162,11 +162,15 @@ describe('Gateway HTTP server', () => {
 
     try {
       const address = server.address() as AddressInfo;
-      const response = await fetch(`http://127.0.0.1:${address.port}/capabilities`);
-      const body = (await response.json()) as { ok: boolean; error: string };
+      const capabilitiesResponse = await fetch(`http://127.0.0.1:${address.port}/capabilities`);
+      const capabilitiesBody = (await capabilitiesResponse.json()) as { ok: boolean; error: string };
+      const tracesResponse = await fetch(`http://127.0.0.1:${address.port}/router/traces`);
+      const tracesBody = (await tracesResponse.json()) as { ok: boolean; error: string };
 
-      expect(response.status).toBe(404);
-      expect(body).toEqual({ ok: false, error: 'not found' });
+      expect(capabilitiesResponse.status).toBe(404);
+      expect(capabilitiesBody).toEqual({ ok: false, error: 'not found' });
+      expect(tracesResponse.status).toBe(404);
+      expect(tracesBody).toEqual({ ok: false, error: 'not found' });
     } finally {
       server.close();
     }
@@ -213,6 +217,11 @@ describe('Gateway HTTP server', () => {
       expect(evalBody.ok).toBe(true);
       expect(evalBody.matched).toBe(true);
       expect(evalBody.result.capabilities.map(item => item.capabilityId)).toContain('debug_custom_report');
+
+      const tracesResponse = await fetch(`${baseUrl}/router/traces`);
+      const tracesBody = (await tracesResponse.json()) as { ok: boolean; traces: unknown[] };
+      expect(tracesResponse.status).toBe(200);
+      expect(tracesBody).toEqual({ ok: true, traces: [] });
 
       const deleteResponse = await fetch(`${baseUrl}/capabilities/debug_custom_report`, { method: 'DELETE' });
       const deleteBody = (await deleteResponse.json()) as { ok: boolean; deleted: boolean };

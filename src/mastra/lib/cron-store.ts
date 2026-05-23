@@ -3,8 +3,8 @@ import path from 'node:path';
 import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
-import { dispatchRuntimeTask, type DispatchResult } from '../runtime/task-dispatcher';
 import { defaultTargetAgentIdForTaskType, runtimeTaskTypes } from '../runtime/task-types';
+import type { DispatchResult } from '../runtime/task-dispatcher';
 import type { ChannelTarget } from '../../gateway/types';
 
 export type CronJobStatus = 'active' | 'paused';
@@ -342,6 +342,7 @@ async function executeCronJob(job: CronJob): Promise<{
     },
   });
 
+  const { dispatchRuntimeTask } = await import('../runtime/task-dispatcher');
   const dispatch = await dispatchRuntimeTask(runtimeTask.id);
 
   return {

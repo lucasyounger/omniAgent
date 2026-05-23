@@ -169,10 +169,11 @@ approval linkage.
 
 - Debug-only router administration can be enabled with `OMNI_ROUTER_ADMIN=1` on the
   HTTP gateway. It exposes `GET /capabilities`, `POST /capabilities`,
-  `DELETE /capabilities/:id`, and `POST /router/eval` for local capability tuning and
-  lightweight router evaluation. Runtime capability changes update the in-process
-  Capability Registry immediately; production deployments should leave the flag off or
-  protect the endpoints externally.
+  `DELETE /capabilities/:id`, `GET /router/traces`, and `POST /router/eval` for local
+  capability tuning, sanitized in-memory route trace inspection, and lightweight router
+  evaluation. Runtime capability changes update the in-process Capability Registry
+  immediately; production deployments should leave the flag off or protect the endpoints
+  externally.
 
 ## Low-Token Entry Point
 

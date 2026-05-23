@@ -9,7 +9,7 @@ import {
   type GoalChannelRequest,
 } from '../mastra/runtime/goal-channel';
 import { listGoals } from '../mastra/runtime/goal';
-import { traceOrchestratorDecision, type RouterTrace } from '../mastra/runtime/decision-trace';
+import { traceOrchestratorDecision, type OrchestratorDecisionTrace, type RouterTrace } from '../mastra/runtime/decision-trace';
 import { createCapabilityPlan } from '../mastra/runtime/capability-planner';
 import {
   routeLlmCapability,
@@ -40,6 +40,19 @@ import { toUnifiedRequest } from './types';
 import { routeRule } from './rule-router';
 
 const ROUTER_TIMEOUT_MS = Number(process.env.OMNI_GATEWAY_ROUTER_TIMEOUT_MS || 60_000);
+const MAX_RECENT_ROUTE_TRACES = 50;
+const recentRouteTraces: OrchestratorDecisionTrace[] = [];
+
+export function listRecentRouteTraces(): OrchestratorDecisionTrace[] {
+  return [...recentRouteTraces];
+}
+
+export function recordRouteTrace(trace: OrchestratorDecisionTrace): void {
+  recentRouteTraces.push(trace);
+  if (recentRouteTraces.length > MAX_RECENT_ROUTE_TRACES) {
+    recentRouteTraces.splice(0, recentRouteTraces.length - MAX_RECENT_ROUTE_TRACES);
+  }
+}
 
 export async function handleChannelMessage(message: ChannelMessage, config: GatewayConfig): Promise<OutboundMessage[]> {
   const { processChannelMessage } = await import('./gateway');
@@ -134,6 +147,7 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
     });
     console.info('[gateway] orchestrator route source=capability_router');
     console.info('[gateway] orchestrator trace', trace);
+    recordRouteTrace(trace);
     return { decision: capabilityDecision.decision, trace };
   }
 
@@ -141,6 +155,7 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
     const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision });
     console.info('[gateway] orchestrator route source=regex_match');
     console.info('[gateway] orchestrator trace', trace);
+    recordRouteTrace(trace);
     return { decision: passthroughDecision, trace };
   }
 
@@ -148,6 +163,7 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
     const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision, fallbackReason: 'llm_disabled' });
     console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_disabled');
     console.info('[gateway] orchestrator trace', trace);
+    recordRouteTrace(trace);
     return { decision: passthroughDecision, trace };
   }
 
@@ -156,12 +172,14 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
     const trace = traceOrchestratorDecision({ messageText: message.text, decision: modelDecision });
     console.info('[gateway] orchestrator route source=llm_orchestrator');
     console.info('[gateway] orchestrator trace', trace);
+    recordRouteTrace(trace);
     return { decision: modelDecision, trace };
   }
 
   const trace = traceOrchestratorDecision({ messageText: message.text, decision: passthroughDecision, fallbackReason: 'llm_unavailable' });
   console.info('[gateway] orchestrator route source=fallback_passthrough reason=llm_unavailable');
   console.info('[gateway] orchestrator trace', trace);
+  recordRouteTrace(trace);
   return { decision: passthroughDecision, trace };
 }
 
