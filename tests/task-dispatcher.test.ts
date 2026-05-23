@@ -230,6 +230,14 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('exposes notify delivery queueing as a Mastra Tool', async () => {
+    const { queueChannelNotificationTool } = await import('../src/mastra/tools/notify-tools');
+
+    expect(queueChannelNotificationTool.id).toBe('queue-channel-notification');
+    expect(queueChannelNotificationTool.description).toContain('Queue an outbound channel notification');
+    expect(queueChannelNotificationTool.execute).toBeTypeOf('function');
+  });
+
   it('dispatches notify.send_channel_message tasks into the delivery queue', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { listDeliveries } = await import('../src/gateway/gateway-store');

@@ -169,6 +169,7 @@ work is delegated, executed, reported, and recovered across all agents.
   `pr_pool.ingest_proposal`, `pr_pool.cron_scan`, `goal.create`, `goal.list`,
   `goal.status`, `goal.run`, `goal.feedback`.
 - PR Pool RuntimeTask handlers route read/write/develop side effects through Tool Gateway audit policies (`pr_pool.read`, `pr_pool.write`, `pr_pool.develop`) while keeping existing develop approval-token semantics unchanged.
+- `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
 - PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
   `pr_pool.ingest_proposal`, creates a `draft` PR item through the runtime, and
   preserves origin/idempotency/proposal summary metadata without confirming or

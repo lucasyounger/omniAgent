@@ -2,8 +2,8 @@ import { startClaudeCodeTask } from '../lib/code-task-store';
 import type { CronJob } from '../lib/cron-store';
 import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
 import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
-import { createDelivery } from '../../gateway/gateway-store';
 import type { ChannelTarget } from '../../gateway/types';
+import { queueChannelNotificationTool } from '../tools/notify-tools';
 import type { RuntimeTask } from './types';
 import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
@@ -289,16 +289,23 @@ async function dispatchNotifySendChannelMessageTask(task: RuntimeTask): Promise<
   });
 
   try {
-    const delivery = await createDelivery({
-      target,
-      text,
-      idempotencyKey: stringValue(payload.idempotencyKey),
-      maxAttempts: numberValue(payload.maxAttempts),
-      sourceInboxMessageId: stringValue(payload.sourceInboxMessageId),
-      taskId: stringValue(payload.taskId) || task.id,
-      runId: stringValue(payload.runId),
-      resultRef: stringValue(payload.resultRef),
-    });
+    const delivery = (await queueChannelNotificationTool.execute!(
+      {
+        target,
+        text,
+        idempotencyKey: stringValue(payload.idempotencyKey),
+        maxAttempts: numberValue(payload.maxAttempts),
+        sourceInboxMessageId: stringValue(payload.sourceInboxMessageId),
+        taskId: stringValue(payload.taskId) || task.id,
+        runId: stringValue(payload.runId),
+        resultRef: stringValue(payload.resultRef),
+      },
+      {},
+    )) as {
+      deliveryId: string;
+      idempotencyKey: string;
+      status: 'pending' | 'sent' | 'failed' | 'dead_letter';
+    };
 
     const result = await completeTeamRun({
       taskId: task.id,

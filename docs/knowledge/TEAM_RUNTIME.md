@@ -119,7 +119,10 @@ approval linkage.
   `approvalToken` linkage alongside the append-only runtime timeline.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
-  research, schedule-handler, PR pool, and Goal task types. PR Pool proposal
+  research, schedule-handler, PR pool, and Goal task types. Notify delivery
+  dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
+  Team Run result contract while queueing outbound Gateway deliveries through the
+  Mastra Tool `queue-channel-notification`. PR Pool proposal
   ingest accepts `pr_pool.ingest_proposal`, creates a draft PR item through the
   PR Pool Runtime, preserves origin/idempotency/proposal metadata, and returns
   an existing item for repeated explicit idempotency keys. PR Pool develop

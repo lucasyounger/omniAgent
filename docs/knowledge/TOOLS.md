@@ -53,6 +53,13 @@ side-effect boundary: list uses `pr_pool.read`, create/ingest/confirm/archive us
 Pool develop approval token remains the user-confirmation gate for starting
 CodeAgent work; this audit boundary does not change that approval flow.
 
+## Gateway Delivery Tools
+
+`queue-channel-notification` is a Mastra Tool that queues outbound Gateway
+deliveries. `notify.send_channel_message` Runtime Tasks call this tool from Task
+Dispatcher while preserving Team Runtime run/result records and task lifecycle
+transitions.
+
 ## Cron Records
 
 CronAgent currently manages scheduled job records under
