@@ -100,6 +100,15 @@ export async function failGoalRun(input: FailGoalRunInput): Promise<GoalRun> {
   return updated;
 }
 
+export async function linkGoalRunPrItem(goalId: string, runId: string, prItemId: string): Promise<GoalRun> {
+  const run = await requireGoalRun(goalId, runId);
+  const prItemIds = Array.from(new Set([...(run.prItemIds || []), prItemId]));
+  const updated: GoalRun = { ...run, prItemIds };
+  await writeGoalRun(updated);
+  await appendGoalRunEvent(goalId, runId, 'goal_run.pr_item_linked', { prItemId });
+  return updated;
+}
+
 export async function appendGoalRunEvent(goalId: string, runId: string, type: string, payload: unknown): Promise<void> {
   assertValidGoalRunId(runId);
   await ensureGoalWorkspace(goalId);

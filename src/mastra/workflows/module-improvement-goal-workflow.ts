@@ -8,6 +8,8 @@ import {
   createGoalRun,
   getGoalRunDir,
   readGoal,
+  readGoalRun,
+  updateGoalRunStatus,
   type Goal,
   type ProofOfWork,
 } from '../runtime/goal';
@@ -38,8 +40,14 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   if (!goal) throw new Error(`Goal not found: ${input.goalId}`);
   if (goal.type !== 'module_improvement') throw new Error(`Goal is not module_improvement: ${input.goalId}`);
 
-  const moduleName = input.moduleName ?? goal.title;
-  await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { moduleName, scope: goal.scope } });
+  const existingRun = await readGoalRun(goal.id, input.runId);
+  const moduleName = input.moduleName ?? (isModulePlan(existingRun?.plan) ? existingRun.plan.moduleName : undefined) ?? goal.title;
+  if (existingRun) {
+    if (existingRun.status !== 'pending') throw new Error(`Goal run already exists: ${input.runId}`);
+    await updateGoalRunStatus(goal.id, input.runId, 'running');
+  } else {
+    await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { moduleName, scope: goal.scope } });
+  }
 
   const moduleContext = await buildModuleContext({ scope: goal.scope });
   const candidateRepos = await searchGitHubReposForModule({ goalId: goal.id, moduleName });
@@ -105,6 +113,10 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   await completeGoalRun({ goalId: goal.id, runId: input.runId, summary: `Generated module improvement artifacts for ${moduleName}.`, proofOfWork });
 
   return { goal, candidateRepos, artifacts };
+}
+
+function isModulePlan(plan: unknown): plan is { moduleName: string } {
+  return Boolean(plan && typeof plan === 'object' && !Array.isArray(plan) && typeof (plan as { moduleName?: unknown }).moduleName === 'string');
 }
 
 function renderRepoAnalysis(repos: Awaited<ReturnType<typeof readCandidateRepo>>[]): string {

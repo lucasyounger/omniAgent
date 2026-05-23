@@ -31,6 +31,7 @@ export {
   getGoalRunEventLogPath,
   getGoalRunPath,
   getProofOfWorkPath,
+  linkGoalRunPrItem,
   listGoalRuns,
   readGoalRun,
   updateGoalRunStatus,

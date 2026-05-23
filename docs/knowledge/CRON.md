@@ -13,7 +13,9 @@ exist, then continues the requested create/list/update/delete operation.
 
 - `id`: generated job id.
 - `name`: short human-readable name.
-- `schedule`: original human-readable or cron-like schedule string.
+- `schedule`: normalized schedule used for execution. User-entered one-time and
+  daily schedules are interpreted as CST (UTC+8) at creation and stored as UTC
+  `YYYY-MM-DD HH:mm` or `daily HH:mm`; cron expressions are stored unchanged.
 - `task`: task description.
 - `taskType`: runtime task type to create when the schedule fires.
 - `targetAgent`: legacy preferred team member field.
@@ -36,7 +38,12 @@ Supported due checks in the current version:
 
 - One-time schedules containing `YYYY-MM-DD HH:mm` or `YYYY-MM-DDTHH:mm`.
 - Daily schedules containing `daily HH:mm`, `every day HH:mm`, `每天 HH:mm`, or `每日 HH:mm`.
+- Standard 5-, 6-, or 7-field cron expressions.
 
+One-time and daily schedule text provided by users is treated as CST (UTC+8)
+and normalized to UTC before it is written to the cron store. Runtime due checks
+compare against the stored UTC value. Channel-facing schedule lists convert the
+stored UTC schedule back to CST for display.
 One-time jobs are paused after a run is started to avoid repeat execution.
 Manual execution is available through the `run-cron-job-now` tool.
 

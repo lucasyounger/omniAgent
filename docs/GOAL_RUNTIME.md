@@ -2,6 +2,8 @@
 
 Goal Runtime turns long-running work into durable goals with isolated workspaces.
 
+Goal feedback can explicitly carry a confirmed `PRPoolProposal`. In that path, Goal Runtime rewrites the proposal source to `goal_driven`, stamps `origin.type=goal` plus `goalId/runId`, calls PR Pool Runtime ingest, and stores the returned `prItemId` on the GoalRun for backlink tracing. This creates a draft PR item only; confirm/develop remain separate user actions.
+
 ## Goal model
 
 A goal records:

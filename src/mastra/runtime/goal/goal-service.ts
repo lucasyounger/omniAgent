@@ -1,8 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { listFeedbackEvents, recordRawFeedback } from '../feedback';
+import { taskRuntime } from '../task-runtime';
+import { runtimeTaskTypes } from '../task-types';
 import { createGoal, readGoal, updateGoal, updateGoalStatus } from './goal-store';
-import { createGoalRun, listGoalRuns, updateGoalRunStatus } from './goal-run-store';
+import { createGoalRun, linkGoalRunPrItem, listGoalRuns, updateGoalRunStatus } from './goal-run-store';
+import { prPoolRuntime } from '../pr-pool/pr-pool-runtime';
+import type { PRPoolProposal } from '../pr-pool/pr-pool-proposal';
 import { goalsRoot } from './goal-workspace';
 import type { CreateGoalInput, Goal, GoalStatus, GoalType } from './goal.schema';
 import type { GoalRun } from './goal-run.schema';
@@ -36,6 +40,7 @@ export type GoalFeedbackInput = {
   text: string;
   channel?: 'qq' | 'feishu' | 'cli' | 'web';
   priority?: Goal['priority'];
+  proposal?: PRPoolProposal;
 };
 
 export type GoalServiceCreateResult = {
@@ -120,6 +125,19 @@ export async function enqueueGoalRun(goalId: string, input: { runId?: string; pl
     plan: input.plan,
   });
   await updateGoalStatus(goalId, 'active');
+  await taskRuntime.createTask({
+    sourceAgentId: 'goal-runtime',
+    targetAgentId: 'goal-runtime',
+    objective: `Run goal: ${goal.title}`,
+    requestedBy: `goal:${goalId}`,
+    metadata: {
+      taskType: runtimeTaskTypes.goalRun,
+      payload: {
+        goalId,
+        runId: run.id,
+      },
+    },
+  });
   return run;
 }
 
@@ -148,7 +166,30 @@ export async function applyGoalFeedback(input: GoalFeedbackInput) {
     goal = await updateGoal(input.goalId, { priority: input.priority });
   }
 
-  return { goal, event, action, run };
+  let prItem;
+  if (input.proposal) {
+    prItem = await prPoolRuntime.ingestProposal(
+      {
+        ...input.proposal,
+        source: 'goal_driven',
+        origin: {
+          ...input.proposal.origin,
+          type: 'goal',
+          goalId: input.goalId,
+          runId: input.runId,
+        },
+        metadata: {
+          ...input.proposal.metadata,
+          goalId: input.goalId,
+          runId: input.runId,
+        },
+      },
+      process.env.OMNI_PROJECT_ROOT || process.cwd(),
+    );
+    if (input.runId) await linkGoalRunPrItem(input.goalId, input.runId, prItem.id);
+  }
+
+  return { goal, event, action, run, prItem };
 }
 
 function createGoalId(title: string) {

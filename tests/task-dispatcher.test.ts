@@ -73,7 +73,7 @@ describe('Task Dispatcher', () => {
     });
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      schedule: '2026-05-12 21:08',
+      schedule: '2026-05-12 13:08',
       task: '你好',
       taskType: 'channel.message',
       targetAgentId: 'channel-gateway',
@@ -506,6 +506,50 @@ describe('Task Dispatcher', () => {
     expect(createResult).toMatchObject({ status: 'dispatched', handler: 'pr-pool-handler' });
     expect(prItemId).toEqual(expect.stringMatching(/^pr-/));
 
+    const ingestTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'ingest PR pool proposal',
+      metadata: {
+        taskType: 'pr_pool.ingest_proposal',
+        payload: {
+          workspaceRepoPath: tempRoot,
+          proposal: {
+            title: 'Dispatcher proposal',
+            objective: 'Create draft item from proposal',
+            source: 'exploration',
+            origin: { type: 'claudecode', artifactPath: '.omc/proposals/dispatcher.json' },
+            impact: { modules: ['runtime'], risk: 'low' },
+            acceptanceCriteria: ['draft created'],
+            codeAgentPrompt: 'Create through proposal ingest',
+          },
+        },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(ingestTask.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      handler: 'pr-pool-handler',
+      result: {
+        status: 'draft',
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/dispatcher.json' },
+      },
+    });
+
+    const invalidIngestTask = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'reject invalid PR pool proposal',
+      metadata: {
+        taskType: 'pr_pool.ingest_proposal',
+        payload: { proposal: { title: 'Missing fields' } },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(invalidIngestTask.id)).resolves.toMatchObject({
+      status: 'failed',
+      reason: expect.stringContaining('pr_pool.ingest_proposal requires payload.proposal'),
+    });
     const confirmTask = await taskRuntime.createTask({
       sourceAgentId: 'test',
       targetAgentId: 'pr-pool-runtime',

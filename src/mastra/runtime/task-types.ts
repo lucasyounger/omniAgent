@@ -18,6 +18,7 @@ export const runtimeTaskTypes = {
   prPoolConfirm: 'pr_pool.confirm',
   prPoolDevelop: 'pr_pool.develop',
   prPoolArchive: 'pr_pool.archive',
+  prPoolIngestProposal: 'pr_pool.ingest_proposal',
   prPoolCronScan: 'pr_pool.cron_scan',
   goalCreate: 'goal.create',
   goalList: 'goal.list',
@@ -178,6 +179,12 @@ const baseRuntimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDefini
     handler: 'pr-pool-handler',
     description: 'Archive a completed PR pool item.',
   },
+  [runtimeTaskTypes.prPoolIngestProposal]: {
+    taskType: runtimeTaskTypes.prPoolIngestProposal,
+    defaultTargetAgentId: 'pr-pool-runtime',
+    handler: 'pr-pool-handler',
+    description: 'Ingest a PR Pool proposal as a draft PR item.',
+  },
   [runtimeTaskTypes.prPoolCronScan]: {
     taskType: runtimeTaskTypes.prPoolCronScan,
     defaultTargetAgentId: 'pr-pool-runtime',
@@ -293,6 +300,7 @@ function examplesForTaskType(taskType: RuntimeTaskType): string[] {
     [runtimeTaskTypes.prPoolConfirm]: ['confirm a PR item', '确认这个 PR'],
     [runtimeTaskTypes.prPoolDevelop]: ['develop a PR item', '开始开发这个 PR'],
     [runtimeTaskTypes.prPoolArchive]: ['archive a PR item', '归档已完成 PR'],
+    [runtimeTaskTypes.prPoolIngestProposal]: ['ingest a PR proposal', '把方案录入 PR Pool'],
     [runtimeTaskTypes.prPoolCronScan]: ['scan PR pool', '扫描可执行 PR'],
     [runtimeTaskTypes.goalCreate]: ['create a long-running goal', '创建目标：长期优化 memory 模块'],
     [runtimeTaskTypes.goalList]: ['list goals', '列出我的目标'],

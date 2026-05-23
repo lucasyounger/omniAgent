@@ -40,7 +40,9 @@ through Team Runtime.
   timestamps as local `YYYY-MM-DD HH:mm` strings instead of raw UTC ISO values.
 - Structured parsing for simple channel reminders such as "today HH:mm reply
   ...", daily AI digest schedules, immediate channel notifications, natural
-  status queries, and low-confidence clarification.
+  status queries, and low-confidence clarification. Schedule times supplied by
+  channel users are interpreted as CST (UTC+8), normalized to UTC for cron
+  storage/execution, and converted back to CST in schedule-list replies.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records

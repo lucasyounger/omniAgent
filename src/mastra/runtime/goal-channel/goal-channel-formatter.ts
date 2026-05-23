@@ -33,10 +33,11 @@ export function formatGoalHelp(): string {
 function formatLocalTimestamp(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
+  const cstDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const yyyy = cstDate.getUTCFullYear();
+  const mm = String(cstDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(cstDate.getUTCDate()).padStart(2, '0');
+  const hh = String(cstDate.getUTCHours()).padStart(2, '0');
+  const min = String(cstDate.getUTCMinutes()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }

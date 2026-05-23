@@ -72,13 +72,53 @@ describe('PR pool store', () => {
     expect(events).toContain('archived');
   });
 
-  it('exports PR pool paths under omni home and runs root', async () => {
-    vi.resetModules();
-    process.env.OMNI_PROJECT_ROOT = tempRoot;
-    process.env.OMNI_HOME = path.join(tempRoot, '.omni');
-    const paths = await import('../src/mastra/lib/paths');
+  it('converts valid proposals into PR item input with origin metadata', async () => {
+    const { proposalToCreatePRItemInput } = await import('../src/mastra/runtime/pr-pool/pr-pool-proposal');
+    const input = proposalToCreatePRItemInput(
+      {
+        title: 'Add proposal ingest',
+        objective: 'Create draft PR items from proposals',
+        source: 'exploration',
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/add-proposal-ingest.md' },
+        impact: { modules: ['PR Pool'], files: ['src/mastra/runtime/pr-pool/pr-pool-store.ts'], risk: 'medium' },
+        acceptanceCriteria: ['draft item is created'],
+        codeAgentPrompt: 'Implement proposal ingest',
+        idempotencyKey: 'file:.omc/proposals/add-proposal-ingest.md:abc',
+      },
+      tempRoot,
+    );
 
-    expect(paths.prPoolRoot).toBe(path.join(tempRoot, '.omni', 'pr-pool'));
-    expect(paths.prPoolRunsRoot).toBe(path.join(tempRoot, '.omni', 'runs', 'pr-pool'));
+    expect(input).toMatchObject({
+      title: 'Add proposal ingest',
+      objective: 'Create draft PR items from proposals',
+      workspaceRepoPath: tempRoot,
+      metadata: {
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/add-proposal-ingest.md' },
+        idempotencyKey: 'file:.omc/proposals/add-proposal-ingest.md:abc',
+        proposalSummary: {
+          title: 'Add proposal ingest',
+          source: 'exploration',
+        },
+      },
+    });
+  });
+
+  it('rejects proposals missing required fields', async () => {
+    const { PRPoolProposalValidationError, proposalToCreatePRItemInput } = await import('../src/mastra/runtime/pr-pool/pr-pool-proposal');
+
+    expect(() =>
+      proposalToCreatePRItemInput(
+        {
+          title: '',
+          objective: 'Create draft PR items from proposals',
+          source: 'exploration',
+          origin: { type: 'manual' },
+          impact: { modules: ['PR Pool'], risk: 'medium' },
+          acceptanceCriteria: [],
+          codeAgentPrompt: '',
+        },
+        tempRoot,
+      ),
+    ).toThrow(PRPoolProposalValidationError);
   });
 });

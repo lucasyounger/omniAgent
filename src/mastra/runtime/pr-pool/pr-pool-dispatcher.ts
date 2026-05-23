@@ -3,6 +3,7 @@ import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from './pr-pool-runtime';
 import { ensureWorktree } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
+import type { PRPoolProposal } from './pr-pool-proposal';
 import { writeCodeAgentPrBrief } from './pr-pool-store';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
@@ -14,6 +15,8 @@ export async function dispatchPrPoolTask(task: RuntimeTask): Promise<DispatchRes
   switch (taskType) {
     case runtimeTaskTypes.prPoolCreate:
       return dispatchPrPoolCreateTask(task);
+    case runtimeTaskTypes.prPoolIngestProposal:
+      return dispatchPrPoolIngestProposalTask(task);
     case runtimeTaskTypes.prPoolList:
       return dispatchPrPoolListTask(task);
     case runtimeTaskTypes.prPoolConfirm:
@@ -38,6 +41,20 @@ async function dispatchPrPoolCreateTask(task: RuntimeTask): Promise<DispatchResu
   return runPrPoolHandler(task, 'Created PR pool item.', async () => {
     const item = await prPoolRuntime.create(payload);
     return { prItemId: item.id, status: item.status };
+  });
+}
+
+async function dispatchPrPoolIngestProposalTask(task: RuntimeTask): Promise<DispatchResult> {
+  const payload = readPayload(task);
+  const proposal = payload.proposal;
+  if (!isPrPoolProposal(proposal)) {
+    return failPrPoolTask(task, 'pr_pool.ingest_proposal requires payload.proposal with title, objective, impact, acceptanceCriteria, and codeAgentPrompt.');
+  }
+
+  const workspaceRepoPath = stringValue(payload.workspaceRepoPath) || process.env.OMNI_PROJECT_ROOT || process.cwd();
+  return runPrPoolHandler(task, 'Ingested PR pool proposal.', async () => {
+    const item = await prPoolRuntime.ingestProposal(proposal, workspaceRepoPath);
+    return { prItemId: item.id, status: item.status, origin: item.metadata.origin };
   });
 }
 
@@ -302,6 +319,22 @@ function isCreatePRItemInput(value: Record<string, unknown>): value is CreatePRI
     Array.isArray((impact as { modules?: unknown }).modules) &&
     Array.isArray(value.acceptanceCriteria) &&
     typeof value.codeAgentPrompt === 'string'
+  );
+}
+
+function isPrPoolProposal(value: unknown): value is PRPoolProposal {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proposal = value as Record<string, unknown>;
+  const impact = proposal.impact;
+  return (
+    typeof proposal.title === 'string' &&
+    typeof proposal.objective === 'string' &&
+    impact !== null &&
+    typeof impact === 'object' &&
+    !Array.isArray(impact) &&
+    Array.isArray((impact as { modules?: unknown }).modules) &&
+    Array.isArray(proposal.acceptanceCriteria) &&
+    typeof proposal.codeAgentPrompt === 'string'
   );
 }
 
