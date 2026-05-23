@@ -15,6 +15,7 @@ source files.
 
 ## Layout
 
+- `PROJECT_VISION.md`: highest-level product vision and design north star for all agents, including opencode and Codex.
 - `agents/`: compact agent cards for low-token AI handoff and future changes.
 - `channels/`: Omni Gateway adapters for phone messaging apps.
 - `ARCHITECTURE.md`: compact system overview and lifecycle rules.
