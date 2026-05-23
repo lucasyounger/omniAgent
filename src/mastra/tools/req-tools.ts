@@ -3,7 +3,9 @@ import { z } from 'zod';
 import {
   confirmReqDocument,
   confirmReqItem,
+  createReqDraft,
   getReqStatus,
+  importReqFromFile,
   importReqFromMarkdown,
   listReqs,
   rejectReqDocument,
@@ -13,11 +15,35 @@ import {
 
 const reqDocumentStatusSchema = z.enum(['draft', 'pending_user_confirmation', 'confirmed', 'rejected', 'planned', 'in_progress', 'implemented', 'verified', 'archived']);
 const reqItemStatusSchema = z.enum(['pending_user_confirmation', 'confirmed', 'rejected', 'planned', 'in_progress', 'implemented', 'verified']);
+const reqSourceTypeSchema = z.enum(['claudecode_conversation', 'opencode_conversation', 'manual_import']);
+
+export const createReqDraftTool = createTool({
+  id: 'create-req-draft',
+  description: 'Create a draft Req document from requirement and design markdown.',
+  inputSchema: z.object({
+    id: z.string().optional(),
+    title: z.string(),
+    summary: z.string().optional(),
+    reqMarkdown: z.string(),
+    designMarkdown: z.string().optional(),
+    artifactPaths: z.array(z.string()).optional(),
+  }),
+  outputSchema: z.record(z.string(), z.unknown()),
+  execute: async input =>
+    createReqDraft({
+      id: input.id,
+      title: input.title,
+      summary: input.summary,
+      reqMarkdown: input.reqMarkdown,
+      designMarkdown: input.designMarkdown,
+      source: { type: 'manual_import', artifactPaths: input.artifactPaths },
+    }),
+});
 
 export const listReqsTool = createTool({
   id: 'list-reqs',
   description: 'List Req library documents with optional status filters.',
-  inputSchema: z.object({ status: reqDocumentStatusSchema.optional() }),
+  inputSchema: z.object({ status: reqDocumentStatusSchema.optional(), sourceType: reqSourceTypeSchema.optional() }),
   outputSchema: z.array(z.record(z.string(), z.unknown())),
   execute: async input => listReqs(input),
 });
@@ -73,12 +99,21 @@ export const updateReqItemStatusTool = createTool({
 export const importReqMarkdownTool = createTool({
   id: 'import-req-markdown',
   description: 'Import a Markdown requirement document into the Req library.',
-  inputSchema: z.object({ markdown: z.string(), title: z.string().optional(), sourceType: z.enum(['claudecode_conversation', 'opencode_conversation', 'manual_import']).optional(), conversationId: z.string().optional(), confirmAndArchive: z.boolean().optional() }),
+  inputSchema: z.object({ markdown: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), conversationId: z.string().optional(), confirmAndArchive: z.boolean().optional() }),
   outputSchema: z.record(z.string(), z.unknown()),
   execute: async input => importReqFromMarkdown(input),
 });
 
+export const importReqFileTool = createTool({
+  id: 'import-req-file',
+  description: 'Import a requirement document file into the Req library.',
+  inputSchema: z.object({ filePath: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), confirmAndArchive: z.boolean().optional() }),
+  outputSchema: z.record(z.string(), z.unknown()),
+  execute: async input => importReqFromFile(input),
+});
+
 export const reqTools = {
+  createReqDraftTool,
   listReqsTool,
   getReqStatusTool,
   confirmReqDocumentTool,
@@ -87,4 +122,5 @@ export const reqTools = {
   rejectReqItemTool,
   updateReqItemStatusTool,
   importReqMarkdownTool,
+  importReqFileTool,
 };

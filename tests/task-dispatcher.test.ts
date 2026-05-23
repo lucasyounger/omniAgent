@@ -1021,6 +1021,17 @@ describe('Task Dispatcher', () => {
     expect(result.steps).toHaveLength(1);
   });
 
+  it('exposes req runtime operations as Mastra Tools', async () => {
+    const { createReqDraftTool, importReqFileTool, listReqsTool } = await import('../src/mastra/tools/req-tools');
+
+    expect(createReqDraftTool.id).toBe('create-req-draft');
+    expect(importReqFileTool.id).toBe('import-req-file');
+    expect(listReqsTool.id).toBe('list-reqs');
+    expect(createReqDraftTool.execute).toBeTypeOf('function');
+    expect(importReqFileTool.execute).toBeTypeOf('function');
+    expect(listReqsTool.execute).toBeTypeOf('function');
+  });
+
   it('dispatches req list tasks', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({

@@ -15,7 +15,9 @@ handler execution through `src/mastra/runtime/task-dispatcher/handler-registry.t
 which centralizes exact `taskType`, `taskType` prefix, and `targetAgentId`
 routing while retaining target agents as executor hints and compatibility fields.
 It includes Goal handlers for `goal.*` and Req handlers for `req.*`
-confirmation/import workflows.
+confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle
+while invoking the matching Mastra Req Tools for document create/list/status,
+confirmation, item updates, and imports.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be

@@ -23,7 +23,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/agents/code-agent.ts`
 - `src/mastra/agents/cron-agent.ts`
 
-- Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler` and write to `.omni/reqs`.
+- Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler`, execute the corresponding Mastra Req Tools, and write to `.omni/reqs`.
 - Goal cron scan: `goal.cron_scan` scans active module improvement Goals and enqueues due runs while avoiding same-day duplicates.
 - `~/.omni/runs/team/tasks.json`
 - `~/.omni/runs/team/runs.json`

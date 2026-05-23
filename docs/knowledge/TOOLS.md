@@ -53,6 +53,13 @@ side-effect boundary: list uses `pr_pool.read`, create/ingest/confirm/archive us
 Pool develop approval token remains the user-confirmation gate for starting
 CodeAgent work; this audit boundary does not change that approval flow.
 
+## Req Runtime Tools
+
+Req document create/list/status, confirmation/rejection, item status updates, and
+imports are exposed as Mastra Tools. Task Dispatcher uses those tools for `req.*`
+Runtime Tasks while preserving Team Runtime run/result records and lifecycle
+transitions.
+
 ## Gateway Delivery Tools
 
 `queue-channel-notification` is a Mastra Tool that queues outbound Gateway

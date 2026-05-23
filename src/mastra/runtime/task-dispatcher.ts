@@ -4,22 +4,22 @@ import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '..
 import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
 import type { ChannelTarget } from '../../gateway/types';
 import { queueChannelNotificationTool } from '../tools/notify-tools';
+import {
+  confirmReqDocumentTool,
+  confirmReqItemTool,
+  createReqDraftTool,
+  getReqStatusTool,
+  importReqFileTool,
+  importReqMarkdownTool,
+  listReqsTool,
+  rejectReqDocumentTool,
+  rejectReqItemTool,
+  updateReqItemStatusTool,
+} from '../tools/req-tools';
 import type { RuntimeTask } from './types';
 import { executeGoalRun } from './goal/goal-run-executor';
 import { dispatchPrPoolTask } from './pr-pool/pr-pool-dispatcher';
 import { applyGoalFeedback, createGoalService, getGoalStatus, listGoals, scanDueGoals } from './goal';
-import {
-  confirmReqDocument,
-  confirmReqItem,
-  createReqDraft,
-  getReqStatus,
-  importReqFromFile,
-  importReqFromMarkdown,
-  listReqs,
-  rejectReqDocument,
-  rejectReqItem,
-  updateReqItemStatus,
-} from './req';
 import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool-gateway';
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType } from './task-types';
@@ -1186,6 +1186,15 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
   }
 }
 
+type ReqRuntimeTool = {
+  execute?: (input: any, context: any) => Promise<unknown>;
+};
+
+async function runReqTool(tool: ReqRuntimeTool, input: unknown): Promise<Record<string, unknown>> {
+  const output = await tool.execute!(input as any, {});
+  return output as Record<string, unknown>;
+}
+
 async function dispatchReqTask(task: RuntimeTask): Promise<DispatchResult> {
   const payload = readPayload(task);
   const taskType = readTaskType(task);
@@ -1207,68 +1216,68 @@ async function dispatchReqTask(task: RuntimeTask): Promise<DispatchResult> {
       const title = stringValue(payload.title);
       const reqMarkdown = stringValue(payload.reqMarkdown) || stringValue(payload.markdown);
       if (!title || !reqMarkdown) throw new Error('req.create requires payload.title and payload.reqMarkdown.');
-      const req = await createReqDraft({
+      const req = await runReqTool(createReqDraftTool, {
         id: stringValue(payload.id),
         title,
         summary: stringValue(payload.summary),
         reqMarkdown,
         designMarkdown: stringValue(payload.designMarkdown),
-        source: { type: 'manual_import', artifactPaths: stringArrayValue(payload.artifactPaths) },
+        artifactPaths: stringArrayValue(payload.artifactPaths),
       });
-      summary = `Req created: ${req.id}`;
+      summary = `Req created: ${String(req.id)}`;
       reqResult = { reqId: req.id, req };
     } else if (taskType === runtimeTaskTypes.reqList) {
-      const reqs = await listReqs({ status: stringValue(payload.status) as NonNullable<Parameters<typeof listReqs>[0]>['status'], sourceType: stringValue(payload.sourceType) as NonNullable<Parameters<typeof listReqs>[0]>['sourceType'] });
+      const reqs = (await runReqTool(listReqsTool, { status: stringValue(payload.status), sourceType: stringValue(payload.sourceType) })) as unknown as Array<Record<string, unknown>>;
       summary = `Req documents listed: ${reqs.length}`;
       reqResult = { reqCount: reqs.length, reqs };
     } else if (taskType === runtimeTaskTypes.reqStatus) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       if (!reqId) throw new Error('req.status requires payload.reqId.');
-      const req = await getReqStatus(reqId);
-      summary = `Req status: ${req.id}`;
+      const req = await runReqTool(getReqStatusTool, { reqId });
+      summary = `Req status: ${String(req.id)}`;
       reqResult = { reqId: req.id, req };
     } else if (taskType === runtimeTaskTypes.reqConfirmDocument) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       if (!reqId) throw new Error('req.confirm_document requires payload.reqId.');
-      const req = await confirmReqDocument(reqId, stringValue(payload.feedback));
-      summary = `Req confirmed: ${req.id}`;
+      const req = await runReqTool(confirmReqDocumentTool, { reqId, feedback: stringValue(payload.feedback) });
+      summary = `Req confirmed: ${String(req.id)}`;
       reqResult = { reqId: req.id, req };
     } else if (taskType === runtimeTaskTypes.reqRejectDocument) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       const reason = stringValue(payload.reason);
       if (!reqId || !reason) throw new Error('req.reject_document requires payload.reqId and payload.reason.');
-      const req = await rejectReqDocument(reqId, reason);
-      summary = `Req rejected: ${req.id}`;
+      const req = await runReqTool(rejectReqDocumentTool, { reqId, reason });
+      summary = `Req rejected: ${String(req.id)}`;
       reqResult = { reqId: req.id, req };
     } else if (taskType === runtimeTaskTypes.reqConfirmItem) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       const itemId = stringValue(payload.itemId);
       if (!reqId || !itemId) throw new Error('req.confirm_item requires payload.reqId and payload.itemId.');
-      const req = await confirmReqItem(reqId, itemId, stringValue(payload.feedback));
-      summary = `Req item confirmed: ${req.id}/${itemId}`;
+      const req = await runReqTool(confirmReqItemTool, { reqId, itemId, feedback: stringValue(payload.feedback) });
+      summary = `Req item confirmed: ${String(req.id)}/${itemId}`;
       reqResult = { reqId: req.id, itemId, req };
     } else if (taskType === runtimeTaskTypes.reqRejectItem) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       const itemId = stringValue(payload.itemId);
       const reason = stringValue(payload.reason);
       if (!reqId || !itemId || !reason) throw new Error('req.reject_item requires payload.reqId, payload.itemId and payload.reason.');
-      const req = await rejectReqItem(reqId, itemId, reason);
-      summary = `Req item rejected: ${req.id}/${itemId}`;
+      const req = await runReqTool(rejectReqItemTool, { reqId, itemId, reason });
+      summary = `Req item rejected: ${String(req.id)}/${itemId}`;
       reqResult = { reqId: req.id, itemId, req };
     } else if (taskType === runtimeTaskTypes.reqUpdateItemStatus) {
       const reqId = stringValue(payload.reqId) || stringValue(payload.id);
       const itemId = stringValue(payload.itemId);
       const status = stringValue(payload.status);
       if (!reqId || !itemId || !status) throw new Error('req.update_item_status requires payload.reqId, payload.itemId and payload.status.');
-      const req = await updateReqItemStatus(reqId, itemId, status as Parameters<typeof updateReqItemStatus>[2]);
-      summary = `Req item status updated: ${req.id}/${itemId}`;
+      const req = await runReqTool(updateReqItemStatusTool, { reqId, itemId, status });
+      summary = `Req item status updated: ${String(req.id)}/${itemId}`;
       reqResult = { reqId: req.id, itemId, req };
     } else if (taskType === runtimeTaskTypes.reqImport) {
       const filePath = stringValue(payload.filePath);
       const req = filePath
-        ? await importReqFromFile({ filePath, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType) as Parameters<typeof importReqFromFile>[0]['sourceType'], confirmAndArchive: booleanValue(payload.confirmAndArchive) })
-        : await importReqFromMarkdown({ markdown: stringValue(payload.markdown) || task.objective, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType) as Parameters<typeof importReqFromMarkdown>[0]['sourceType'], confirmAndArchive: booleanValue(payload.confirmAndArchive) });
-      summary = `Req imported: ${req.id}`;
+        ? await runReqTool(importReqFileTool, { filePath, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType), confirmAndArchive: booleanValue(payload.confirmAndArchive) })
+        : await runReqTool(importReqMarkdownTool, { markdown: stringValue(payload.markdown) || task.objective, title: stringValue(payload.title), sourceType: stringValue(payload.sourceType), confirmAndArchive: booleanValue(payload.confirmAndArchive) });
+      summary = `Req imported: ${String(req.id)}`;
       reqResult = { reqId: req.id, req };
     } else {
       throw new Error(`Unsupported Req task type: ${taskType}`);
