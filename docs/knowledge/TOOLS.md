@@ -77,5 +77,6 @@ paths.
 ## Docs Memory
 
 KnowledgeAgent reads and updates file-backed memory with guarded tools. Memory
-maintenance workflows also route append/proposal/index writes through Tool
-Gateway audit records using the `memory.write` capability.
+maintenance workflows and `knowledge.*` RuntimeTask dispatch both route
+append/proposal/index writes through Mastra memory tools and Tool Gateway audit
+records using the `memory.write` capability.

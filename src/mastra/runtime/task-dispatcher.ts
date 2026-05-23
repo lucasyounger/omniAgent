@@ -1,7 +1,11 @@
 import { startClaudeCodeTask } from '../lib/code-task-store';
 import type { CronJob } from '../lib/cron-store';
-import { appendEpisodicLog, updateMemoryIndex, writeDocUpdateProposal } from '../lib/docs-memory';
 import { appendTeamEvent, completeTeamRun, failTeamRun, sendAgentInboxMessage, startTeamTaskRun } from '../lib/team-runtime-store';
+import {
+  appendEpisodicLogTool,
+  proposeDocUpdateTool,
+  updateMemoryIndexTool,
+} from '../tools/memory-tools';
 import type { ChannelTarget } from '../../gateway/types';
 import { queueChannelNotificationTool } from '../tools/notify-tools';
 import {
@@ -1186,12 +1190,18 @@ async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResult> {
   }
 }
 
-type ReqRuntimeTool = {
+type RuntimeTool = {
   execute?: (input: any, context: any) => Promise<unknown>;
 };
 
+async function runRuntimeTool(tool: RuntimeTool, input: unknown): Promise<unknown> {
+  return tool.execute!(input as any, {});
+}
+
+type ReqRuntimeTool = RuntimeTool;
+
 async function runReqTool(tool: ReqRuntimeTool, input: unknown): Promise<Record<string, unknown>> {
-  const output = await tool.execute!(input as any, {});
+  const output = await runRuntimeTool(tool, input);
   return output as Record<string, unknown>;
 }
 
@@ -1338,21 +1348,21 @@ async function dispatchKnowledgeTask(task: RuntimeTask): Promise<DispatchResult>
   try {
     const taskType = typeof task.metadata?.taskType === 'string' ? task.metadata.taskType : 'knowledge.task';
     if (taskType === 'knowledge.memory_index') {
-      await updateMemoryIndex();
+      await runRuntimeTool(updateMemoryIndexTool, {});
     } else if (taskType === 'knowledge.episode') {
-      await appendEpisodicLog({
+      await runRuntimeTool(appendEpisodicLogTool, {
         title: stringValue(payload.title) || task.objective,
         summary: stringValue(payload.summary) || task.objective,
         tags: Array.isArray(payload.tags) ? payload.tags.filter((item): item is string => typeof item === 'string') : ['dispatcher'],
         sourceRunId: stringValue(payload.sourceRunId),
       });
-      await updateMemoryIndex();
+      await runRuntimeTool(updateMemoryIndexTool, {});
     } else if (taskType === 'knowledge.doc_update_proposal') {
       const proposal = payload.proposal;
       if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
         throw new Error('knowledge.doc_update_proposal requires payload.proposal.');
       }
-      await writeDocUpdateProposal(proposal as Parameters<typeof writeDocUpdateProposal>[0]);
+      await runRuntimeTool(proposeDocUpdateTool, proposal);
     } else {
       await appendTeamEvent({
         taskId: task.id,

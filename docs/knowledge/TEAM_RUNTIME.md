@@ -17,7 +17,9 @@ routing while retaining target agents as executor hints and compatibility fields
 It includes Goal handlers for `goal.*` and Req handlers for `req.*`
 confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle
 while invoking the matching Mastra Req Tools for document create/list/status,
-confirmation, item updates, and imports.
+confirmation, item updates, and imports. Knowledge dispatch preserves the same
+compatibility handler and RuntimeTask lifecycle while invoking Mastra memory tools
+for memory index refreshes, episodic logs, and doc update proposals.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be

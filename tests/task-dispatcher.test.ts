@@ -1021,6 +1021,51 @@ describe('Task Dispatcher', () => {
     expect(result.steps).toHaveLength(1);
   });
 
+  it('exposes knowledge runtime operations as Mastra memory Tools', async () => {
+    const { appendEpisodicLogTool, proposeDocUpdateTool, updateMemoryIndexTool } = await import('../src/mastra/tools/memory-tools');
+
+    expect(appendEpisodicLogTool.id).toBe('append-episodic-log');
+    expect(proposeDocUpdateTool.id).toBe('propose-doc-update');
+    expect(updateMemoryIndexTool.id).toBe('update-memory-index');
+    expect(appendEpisodicLogTool.execute).toBeTypeOf('function');
+    expect(proposeDocUpdateTool.execute).toBeTypeOf('function');
+    expect(updateMemoryIndexTool.execute).toBeTypeOf('function');
+  });
+
+  it('dispatches knowledge episode tasks through memory tools', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    await fs.mkdir(path.join(tempRoot, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(tempRoot, 'docs', 'README.md'), '# Test Docs\n', 'utf8');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'knowledge-agent',
+      objective: 'record dispatch learning',
+      metadata: {
+        taskType: 'knowledge.episode',
+        payload: {
+          title: 'Dispatch learning',
+          summary: 'Knowledge dispatch uses memory tools.',
+          tags: ['test'],
+          sourceRunId: 'run-knowledge-1',
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      targetAgentId: 'knowledge-agent',
+      handler: 'knowledge-agent',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'memory', 'EPISODIC_LOG.md'), 'utf8')).resolves.toContain('Knowledge dispatch uses memory tools.');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'memory', 'MEMORY_INDEX.json'), 'utf8')).resolves.toContain('EPISODIC_LOG.md');
+  });
+
   it('exposes req runtime operations as Mastra Tools', async () => {
     const { createReqDraftTool, importReqFileTool, listReqsTool } = await import('../src/mastra/tools/req-tools');
 
