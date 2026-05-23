@@ -64,14 +64,17 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
   returns a confirmation/clarification prompt instead of persisting a Goal.
 - `列出我的目标`, `目标状态 <goalId>`, `运行目标 <goalId>`, and
   `反馈目标 <goalId> 暂停` map to `goal.list`, `goal.status`, `goal.run`, and
-  `goal.feedback` RuntimeTasks.
+  `goal.feedback` RuntimeTasks. Goal list/status channel replies render persisted
+  timestamps as local `YYYY-MM-DD HH:mm` strings instead of raw UTC ISO values.
 - `今天21点08分回复一句：你好` creates a one-time `schedule.create` task for
   a `channel.message` reminder. Natural-language `schedule.create` requires explicit
   time or recurrence evidence and a concrete `payload.schedule`; the LLM
   orchestrator must not create schedules from goal-like messages that lack timing.
 - `每天09点给我发 AI Agents 日报` creates a daily `schedule.create` task for
   `research.ai_daily_digest`.
-- `列出我的定时任务` or `当前有哪些定时任务` creates a `schedule.list` RuntimeTask.
+- `列出我的定时任务` or `当前有哪些定时任务` creates a `schedule.list` RuntimeTask;
+  channel replies show each schedule's local updated time in `YYYY-MM-DD HH:mm`
+  form instead of raw UTC ISO timestamps.
 - `删除前两个定时任务` creates a `schedule.delete` RuntimeTask with `first: 2`.
 - `暂停 AI Agents 日报任务` creates a `schedule.pause` RuntimeTask using a
   name/query selector.

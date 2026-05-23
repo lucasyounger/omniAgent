@@ -36,7 +36,8 @@ through Team Runtime.
 - Deterministic Goal intents support explicit creation (`创建目标：...`),
   natural long-running creation with auto-run (`我想长期优化 memory 模块`),
   list/status/run/feedback phrases, and confirmation prompts for ambiguous
-  analysis requests before any Goal is persisted.
+  analysis requests before any Goal is persisted. Goal list/status replies render
+  timestamps as local `YYYY-MM-DD HH:mm` strings instead of raw UTC ISO values.
 - Structured parsing for simple channel reminders such as "today HH:mm reply
   ...", daily AI digest schedules, immediate channel notifications, natural
   status queries, and low-confidence clarification.

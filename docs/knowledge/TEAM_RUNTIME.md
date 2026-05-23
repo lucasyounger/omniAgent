@@ -132,8 +132,10 @@ approval linkage.
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
   mirrors the execution result into the Team Run result file.
 - Schedule create/list/delete/pause/resume maintenance tasks are audited but do
-  not require Tool Gateway approval. `schedule.run_now` dynamically requires
-  approval when it would trigger direct code execution.
+  not require Tool Gateway approval. `schedule.list` result rows include
+  `updatedAt` so channel adapters can render local display timestamps without
+  exposing raw UTC ISO strings. `schedule.run_now` dynamically requires approval
+  when it would trigger direct code execution.
 - Dispatcher uses `dispatchLeaseId` and `dispatchLeaseExpiresAt` metadata to
   reduce duplicate dispatch. Unsupported targets and registered-but-nonexecutable
   handler placeholders transition to runtime `failed` with the dispatcher reason

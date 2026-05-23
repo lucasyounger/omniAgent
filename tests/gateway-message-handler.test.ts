@@ -832,6 +832,8 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
     expect(list[0].text).toContain(goalId);
+    expect(list[0].text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    expect(list[0].text).not.toMatch(/\.\d{3}Z/);
 
     const run = await handleChannelMessage(message(`/goal run ${goalId}`, 'trusted'), {
       ...baseConfig(),
