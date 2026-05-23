@@ -11,9 +11,11 @@ TaskRuntime controls runtime status transitions such as
 `waiting_user_confirm`, `retrying`, and `paused`.
 
 Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
-handler execution primarily by `taskType`, with `targetAgentId` retained as an
-executor hint and compatibility field. It includes Goal handlers for `goal.*`
-and Req handlers for `req.*` confirmation/import workflows.
+handler execution through `src/mastra/runtime/task-dispatcher/handler-registry.ts`,
+which centralizes exact `taskType`, `taskType` prefix, and `targetAgentId`
+routing while retaining target agents as executor hints and compatibility fields.
+It includes Goal handlers for `goal.*` and Req handlers for `req.*`
+confirmation/import workflows.
 
 Approval Store sits next to Tool Gateway and persists approval requests for
 high-risk execution. Approved requests generate an approval token that can be

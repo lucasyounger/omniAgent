@@ -24,6 +24,7 @@ import { executeWithToolGateway, ToolGatewayApprovalRequiredError } from './tool
 import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType } from './task-types';
 import type { CapabilityPlan } from './capability-planner';
+import { createRuntimeTaskHandlerRegistry, resolveRuntimeTaskHandler } from './task-dispatcher/handler-registry';
 
 const dispatchCodeTaskPolicy = {
   risk: 'dangerous',
@@ -171,65 +172,29 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
 
   const leased = await leaseTask(task);
   const taskType = readTaskType(leased);
+  const handler = resolveRuntimeTaskHandler({
+    task: leased,
+    taskType,
+    registry: createRuntimeTaskHandlerRegistry({
+      dispatchScheduleCreateTask,
+      dispatchScheduleListTask,
+      dispatchScheduleDeleteTask,
+      dispatchSchedulePauseTask: task => dispatchScheduleStatusTask(task, 'paused'),
+      dispatchScheduleResumeTask: task => dispatchScheduleStatusTask(task, 'active'),
+      dispatchScheduleRunNowTask,
+      dispatchChannelGatewayTask,
+      dispatchNotifySendChannelMessageTask,
+      dispatchResearchAiDailyDigestTask,
+      dispatchGoalTask,
+      dispatchReqTask,
+      dispatchPrPoolTask,
+      dispatchCodeTask,
+      dispatchKnowledgeTask,
+    }),
+  });
 
-  if (taskType === runtimeTaskTypes.scheduleCreate) {
-    return dispatchScheduleCreateTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.scheduleList) {
-    return dispatchScheduleListTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.scheduleDelete) {
-    return dispatchScheduleDeleteTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.schedulePause) {
-    return dispatchScheduleStatusTask(leased, 'paused');
-  }
-
-  if (taskType === runtimeTaskTypes.scheduleResume) {
-    return dispatchScheduleStatusTask(leased, 'active');
-  }
-
-  if (taskType === runtimeTaskTypes.scheduleRunNow) {
-    return dispatchScheduleRunNowTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.channelMessage) {
-    return dispatchChannelGatewayTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.notifySendChannelMessage) {
-    return dispatchNotifySendChannelMessageTask(leased);
-  }
-
-  if (taskType === runtimeTaskTypes.researchAiDailyDigest) {
-    return dispatchResearchAiDailyDigestTask(leased);
-  }
-
-  if (taskType?.startsWith('req.')) {
-    return dispatchReqTask(leased);
-  }
-
-  if (taskType?.startsWith('goal.')) {
-    return dispatchGoalTask(leased);
-  }
-
-  if (taskType?.startsWith('pr_pool.')) {
-    return dispatchPrPoolTask(leased);
-  }
-
-  if (leased.targetAgentId === 'code-agent') {
-    return dispatchCodeTask(leased);
-  }
-
-  if (leased.targetAgentId === 'knowledge-agent') {
-    return dispatchKnowledgeTask(leased);
-  }
-
-  if (leased.targetAgentId === 'channel-gateway') {
-    return dispatchChannelGatewayTask(leased);
+  if (handler) {
+    return handler(leased);
   }
 
   if (leased.targetAgentId === 'notify-agent' || leased.targetAgentId === 'research-agent') {
