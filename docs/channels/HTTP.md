@@ -42,9 +42,9 @@ prompt instead of executing commands.
 - `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
 - `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
-  RuntimeTask and dispatches it through Task Dispatcher. Direct Claude Code
-  startup normally returns `Dispatch: waiting_user_confirm` until Tool Gateway
-  approval is granted.
+  RuntimeTask and dispatches it through Task Dispatcher. CodeAgent starts once
+  the workspace path is inside `OMNI_ALLOWED_WORKSPACES`; Tool Gateway records an
+  audit event but does not require a separate approval token.
 
 ## Gateway Routing Pipeline
 
@@ -85,7 +85,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 - `恢复第3个任务` creates a `schedule.resume` RuntimeTask using a 1-based
   index selector.
 - `手动跑一次第3个任务` creates a `schedule.run_now` RuntimeTask. Direct code
-  schedules still require Tool Gateway approval.
+  schedules use the CodeAgent allowed-workspace boundary and audit records rather
+  than an extra Tool Gateway approval.
 - `通知我：hello` creates a `notify.send_channel_message` task.
 - `状态` returns Gateway runtime status.
 

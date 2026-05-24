@@ -150,7 +150,14 @@ approval linkage.
   dispatcher path. Skill, CLI, and Goal integrations should call the Runtime ingest
   API rather than writing PR Pool files directly. Re-ingesting the same explicit
   `idempotencyKey` returns an existing item and records a deduplication event. PR
-  Pool develop
+  Pool develop now creates and immediately dispatches a child CodeAgent RuntimeTask.
+  The child task keeps `codeAgentBriefPath` and optional executor metadata for
+  `claude_code`, `opencode`, or `custom`. Confirmed PR Pool items are already
+  reviewed, so develop dispatch does not carry a second approval token; execution
+  is bounded by the assigned allowed workspace and Tool Gateway audit records.
+  Cron scans reconcile active CodeTask results before and after scheduling so
+  completed runs mark PR items `completed` and failures mark items `failed` with
+  blocking details. PR Pool develop
   dispatch now creates a durable `code-agent-pr-brief.md` under
   `~/.omni/runs/pr-pool/{prItemId}/`, passes `codeAgentBriefPath` to the
   generated CodeAgent RuntimeTask, and archives the same brief with the PR Pool
@@ -171,7 +178,7 @@ approval linkage.
   Runtime Service execution is the clearer boundary. Deterministic and lightweight
   capability routers rank candidates from
   examples, descriptions, and simple bilingual synonyms without embeddings or a
-  vector database. Code tasks without approval move to `waiting_user_confirm`.
+  vector database.
 - Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.
 - `goal.run` Runtime Tasks target `goal-runtime`; dispatcher reserves a run ID,
   invokes the routed Goal workflow executor, writes Goal output artifacts, and
@@ -179,8 +186,8 @@ approval linkage.
 - Schedule create/list/delete/pause/resume maintenance tasks are audited but do
   not require Tool Gateway approval. `schedule.list` result rows include
   `updatedAt` so channel adapters can render local display timestamps without
-  exposing raw UTC ISO strings. `schedule.run_now` dynamically requires approval
-  when it would trigger direct code execution.
+  exposing raw UTC ISO strings. `schedule.run_now` is also audit-only; direct code
+  schedules rely on CodeAgent's allowed-workspace boundary before execution.
 - Dispatcher uses `dispatchLeaseId` and `dispatchLeaseExpiresAt` metadata to
   reduce duplicate dispatch. Unsupported targets and registered-but-nonexecutable
   handler placeholders transition to runtime `failed` with the dispatcher reason

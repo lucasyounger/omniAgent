@@ -34,6 +34,9 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
+  delete process.env.OMNI_CODE_AGENT_COMMAND;
+  delete process.env.OMNI_CODE_AGENT_ARGS;
+  delete process.env.OMNI_CODE_AGENT_PROMPT_ARG;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -191,7 +194,7 @@ describe('Task Dispatcher', () => {
     await expect(listCronJobs()).resolves.toHaveLength(0);
   });
 
-  it('moves direct code schedule.run_now tasks into waiting_user_confirm', async () => {
+  it('runs code schedule.run_now tasks in allowed workspaces without extra approval', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { createCronJob } = await import('../src/mastra/lib/cron-store');
     const job = await createCronJob({
@@ -203,7 +206,7 @@ describe('Task Dispatcher', () => {
       payload: {
         workspacePath: tempRoot,
         objective: 'change files',
-        executionMode: 'direct',
+        executionMode: 'patch_proposal',
       },
     });
     const task = await taskRuntime.createTask({
@@ -222,11 +225,12 @@ describe('Task Dispatcher', () => {
 
     expect(result).toMatchObject({
       taskId: task.id,
-      status: 'waiting_user_confirm',
+      status: 'dispatched',
       targetAgentId: 'scheduler-runtime',
+      handler: 'schedule-handler',
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
-      status: 'waiting_user_confirm',
+      status: 'succeeded',
     });
   });
 
@@ -425,7 +429,7 @@ describe('Task Dispatcher', () => {
     });
   });
 
-  it('moves code tasks without approval into waiting_user_confirm', async () => {
+  it('dispatches code tasks in allowed workspaces without extra approval', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({
       sourceAgentId: 'scheduler-runtime',
@@ -445,11 +449,12 @@ describe('Task Dispatcher', () => {
 
     expect(result).toMatchObject({
       taskId: task.id,
-      status: 'waiting_user_confirm',
+      status: 'dispatched',
       targetAgentId: 'code-agent',
+      handler: 'code-agent',
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
-      status: 'waiting_user_confirm',
+      status: 'succeeded',
     });
   });
 
@@ -708,7 +713,7 @@ describe('Task Dispatcher', () => {
     });
   });
 
-  it('dispatches approved PR pool develop tasks into code-agent runtime tasks', async () => {
+  it('dispatches PR pool develop tasks into code-agent runtime tasks without extra approval', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
@@ -740,7 +745,7 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id, approvalToken: 'approved' },
+        payload: { prItemId: item.id, executor: 'opencode' },
       },
     });
 
@@ -752,19 +757,18 @@ describe('Task Dispatcher', () => {
     expect(result).toMatchObject({
       status: 'dispatched',
       handler: 'pr-pool-handler',
-      result: { prItemId: item.id, status: 'developing' },
+      result: { prItemId: item.id, status: 'developing', codeDispatchStatus: 'dispatched', executor: 'opencode' },
     });
     expect(updated).toMatchObject({
       status: 'developing',
-      approval: { developApprovalToken: 'approved' },
       run: { runtimeTaskId: task.id },
     });
-    expect(updated?.approval.developApprovalId).toEqual(expect.stringMatching(/^develop-/));
-    expect(new Date(updated?.approval.developApprovalExpiresAt || 0).getTime()).toBeGreaterThan(Date.now());
+    expect(updated?.approval.developApprovalId).toBeUndefined();
+    expect(updated?.approval.developApprovalToken).toBeUndefined();
     await expect(fs.readFile(updated?.run.codeAgentBriefPath || '', 'utf8')).resolves.toContain('# CodeAgent PR Brief');
     expect(codeTask).toMatchObject({
       targetAgentId: 'code-agent',
-      status: 'pending',
+      status: 'succeeded',
       metadata: {
         taskType: 'code.claude_code_task',
         payload: {
@@ -772,26 +776,31 @@ describe('Task Dispatcher', () => {
           objective: 'Create the implementation',
           codeAgentBriefPath: expect.stringContaining(path.join('.omni', 'runs', 'pr-pool', item.id, 'code-agent-pr-brief.md')),
           executionMode: 'patch_proposal',
-          approvalToken: 'approved',
+          executor: 'opencode',
           prItemId: item.id,
         },
       },
     });
   });
 
-  it('requires fresh develop approval when a stored token is expired', async () => {
+  it('ignores stale PR pool develop approval tokens because confirmed slices execute directly', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
       title: 'Expired approval item',
-      objective: 'Reject stale develop token',
+      objective: 'Run despite stale develop token',
       workspaceRepoPath: tempRoot,
       impact: { modules: ['runtime'], risk: 'low' },
-      acceptanceCriteria: ['stale token ignored'],
-      codeAgentPrompt: 'Do not run with stale token',
+      acceptanceCriteria: ['stale token does not block'],
+      codeAgentPrompt: 'Run without checking stale token',
     });
     await prPoolRuntime.confirm(item.id);
     await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
       approval: {
         developApprovalId: 'develop-expired',
         developApprovalToken: 'expired',
@@ -812,22 +821,29 @@ describe('Task Dispatcher', () => {
 
     const result = await dispatchRuntimeTask(task.id);
 
-    expect(result).toMatchObject({ status: 'waiting_user_confirm' });
-    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
+    expect(result).toMatchObject({ status: 'dispatched' });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
 
-  it('moves PR pool develop tasks without approval into waiting_user_confirm', async () => {
+  it('dispatches confirmed PR pool develop tasks without extra approval', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
-      title: 'Needs develop approval',
-      objective: 'Wait for explicit approval',
+      title: 'Confirmed develop item',
+      objective: 'Run confirmed item',
       workspaceRepoPath: tempRoot,
       impact: { modules: ['runtime'], risk: 'low' },
-      acceptanceCriteria: ['approval requested'],
-      codeAgentPrompt: 'Do not run yet',
+      acceptanceCriteria: ['code task created'],
+      codeAgentPrompt: 'Run confirmed item',
     });
     await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
     const task = await taskRuntime.createTask({
       sourceAgentId: 'test',
       targetAgentId: 'pr-pool-runtime',
@@ -841,11 +857,12 @@ describe('Task Dispatcher', () => {
     const result = await dispatchRuntimeTask(task.id);
 
     expect(result).toMatchObject({
-      status: 'waiting_user_confirm',
+      status: 'dispatched',
       targetAgentId: 'pr-pool-runtime',
+      handler: 'pr-pool-handler',
     });
-    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({ status: 'waiting_user_confirm' });
-    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'ready' });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
 
   it('dispatches goal runtime tasks through the goal handler', async () => {

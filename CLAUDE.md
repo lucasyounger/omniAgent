@@ -1,9 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Before changing OmniAgent, read `docs/PROJECT_VISION.md`. It is the project north star for all agents, including Claude Code, opencode, and Codex.
-
-This project is indexed by GitNexus as **OmniAgent** (1507 symbols, 4585 relationships, 113 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **OmniAgent** (1688 symbols, 5093 relationships, 128 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

@@ -74,9 +74,9 @@ Current dispatcher handlers include:
 - `schedule-handler`: creates and maintains schedule records through
   `schedule.create`, `schedule.list`, `schedule.delete`, `schedule.pause`,
   `schedule.resume`, and `schedule.run_now`.
-- `code-agent`: starts Claude Code through Tool Gateway approval policy. If a
-  code task does not carry an approval token, dispatch records the approval
-  requirement and moves the Runtime Task to `waiting_user_confirm`.
+- `code-agent`: starts Claude Code through the CodeAgent dispatcher path. Code
+  tasks execute once their workspace path passes `OMNI_ALLOWED_WORKSPACES`; Tool
+  Gateway records audit events but does not require an approval token.
 - `knowledge-agent`: executes supported knowledge maintenance task types.
 - `channel-gateway`: queues direct channel messages for the Omni Gateway
   delivery worker. This is used by scheduled QQ/HTTP/OneBot reminder messages
@@ -103,12 +103,9 @@ tool calls:
 - `schedule.resume`: changes selected records to `active`.
 - `schedule.run_now`: triggers one schedule immediately.
 
-Create/list/delete/pause/resume are audited through Tool Gateway but do not
-require security approval. `schedule.run_now` uses dynamic policy:
-
-- Ordinary reminder, research, notify, or knowledge tasks run without approval.
-- Direct code execution schedules require Tool Gateway approval.
-- Patch-proposal code schedules are not treated as direct high-risk execution.
+Create/list/delete/pause/resume/run-now are audited through Tool Gateway but do not
+require security approval. Code schedule execution still passes through CodeAgent's
+allowed-workspace boundary before the local executor starts.
 
 Chat confirmation is a separate UX concern. For example, confirming deletion
 of multiple schedules should be implemented as a conversation confirmation

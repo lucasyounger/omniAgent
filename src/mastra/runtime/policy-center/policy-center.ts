@@ -2,7 +2,7 @@ import type { ToolGatewayPolicy } from '../types';
 import type { ToolPolicyCenter, ToolPolicyRecord, ToolPolicySummary } from './policy-center.schema';
 
 const staticPolicies: ToolPolicyRecord[] = [
-  policy('start-claude-code-task', { risk: 'dangerous', capability: 'code.execute_claude_code_task', requireApproval: true, audit: true }, 'Start direct Claude Code execution.'),
+  policy('start-claude-code-task', { risk: 'medium', capability: 'code.execute_claude_code_task', audit: true }, 'Start Claude Code execution inside an allowed workspace.'),
   policy('get-claude-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read Claude Code task status.'),
   policy('list-claude-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List Claude Code tasks.'),
   policy('create-cron-job', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Create scheduled job records.'),

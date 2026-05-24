@@ -74,7 +74,11 @@ used only by unregistered workflows:
   `npm run prpool:ingest -- --file <proposal.json|proposal.md>` and supports
   `--dry-run` validation. Passing `--confirmed` marks the proposal as confirmed,
   creates a `ready` item, and lets the PR Pool cron scan pick it up later; without
-  the flag, proposals follow their embedded confirmation/default rule.
+  the flag, proposals follow their embedded confirmation/default rule. `pr_pool.develop`
+  creates the child CodeAgent RuntimeTask and dispatches it immediately, carrying
+  `executor` metadata for Claude Code, opencode, or custom CLI backends. Cron scans
+  reconcile active CodeTask results before and after scheduling so completed/failed
+  development runs are reflected back onto PR Pool items.
 - **Req Runtime** (`src/mastra/runtime/req/`): `.omni/reqs` requirement library
   with path-safe document IDs, `reqs.json` index, per-document markdown/design
   files, source metadata, and append-only status events for document and item

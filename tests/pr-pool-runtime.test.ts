@@ -3,6 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../src/mastra/lib/code-task-store', () => ({
+  getCodeTask: vi.fn(),
+}));
+
 let tempRoot: string;
 
 async function loadRuntime() {
@@ -174,5 +178,45 @@ describe('PR pool runtime', () => {
     });
     const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
     expect(events).toContain('proposal_ingested');
+  });
+
+  it('reconciles completed and failed CodeTask runs back to PR items', async () => {
+    const { getCodeTask } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: taskId === 'code-ok' ? 'completed' : 'failed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: taskId === 'code-ok' ? 0 : 1,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'patch_proposal',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'claude',
+      args: [],
+      promptArg: '-p',
+      recentEvents: taskId === 'code-ok' ? [] : [{ type: 'task_failed', message: 'tests failed', ts: new Date().toISOString() }],
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const completed = await prPoolRuntime.create(input('Complete me'));
+    const failed = await prPoolRuntime.create(input('Fail me'));
+    await prPoolRuntime.confirm(completed.id);
+    await prPoolRuntime.transition(completed.id, 'scheduled');
+    await prPoolRuntime.transition(completed.id, 'developing');
+    await prPoolRuntime.update(completed.id, { run: { ...completed.run, codeTaskId: 'code-ok' } });
+    await prPoolRuntime.confirm(failed.id);
+    await prPoolRuntime.transition(failed.id, 'scheduled');
+    await prPoolRuntime.transition(failed.id, 'developing');
+    await prPoolRuntime.update(failed.id, { run: { ...failed.run, codeTaskId: 'code-bad' } });
+
+    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+
+    expect(result).toMatchObject({ scanned: 2, completed: 1, failed: 1 });
+    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({ status: 'completed', run: { lastRunId: 'run-code-ok' } });
+    await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({ status: 'failed', blocking: { reason: 'tests failed', category: 'runtime_error' } });
   });
 });

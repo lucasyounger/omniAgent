@@ -10,6 +10,17 @@ vi.mock('node:child_process', () => ({
     }
     callback(null, '', '');
   }),
+  spawn: vi.fn(() => {
+    const stream = {
+      setEncoding: vi.fn(),
+      on: vi.fn(),
+    };
+    return {
+      stdout: stream,
+      stderr: stream,
+      on: vi.fn(),
+    };
+  }),
 }));
 import type { GatewayConfig } from '../src/gateway/config';
 import type { ChannelMessage } from '../src/gateway/types';
@@ -154,7 +165,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u683c\u5f0f\u9519\u8bef');
   });
 
-  it('creates task commands as approval-gated RuntimeTasks', async () => {
+  it('creates task commands as directly dispatched RuntimeTasks in allowed workspaces', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { listApprovalRequests } = await import('../src/mastra/runtime/approval-store');
@@ -170,14 +181,14 @@ describe('Gateway message handler', () => {
     const task = taskId ? await taskRuntime.getTask(taskId) : undefined;
 
     expect(replyText).toContain('Runtime Task:');
-    expect(replyText).toContain('Dispatch: waiting_user_confirm');
-    expect(replyText).toContain('Tool Gateway');
+    expect(replyText).toContain('Dispatch: dispatched');
+    expect(replyText).not.toContain('Tool Gateway');
     expect(taskId).toBeDefined();
     expect(task).toMatchObject({
       sourceAgentId: 'channel-gateway',
       targetAgentId: 'code-agent',
       objective: 'change files',
-      status: 'waiting_user_confirm',
+      status: 'running',
       metadata: {
         taskType: 'code.claude_code_task',
         payload: {
@@ -187,17 +198,7 @@ describe('Gateway message handler', () => {
         },
       },
     });
-    expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({
-      toolId: 'dispatcher.start-claude-code-task',
-      capability: 'code.execute_claude_code_task',
-      status: 'pending',
-      taskId,
-      inputPreview: {
-        workspacePath: tempRoot,
-        objective: 'change files',
-      },
-    });
+    expect(requests).toHaveLength(0);
   });
   it('creates channel reminder cron jobs directly from natural language', async () => {
     const { handleChannelMessage } = await loadHandler();
@@ -301,9 +302,8 @@ describe('Gateway message handler', () => {
       allowSenders: ['trusted'],
     });
 
-    expect(replies[0].text).toContain('2026-05-12 21:08');
+    expect(replies[0].text).toContain('2026-05-12 13:08');
     expect(replies[0].text).toContain('daily 09:00');
-    expect(replies[0].text).not.toContain('2026-05-12 13:08');
     expect(replies[0].text).not.toContain('daily 01:00');
   });
 
@@ -877,6 +877,7 @@ describe('Gateway message handler', () => {
   });
 
   it('handles explicit PR pool commands', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({

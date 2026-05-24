@@ -32,9 +32,8 @@ import type { CapabilityPlan } from './capability-planner';
 import { createRuntimeTaskHandlerRegistry, resolveRuntimeTaskHandler } from './task-dispatcher/handler-registry';
 
 const dispatchCodeTaskPolicy = {
-  risk: 'dangerous',
+  risk: 'medium',
   capability: 'code.execute_claude_code_task',
-  requireApproval: true,
   audit: true,
 } as const;
 
@@ -1405,6 +1404,7 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
   const approvalToken = stringValue(payload.approvalToken);
   const dryRun = booleanValue(payload.dryRun);
   const executionMode = payload.executionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
+  const executor = codeTaskExecutorValue(payload.executor);
   const command = stringValue(payload.command);
   const args = stringArrayValue(payload.args);
   const promptArg = stringValue(payload.promptArg);
@@ -1422,45 +1422,6 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
       targetAgentId: task.targetAgentId,
       reason: 'Code task payload is missing workspacePath.',
     };
-  }
-
-  if (!approvalToken) {
-    try {
-      await executeWithToolGateway(
-        'dispatcher.start-claude-code-task',
-        dispatchCodeTaskPolicy,
-        {
-          workspacePath,
-          objective,
-          contextBrief,
-          dryRun,
-          teamTaskId: task.id,
-          sourceAgentId: 'task-dispatcher',
-          requestedBy: `runtime-task:${task.id}`,
-          approvalToken,
-          command,
-          args,
-          promptArg,
-        },
-        async () => ({ skipped: true }),
-      );
-    } catch (error) {
-      if (error instanceof ToolGatewayApprovalRequiredError) {
-        await taskRuntime.transition({
-          taskId: task.id,
-          nextStatus: 'waiting_user_confirm',
-          reason: error.message,
-          sourceAgentId: 'task-dispatcher',
-        });
-        return {
-          taskId: task.id,
-          status: 'waiting_user_confirm',
-          targetAgentId: task.targetAgentId,
-          reason: error.message,
-        };
-      }
-      throw error;
-    }
   }
 
   try {
@@ -1498,6 +1459,7 @@ async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
           teamTaskId: task.id,
           sourceAgentId: 'task-dispatcher',
           requestedBy: `runtime-task:${task.id}`,
+          executor,
           command,
           args,
           promptArg,
@@ -1597,6 +1559,10 @@ function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+function codeTaskExecutorValue(value: unknown) {
+  return value === 'claude_code' || value === 'opencode' || value === 'custom' ? value : undefined;
+}
+
 function stringArrayValue(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
 }
@@ -1632,11 +1598,9 @@ function resolveScheduleSelection(payload: Record<string, unknown>, jobs: CronJo
 }
 
 function resolveScheduleRunNowPolicy(job: CronJob) {
-  const isDangerousCodeTask = job.taskType === runtimeTaskTypes.codeClaudeCodeTask && job.payload?.executionMode !== 'patch_proposal';
   return {
-    risk: isDangerousCodeTask ? 'dangerous' : 'medium',
+    risk: 'medium',
     capability: 'schedule.run_now',
-    requireApproval: isDangerousCodeTask,
     audit: true,
   } as const;
 }

@@ -4,9 +4,8 @@ import { startClaudeCodeTask } from '../lib/code-task-store';
 import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const startClaudeCodeTaskWorkflowPolicy = {
-  risk: 'dangerous',
+  risk: 'medium',
   capability: 'code.execute_claude_code_task',
-  requireApproval: true,
   audit: true,
 } as const;
 

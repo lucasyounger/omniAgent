@@ -15,13 +15,13 @@ describe('tool policy center', () => {
     expect(center.policies.length).toBeGreaterThan(20);
     expect(center.summary).toMatchObject({
       total: center.policies.length,
-      dangerous: 5,
-      approvalRequired: 5,
+      dangerous: 4,
+      approvalRequired: 4,
     });
     expect(getToolPolicy('start-claude-code-task')).toMatchObject({
-      risk: 'dangerous',
+      risk: 'medium',
       capability: 'code.execute_claude_code_task',
-      requireApproval: true,
+      audit: true,
     });
     expect(getToolPolicy('queue-channel-notification')).toMatchObject({
       risk: 'medium',

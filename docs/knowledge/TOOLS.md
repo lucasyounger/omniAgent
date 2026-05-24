@@ -6,10 +6,12 @@ Command: `claude`
 
 OmniAgent starts Claude Code through `startClaudeCodeTaskTool`. Task progress is recorded as JSONL under `~/.omni/runs/code-runs`.
 
-Claude Code execution is high risk and must pass through Tool Gateway. This
-applies to both `start-claude-code-task` and `run-code-task-workflow`.
-Approval-required calls need an `approvalToken`; otherwise Tool Gateway records
-`pending_approval` and does not execute the tool.
+CodeAgent execution is medium-risk and audit-only after the workspace path passes
+`OMNI_ALLOWED_WORKSPACES`. `start-claude-code-task`, RuntimeTask code dispatch,
+and `run-code-task-workflow` write Tool Gateway audit records but do not create
+approval requests or require an `approvalToken`. PR Pool items are reviewed before
+development, so confirmed slices execute in their assigned workspace without a
+second security approval gate.
 
 ## Tool Gateway
 
@@ -43,15 +45,14 @@ Use three distinct layers:
 - Security approval: high-risk side effects, such as direct code execution,
   shell/file mutation, secret access, or external write-heavy actions.
 
-For schedule operations, create/list/delete/pause/resume are audit-only today.
-Immediate run is dynamic: ordinary scheduled reminders do not need approval,
-while direct code execution schedules require Tool Gateway approval.
+For schedule operations, create/list/delete/pause/resume and immediate run are audit-only today. Code schedules still rely on the CodeAgent workspace boundary before execution.
 
 PR Pool dispatcher operations now use Tool Gateway audit-only policies as the
 side-effect boundary: list uses `pr_pool.read`, create/ingest/confirm/archive use
-`pr_pool.write`, and develop/cron scan use `pr_pool.develop`. The existing PR
-Pool develop approval token remains the user-confirmation gate for starting
-CodeAgent work; this audit boundary does not change that approval flow.
+`pr_pool.write`, and develop/cron scan use `pr_pool.develop`. Confirmed PR Pool
+items have already passed requirement review, so develop/cron scan may dispatch
+CodeAgent work directly inside the assigned allowed workspace; repeated develop
+approval tokens are no longer part of the execution gate.
 
 ## Req Runtime Tools
 

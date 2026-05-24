@@ -13,7 +13,9 @@ through Team Runtime.
 - Official QQ Bot websocket adapter when `OMNI_QQBOT_APPID` and
   `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
-- `/task <workspacePath> :: <objective>` for async CodeAgent execution
+- `/task <workspacePath> :: <objective>` for async CodeAgent execution after the
+  workspace passes `OMNI_ALLOWED_WORKSPACES`; execution is audited but does not
+  require a second Tool Gateway approval.
 - `/goal create/list/status/run/feedback` for durable Goal Runtime management
   from paired or allowlisted channels
 - Adapters still emit `ChannelMessage`, but Gateway converts each message into a

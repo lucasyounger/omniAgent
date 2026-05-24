@@ -4,9 +4,8 @@ import { getCodeTask, listCodeTasks, startClaudeCodeTask } from '../lib/code-tas
 import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const startClaudeCodeTaskPolicy = {
-  risk: 'dangerous',
+  risk: 'medium',
   capability: 'code.execute_claude_code_task',
-  requireApproval: true,
   audit: true,
 } as const;
 
@@ -21,7 +20,7 @@ const approvalTokenSchema = z.string().optional().describe('Approval token issue
 export const startClaudeCodeTaskTool = createTool({
   id: 'start-claude-code-task',
   description: 'Start a Claude Code CLI task in an allowed local workspace and return a task id for progress polling.',
-  requireApproval: input => !input.dryRun,
+  requireApproval: () => false,
   background: {
     enabled: true,
     timeoutMs: Number(process.env.OMNI_CODE_TASK_BACKGROUND_TIMEOUT_MS || 30 * 60_000),
@@ -38,6 +37,10 @@ export const startClaudeCodeTaskTool = createTool({
     requestedBy: z.string().optional().describe('Human or system requester.'),
     parentTaskId: z.string().optional().describe('Optional parent Team Runtime task id.'),
     executionMode: z.enum(['direct', 'patch_proposal']).default('direct').describe('Use patch_proposal to create a review artifact without modifying files.'),
+    executor: z.enum(['claude_code', 'opencode', 'custom']).default('claude_code').describe('Code execution backend. opencode uses opencode command defaults; custom uses command overrides.'),
+    command: z.string().optional().describe('Optional CLI command override for the code executor.'),
+    args: z.array(z.string()).optional().describe('Optional CLI arguments before the prompt argument.'),
+    promptArg: z.string().optional().describe('Optional CLI prompt argument, defaults to -p.'),
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
@@ -53,6 +56,10 @@ export const startClaudeCodeTaskTool = createTool({
     logFile: z.string(),
     executionMode: z.enum(['direct', 'patch_proposal']).optional(),
     patchFile: z.string().optional(),
+    executor: z.enum(['claude_code', 'opencode', 'custom']).optional(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    promptArg: z.string().optional(),
     recentEvents: z.array(
       z.object({
         type: z.string(),
@@ -83,6 +90,10 @@ export const getClaudeCodeTaskStatusTool = createTool({
     logFile: z.string(),
     executionMode: z.enum(['direct', 'patch_proposal']).optional(),
     patchFile: z.string().optional(),
+    executor: z.enum(['claude_code', 'opencode', 'custom']).optional(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    promptArg: z.string().optional(),
     recentEvents: z.array(
       z.object({
         type: z.string(),

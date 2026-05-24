@@ -45,9 +45,9 @@ TaskRuntime.
   synchronously.
 - Records `lastDispatchStatus` and optional `lastDispatchError` for the
   immediate dispatch attempt.
-- Ordinary create/list/delete/pause/resume schedule maintenance is audited but
-  does not require Tool Gateway approval. Manual `schedule.run_now` dynamically
-  requires approval only when it would trigger direct code execution.
+- Ordinary create/list/delete/pause/resume/run-now schedule maintenance is audited
+  but does not require Tool Gateway approval. Direct code schedules rely on
+  CodeAgent's allowed-workspace boundary before the local executor starts.
 
 ## Tools
 

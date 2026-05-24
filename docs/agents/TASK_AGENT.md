@@ -102,12 +102,12 @@ work is delegated, executed, reported, and recovered across all agents.
 - Gateway `/task <workspacePath> :: <objective>` commands create `code-agent`
   Runtime Tasks and enter Task Dispatcher instead of directly starting
   CodeAgent.
-- Code tasks without an approval token transition to `waiting_user_confirm`;
-  approving the linked Tool Gateway request injects the token and moves the task
-  back to `pending`.
-- Schedule create/list/delete/pause/resume maintenance tasks are audited but do
-  not require approval. `schedule.run_now` dynamically requires approval when
-  the target schedule would trigger direct code execution.
+- Code tasks are audited by Tool Gateway and execute once the workspace path is
+  inside `OMNI_ALLOWED_WORKSPACES`; they no longer require an approval token just
+  to start CodeAgent.
+- Schedule create/list/delete/pause/resume/run-now maintenance tasks are audited
+  but do not require approval. Code schedules rely on the same allowed-workspace
+  boundary before execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
   working on a task. Unsupported target agents and handler placeholders that are
   not executable are transitioned to runtime `failed` with a visible reason
@@ -190,6 +190,17 @@ work is delegated, executed, reported, and recovered across all agents.
   to `required`. Ingest preserves non-goals, constraints, and references, writes
   `~/.omni/pr-pool/active/{prItemId}/brief.md`, and never creates CodeAgent tasks.
   PR Pool cron scan consumes only `ready` items.
+- `pr_pool.develop` now creates and immediately dispatches the child
+  `code.claude_code_task` RuntimeTask. The child payload can carry `executor:
+  claude_code | opencode | custom`, plus command override metadata. Confirmed PR
+  Pool items are already reviewed, so develop dispatch does not require an
+  additional approval token; execution is bounded by the assigned allowed
+  workspace and audited Tool Gateway records. If child dispatch fails
+  synchronously, the PR Pool item is moved to `failed` with a runtime blocking
+  reason.
+- PR Pool cron scans reconcile active development runs before and after scheduling:
+  completed CodeTasks mark items `completed`, failed/cancelled CodeTasks mark items
+  `failed`, and queued approval waits remain visible on the PR item.
 - `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
 - PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
   `pr_pool.ingest_proposal`, validates required title/objective/source/origin/

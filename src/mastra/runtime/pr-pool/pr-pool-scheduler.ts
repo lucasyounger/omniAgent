@@ -12,6 +12,10 @@ export type PRPoolCronScanResult = {
   dispatched: number;
   skipped: number;
   failed: number;
+  reconciled: {
+    before: Awaited<ReturnType<typeof prPoolRuntime.reconcileDevelopmentRuns>>;
+    after: Awaited<ReturnType<typeof prPoolRuntime.reconcileDevelopmentRuns>>;
+  };
 };
 
 export async function registerPrPoolCronJob(): Promise<CronJob> {
@@ -32,6 +36,7 @@ export async function ensurePrPoolCronJob(): Promise<CronJob> {
 }
 
 export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
+  const before = await prPoolRuntime.reconcileDevelopmentRuns();
   const readyItems = await prPoolRuntime.list({ status: 'ready' });
   const runningItems = await prPoolRuntime.list({ status: 'developing' });
   const plan = buildDispatchPlan(readyItems, runningItems, {
@@ -39,11 +44,13 @@ export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
     maxConcurrentPerRepo: Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT_PER_REPO || 2),
   });
   const scheduleResult = await executeDispatchPlan(plan);
+  const after = await prPoolRuntime.reconcileDevelopmentRuns();
   const result: PRPoolCronScanResult = {
     scanned: readyItems.length,
     dispatched: scheduleResult.dispatched.length,
     skipped: scheduleResult.skipped.length,
     failed: scheduleResult.failed.length,
+    reconciled: { before, after },
   };
 
   await writeScanSummary({ ...result, conflicts: scheduleResult.conflicts, cycles: plan.cycles });

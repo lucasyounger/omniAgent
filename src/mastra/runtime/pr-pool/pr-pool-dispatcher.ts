@@ -1,6 +1,6 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-runtime-store';
 import { runPrPoolCronScan } from './pr-pool-scheduler';
-import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from './pr-pool-runtime';
+import { prPoolRuntime } from './pr-pool-runtime';
 import { ensureWorktree } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import type { PRPoolProposal } from './pr-pool-proposal';
@@ -114,41 +114,8 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     return failPrPoolTask(task, `PR pool item not found: ${prItemId}`);
   }
 
-  const payloadToken = stringValue(payload.approvalToken);
-  const approvalToken = payloadToken || (validateDevelopApprovalToken(item) ? item.approval.developApprovalToken : undefined);
-  if (!approvalToken) {
-    await taskRuntime.transition({
-      taskId: task.id,
-      nextStatus: 'waiting_user_confirm',
-      reason: 'pr_pool.develop requires develop approval.',
-      sourceAgentId: 'pr-pool-handler',
-    });
-    return {
-      taskId: task.id,
-      status: 'waiting_user_confirm',
-      targetAgentId: task.targetAgentId,
-      reason: 'pr_pool.develop requires develop approval.',
-    };
-  }
-
   return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, prPoolDevelopPolicy, async () => {
-    const developApproval = validateDevelopApprovalToken(item, payloadToken)
-      ? undefined
-      : generateDevelopApprovalToken(prItemId, stringValue(payload.approvedBy) || task.sourceAgentId || 'pr-pool-runtime');
-    const approvedItem = developApproval
-      ? await prPoolRuntime.update(prItemId, {
-          approval: {
-            ...item.approval,
-            developApprovalId: developApproval.id,
-            developApprovalToken: approvalToken,
-            developApprovalIssuedAt: developApproval.issuedAt,
-            developApprovalExpiresAt: developApproval.expiresAt,
-            developApprovalIssuedBy: developApproval.issuedBy,
-            approvedBy: developApproval.issuedBy,
-            approvedAt: developApproval.issuedAt,
-          },
-        })
-      : item;
+    const approvedItem = item;
     const scheduledItem = approvedItem.status === 'ready' ? await prPoolRuntime.transition(prItemId, 'scheduled', 'Dispatched for development') : approvedItem;
     const developingItem = scheduledItem.status === 'scheduled' ? await prPoolRuntime.transition(prItemId, 'developing', 'CodeAgent task created') : scheduledItem;
     if (developingItem.status !== 'developing') {
@@ -156,6 +123,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     }
     const worktreeItem = await ensureWorktree(developingItem);
     const codeAgentBriefPath = await writeCodeAgentPrBrief(worktreeItem);
+    const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(process.env.OMNI_CODE_AGENT_EXECUTOR) || 'claude_code';
 
     const codeTask = await taskRuntime.createTask({
       sourceAgentId: 'pr-pool-runtime',
@@ -170,7 +138,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
           contextBrief: formatPrItemContext(worktreeItem, codeAgentBriefPath),
           codeAgentBriefPath,
           executionMode: process.env.OMNI_CODE_EXECUTION_MODE === 'direct' ? 'direct' : 'patch_proposal',
-          approvalToken,
+          executor,
           prItemId,
         },
       },
@@ -185,7 +153,19 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       },
     });
 
-    return { prItemId, status: 'developing', codeTaskId: codeTask.id };
+    const { dispatchRuntimeTask } = await import('../task-dispatcher');
+    const codeDispatch = await dispatchRuntimeTask(codeTask.id);
+    if (codeDispatch.status === 'waiting_user_confirm') {
+      await prPoolRuntime.transition(prItemId, 'waiting_user_confirm', codeDispatch.reason || 'Code task is waiting for approval.');
+    } else if (codeDispatch.status === 'failed') {
+      const reason = codeDispatch.reason || 'Code task dispatch failed.';
+      await prPoolRuntime.update(prItemId, {
+        status: 'failed',
+        blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
+      });
+    }
+
+    return { prItemId, status: codeDispatch.status === 'waiting_user_confirm' ? 'waiting_user_confirm' : codeDispatch.status === 'failed' ? 'failed' : 'developing', codeTaskId: codeTask.id, codeDispatchStatus: codeDispatch.status, executor };
   });
 }
 
@@ -363,6 +343,10 @@ function prItemPriorityValue(value: unknown): PRItem['priority'] | undefined {
 
 function isOneOf<const T extends readonly string[]>(value: string, allowed: T): value is T[number] {
   return allowed.includes(value);
+}
+
+function codeTaskExecutorValue(value: unknown): 'claude_code' | 'opencode' | 'custom' | undefined {
+  return typeof value === 'string' && isOneOf(value, ['claude_code', 'opencode', 'custom']) ? value : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {
