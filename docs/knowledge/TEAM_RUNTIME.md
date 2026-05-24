@@ -153,7 +153,12 @@ approval linkage.
   task type maps to at least one capability while agents/tools remain execution
   bindings. Capability entries can include optional Mastra executable bindings for
   migrated tool/workflow handlers; routers still select capability ids, not raw
-  executable names. Deterministic and lightweight capability routers rank candidates from
+  executable names. Runtime-service identities such as `research-agent`,
+  `notify-agent`, `goal-runtime`, `req-runtime`, and `pr-pool-runtime` are
+  registry-visible execution surfaces, not necessarily standalone Mastra Agents;
+  they route through Task Dispatcher handlers when deterministic Tool/Workflow or
+  Runtime Service execution is the clearer boundary. Deterministic and lightweight
+  capability routers rank candidates from
   examples, descriptions, and simple bilingual synonyms without embeddings or a
   vector database. Code tasks without approval move to `waiting_user_confirm`.
 - Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it.

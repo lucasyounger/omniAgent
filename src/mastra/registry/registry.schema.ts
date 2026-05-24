@@ -1,4 +1,4 @@
-export type RegistryEntryKind = 'agent' | 'workflow';
+export type RegistryEntryKind = 'agent' | 'workflow' | 'runtime_service';
 
 export type RegistryEntry = {
   id: string;
@@ -13,4 +13,5 @@ export type RegistryEntry = {
 export type RegistryCatalog = {
   agents: RegistryEntry[];
   workflows: RegistryEntry[];
+  runtimeServices: RegistryEntry[];
 };

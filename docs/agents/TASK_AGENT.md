@@ -33,6 +33,18 @@ work is delegated, executed, reported, and recovered across all agents.
 - `~/.omni/runs/team/inbox/{agentId}.jsonl`
 - `~/.omni/runs/team/results/{runId}.json`
 
+- `research-agent`, `notify-agent`, `goal-runtime`, `req-runtime`, and
+  `pr-pool-runtime` are registry-visible runtime services, not standalone Mastra
+  Agents. They resolve through Task Dispatcher handlers so deterministic service
+  execution stays behind RuntimeTask lifecycle, Tool Gateway policy, and Team Run
+  result contracts.
+- Unsupported `notify-agent` or `research-agent` task types fail with a concrete
+  missing task-type handler reason instead of being described as pending agent
+  implementations.
+- TaskAgent remains a protocol/tooling role rather than a standalone Mastra
+  Agent until it needs reasoning or user interaction beyond deterministic runtime
+  service execution.
+
 ## Tools
 
 - `create-team-task`

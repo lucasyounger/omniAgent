@@ -20,8 +20,25 @@ describe('agent and workflow registry', () => {
       kind: 'agent',
       capabilities: expect.arrayContaining(['routing', 'task_planning', 'final_response']),
     });
+    expect(catalog.runtimeServices.map(entry => entry.id)).toEqual([
+      'research-agent',
+      'notify-agent',
+      'goal-runtime',
+      'req-runtime',
+      'pr-pool-runtime',
+    ]);
     expect(catalog.workflows.map(entry => entry.id)).toContain('task-orchestration-workflow');
     expect(catalog.workflows.map(entry => entry.id)).toContain('topic-research-goal-workflow');
+    expect(getRegistryEntry('goal-runtime')).toMatchObject({
+      kind: 'runtime_service',
+      capabilities: expect.arrayContaining(['goal_management', 'goal_execution']),
+    });
+    expect(searchRegistryEntries('notification_delivery')).toMatchObject([
+      {
+        id: 'notify-agent',
+        kind: 'runtime_service',
+      },
+    ]);
   });
 
   it('gets and searches registry entries by product capability', () => {

@@ -935,7 +935,10 @@ describe('Task Dispatcher', () => {
     await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: 'goal.run', registry })?.(baseTask)).resolves.toMatchObject({ handler: 'goal' });
     await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: 'req.list', registry })?.(baseTask)).resolves.toMatchObject({ handler: 'req' });
     await expect(resolveRuntimeTaskHandler({ task: baseTask, taskType: undefined, registry })?.(baseTask)).resolves.toMatchObject({ handler: 'code' });
-    expect(calls).toEqual(['schedule-create', 'goal', 'req', 'code']);
+    await expect(resolveRuntimeTaskHandler({ task: { ...baseTask, targetAgentId: 'goal-runtime' }, taskType: undefined, registry })?.(baseTask)).resolves.toMatchObject({ handler: 'goal' });
+    expect(resolveRuntimeTaskHandler({ task: { ...baseTask, targetAgentId: 'notify-agent' }, taskType: undefined, registry })).toBeUndefined();
+    expect(resolveRuntimeTaskHandler({ task: { ...baseTask, targetAgentId: 'research-agent' }, taskType: undefined, registry })).toBeUndefined();
+    expect(calls).toEqual(['schedule-create', 'goal', 'req', 'code', 'goal']);
   });
 
   it('fails unsupported dispatcher targets instead of leaving them queued', async () => {
@@ -964,7 +967,7 @@ describe('Task Dispatcher', () => {
     });
   });
 
-  it('fails pending implementation handlers instead of leaving them queued', async () => {
+  it('fails unsupported task types for runtime-service targets instead of leaving them queued', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({
       sourceAgentId: 'test',
@@ -980,12 +983,12 @@ describe('Task Dispatcher', () => {
     expect(result).toMatchObject({
       status: 'skipped',
       targetAgentId: 'research-agent',
-      reason: 'Handler for research-agent is registered as pending implementation.',
+      reason: 'No executable handler for task type: research.future_task.',
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
       status: 'failed',
       metadata: {
-        runtimeStatusReason: 'Handler for research-agent is registered as pending implementation.',
+        runtimeStatusReason: 'No executable handler for task type: research.future_task.',
       },
     });
   });

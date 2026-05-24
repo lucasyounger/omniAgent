@@ -203,7 +203,7 @@ export async function dispatchRuntimeTask(taskId: string): Promise<DispatchResul
   }
 
   if (leased.targetAgentId === 'notify-agent' || leased.targetAgentId === 'research-agent') {
-    const reason = `Handler for ${leased.targetAgentId} is registered as pending implementation.`;
+    const reason = `No executable handler for task type: ${taskType || 'unknown'}.`;
     await appendTeamEvent({
       taskId,
       sourceAgentId: 'task-dispatcher',

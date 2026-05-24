@@ -52,6 +52,9 @@ export function createRuntimeTaskHandlerRegistry(handlers: RuntimeTaskHandlerSet
       'code-agent': handlers.dispatchCodeTask,
       'knowledge-agent': handlers.dispatchKnowledgeTask,
       'channel-gateway': handlers.dispatchChannelGatewayTask,
+      'goal-runtime': handlers.dispatchGoalTask,
+      'req-runtime': handlers.dispatchReqTask,
+      'pr-pool-runtime': handlers.dispatchPrPoolTask,
     },
   };
 }
