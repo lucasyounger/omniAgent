@@ -130,8 +130,8 @@ describe('Composite task workflow', () => {
         },
         {
           stepId: 'step-2',
-          capabilityId: 'code.claude_code_task',
-          taskType: 'code.claude_code_task',
+          capabilityId: 'code.task',
+          taskType: 'code.task',
           dependencies: ['step-1'],
           expectedOutput: 'Run code change',
         },
@@ -150,29 +150,29 @@ describe('Composite task workflow', () => {
     expect(result.stepResults).toHaveLength(2);
   });
 
-  it('pauses composite plans when a step waits for approval', async () => {
+  it('runs composite code steps once the workspace is allowed', async () => {
     const { executeCompositePlan } = await loadWorkflow();
     const plan: ExecutionPlan = {
-      planId: 'plan-paused',
-      messageId: 'msg-paused',
+      planId: 'plan-code-step',
+      messageId: 'msg-code-step',
       mode: 'composite',
       steps: [
         {
           stepId: 'step-1',
           capabilityId: 'goal.create',
           taskType: 'goal.create',
-          input: { title: 'Approval gated plan' },
+          input: { title: 'Code plan' },
           expectedOutput: 'Create a goal',
         },
         {
           stepId: 'step-2',
-          capabilityId: 'code.claude_code_task',
-          taskType: 'code.claude_code_task',
+          capabilityId: 'code.task',
+          taskType: 'code.task',
           dependencies: ['step-1'],
           input: {
             workspacePath: tempRoot,
             objective: 'change files',
-            executionMode: 'direct',
+            executionMode: 'patch_proposal',
           },
           expectedOutput: 'Run code task',
         },
@@ -182,15 +182,13 @@ describe('Composite task workflow', () => {
     const result = await executeCompositePlan(plan);
 
     expect(result).toMatchObject({
-      planId: 'plan-paused',
-      status: 'paused',
-      completedStepIds: ['step-1'],
-      failedStepId: 'step-2',
-      failureReason: expect.stringContaining('Approval'),
+      planId: 'plan-code-step',
+      status: 'succeeded',
+      completedStepIds: ['step-1', 'step-2'],
     });
     expect(result.stepResults[1]).toMatchObject({
       stepId: 'step-2',
-      status: 'waiting_user_confirm',
+      status: 'dispatched',
     });
   });
 });

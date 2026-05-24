@@ -1,4 +1,6 @@
 export const runtimeTaskTypes = {
+  codeTask: 'code.task',
+  /** @deprecated Use codeTask. Kept for persisted RuntimeTask compatibility. */
   codeClaudeCodeTask: 'code.claude_code_task',
   knowledgeTask: 'knowledge.task',
   knowledgeMemoryIndex: 'knowledge.memory_index',
@@ -76,11 +78,17 @@ type RuntimeTaskTypeRegistryEntry = RuntimeTaskTypeDefinition & {
 };
 
 const baseRuntimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDefinition> = {
+  [runtimeTaskTypes.codeTask]: {
+    taskType: runtimeTaskTypes.codeTask,
+    defaultTargetAgentId: 'code-agent',
+    handler: 'code-agent',
+    description: 'Run a code executor task through the code execution handler.',
+  },
   [runtimeTaskTypes.codeClaudeCodeTask]: {
     taskType: runtimeTaskTypes.codeClaudeCodeTask,
     defaultTargetAgentId: 'code-agent',
     handler: 'code-agent',
-    description: 'Run a Claude Code task through the code execution handler.',
+    description: 'Legacy alias for code.task RuntimeTask records.',
   },
   [runtimeTaskTypes.knowledgeTask]: {
     taskType: runtimeTaskTypes.knowledgeTask,
@@ -353,7 +361,8 @@ function categoryForTaskType(taskType: RuntimeTaskType): RuntimeTaskCapabilityCa
 
 function examplesForTaskType(taskType: RuntimeTaskType): string[] {
   const examples: Partial<Record<RuntimeTaskType, string[]>> = {
-    [runtimeTaskTypes.codeClaudeCodeTask]: ['run a CodeAgent task', '修改这个仓库并验证'],
+    [runtimeTaskTypes.codeTask]: ['run a CodeAgent task', 'run a code executor task', '修改这个仓库并验证'],
+    [runtimeTaskTypes.codeClaudeCodeTask]: ['run a legacy CodeAgent task', '运行旧 code.claude_code_task 记录'],
     [runtimeTaskTypes.knowledgeTask]: ['answer a knowledge request', '整理知识任务'],
     [runtimeTaskTypes.knowledgeMemoryIndex]: ['refresh memory index', '重建记忆索引'],
     [runtimeTaskTypes.knowledgeEpisode]: ['save an episodic memory', '记录这次经验'],
@@ -404,12 +413,12 @@ function outputsForTaskType(taskType: RuntimeTaskType): string[] | undefined {
   if (taskType.startsWith('req.')) return ['req'];
   if (taskType.startsWith('pr_pool.')) return ['pr_pool_item'];
   if (taskType === runtimeTaskTypes.notifySendChannelMessage || taskType === runtimeTaskTypes.channelMessage) return ['channel_delivery'];
-  if (taskType === runtimeTaskTypes.codeClaudeCodeTask) return ['code_task_result'];
+  if (taskType === runtimeTaskTypes.codeTask || taskType === runtimeTaskTypes.codeClaudeCodeTask) return ['code_task_result'];
   return undefined;
 }
 
 function safetyLevelForTaskType(taskType: RuntimeTaskType): RuntimeTaskCapability['safetyLevel'] {
-  if (taskType === runtimeTaskTypes.codeClaudeCodeTask || taskType === runtimeTaskTypes.prPoolDevelop) return 'high';
+  if (taskType === runtimeTaskTypes.codeTask || taskType === runtimeTaskTypes.codeClaudeCodeTask || taskType === runtimeTaskTypes.prPoolDevelop) return 'high';
   if (taskType.startsWith('schedule.') || taskType.startsWith('goal.') || taskType.startsWith('pr_pool.') || taskType.startsWith('req.')) return 'medium';
   return 'low';
 }

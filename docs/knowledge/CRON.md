@@ -67,14 +67,14 @@ Cron execution creates a Runtime Task, then invokes Task Dispatcher once for
 that task. Cron is the source, the configured `targetAgentId` is the target,
 and the actual execution belongs to dispatcher handlers or specialist agent
 logic outside the cron store. The cron store must not import or call CodeAgent
-or `startClaudeCodeTask` directly.
+or `startCodeTask` directly.
 
 Current dispatcher handlers include:
 
 - `schedule-handler`: creates and maintains schedule records through
   `schedule.create`, `schedule.list`, `schedule.delete`, `schedule.pause`,
   `schedule.resume`, and `schedule.run_now`.
-- `code-agent`: starts Claude Code through the CodeAgent dispatcher path. Code
+- `code-agent`: starts code executor work through the CodeAgent dispatcher path. Code
   tasks execute once their workspace path passes `OMNI_ALLOWED_WORKSPACES`; Tool
   Gateway records audit events but does not require an approval token.
 - `knowledge-agent`: executes supported knowledge maintenance task types.
@@ -116,7 +116,7 @@ creation time. Old records still run by inferring:
 
 - `targetAgentId`: normalized from `targetAgent`, defaulting to `code-agent`.
 - `taskType`: inferred from the target agent, defaulting to
-  `code.claude_code_task`.
+  `code.task`. `code.claude_code_task` remains accepted for legacy records.
 - `payload`: includes `objective` and a best-effort `workspacePath`.
 
 ## Next Enhancement

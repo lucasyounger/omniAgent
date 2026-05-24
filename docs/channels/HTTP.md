@@ -41,7 +41,7 @@ prompt instead of executing commands.
   priority updates.
 - `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
-- `/task <workspacePath> :: <objective>` creates a `code.claude_code_task`
+- `/task <workspacePath> :: <objective>` creates a `code.task`
   RuntimeTask and dispatches it through Task Dispatcher. CodeAgent starts once
   the workspace path is inside `OMNI_ALLOWED_WORKSPACES`; Tool Gateway records an
   audit event but does not require a separate approval token.

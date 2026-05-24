@@ -190,7 +190,7 @@ describe('Gateway message handler', () => {
       objective: 'change files',
       status: 'running',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'change files',
@@ -374,7 +374,7 @@ describe('Gateway message handler', () => {
     expect(String(fetchMock.mock.calls[0][1]?.body)).toContain('You are OmniAgent LLM Capability Router');
     expect(replies[0].text).toContain('已识别为复合能力请求');
     expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
-    expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.claude_code_task');
+    expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.task');
     expect(replies[0].text).toContain('Dispatch Steps:');
   });
 

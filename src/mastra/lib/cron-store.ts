@@ -406,7 +406,7 @@ function inferTaskType(targetAgent?: string) {
   if (agentId === 'channel-gateway') {
     return runtimeTaskTypes.channelMessage;
   }
-  return runtimeTaskTypes.codeClaudeCodeTask;
+  return runtimeTaskTypes.codeTask;
 }
 
 function normalizeAgentId(agentId?: string) {

@@ -19,7 +19,7 @@ const capabilities: CapabilityDefinition[] = [
     name: 'Beta',
     description: 'Beta repository analysis',
     category: 'repo',
-    taskTypes: ['code.claude_code_task'],
+    taskTypes: ['code.task'],
     examples: ['analyze repository', 'inspect code'],
     safetyLevel: 'medium',
     standalone: true,

@@ -105,7 +105,7 @@ async function appendTaskEvent(task: CodeTask, event: CodeTaskEvent) {
   await persistTaskSnapshot(task);
 }
 
-export async function startClaudeCodeTask(input: {
+export async function startCodeTask(input: {
   workspacePath: string;
   objective: string;
   contextBrief?: string;

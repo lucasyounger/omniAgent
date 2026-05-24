@@ -16,12 +16,10 @@ const scheduleWritePolicy = {
   audit: true,
 } as const;
 
-function resolveScheduleRunPolicy(job: CronJob) {
-  const isDangerousCodeTask = job.taskType === 'code.claude_code_task' && job.payload?.executionMode !== 'patch_proposal';
+function resolveScheduleRunPolicy(_job: CronJob) {
   return {
-    risk: isDangerousCodeTask ? 'dangerous' : 'medium',
+    risk: 'medium',
     capability: 'schedule.run_now',
-    requireApproval: isDangerousCodeTask,
     audit: true,
   } as const;
 }

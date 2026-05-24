@@ -153,7 +153,8 @@ approval linkage.
   dispatcher path. Skill, CLI, and Goal integrations should call the Runtime ingest
   API rather than writing PR Pool files directly. Re-ingesting the same explicit
   `idempotencyKey` returns an existing item and records a deduplication event. PR
-  Pool develop now creates and immediately dispatches a child CodeAgent RuntimeTask.
+  Pool develop now creates and immediately dispatches a child `code.task` CodeAgent RuntimeTask.
+  The legacy `code.claude_code_task` type remains accepted for persisted compatibility.
   The child task keeps `codeAgentBriefPath` and optional executor metadata for
   `claude_code`, `opencode`, or `custom`. Confirmed PR Pool items are already
   reviewed, so develop dispatch does not carry a second approval token; execution
@@ -167,7 +168,8 @@ approval linkage.
   evidence bundle so the implementation contract is traceable. The task type
   registry also exposes capability metadata for each existing task type
   (category, examples, handler tools, dependencies, outputs, and safety level)
-  without changing dispatch behavior or default target agent IDs. A dedicated
+  without changing dispatch behavior; `code.task` is the default CodeAgent task type
+  while `code.claude_code_task` remains a legacy alias. A dedicated
   Capability Registry groups existing task types into coarse routing capabilities
   such as `repository_analysis`, `architecture_modeling`, `report_generation`,
   `schedule_management`, `goal_management`, and `pr_management`; every runtime

@@ -131,7 +131,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       parentTaskId: task.id,
       objective: buildCodeAgentPrompt(worktreeItem, codeAgentBriefPath),
       metadata: {
-        taskType: runtimeTaskTypes.codeClaudeCodeTask,
+        taskType: runtimeTaskTypes.codeTask,
         payload: {
           workspacePath: worktreeItem.workspace.worktreePath || worktreeItem.workspace.repoPath,
           objective: worktreeItem.codeAgentPrompt,

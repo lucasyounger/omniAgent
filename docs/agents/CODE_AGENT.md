@@ -2,7 +2,7 @@
 
 Status: active Mastra Agent.
 
-CodeAgent executes local coding tasks through Claude Code CLI and records the
+CodeAgent executes local coding tasks through configurable code executor CLIs and records the
 execution through Team Runtime.
 
 ## Source Files
@@ -14,19 +14,19 @@ execution through Team Runtime.
 
 ## Key Behavior
 
-- Starts Claude Code with `start-claude-code-task`.
-- Claude Code execution must stay under `OMNI_ALLOWED_WORKSPACES` and passes
-  through Tool Gateway for audit records before spawning the CLI.
+- Starts code executor tasks with `start-code-task`.
+- Code execution must stay under `OMNI_ALLOWED_WORKSPACES` and passes
+  through Tool Gateway for audit records before spawning the selected CLI.
 - `run-code-task-workflow` uses the same audit-only execution policy as the tool
   call.
-- Task Dispatcher can dispatch `code-agent` Runtime Tasks into Claude Code
+- Task Dispatcher can dispatch `code-agent` Runtime Tasks into code executor
   execution. Gateway-created `/task` requests use this path and rely on the same
   allowed-workspace boundary plus Tool Gateway audit record before the CLI spawns.
 - Supports `executor: claude_code | opencode | custom` metadata. `opencode`
   resolves to opencode-specific command/argument env overrides when present, while
   `custom` uses the explicit command override path.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
-  does not spawn Claude Code or modify the workspace.
+  does not spawn the selected executor or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
 - Captures stdout/stderr in `~/.omni/runs/code-runs/{taskId}.jsonl`.
 - Writes Team Runtime events for progress.
@@ -35,10 +35,10 @@ execution through Team Runtime.
 
 ## Tools
 
-- `start-claude-code-task`: start a Claude Code CLI task.
-- `get-claude-code-task-status`: query the status of an in-progress or
+- `start-code-task`: start a code executor task.
+- `get-code-task-status`: query the status of an in-progress or
   completed code task.
-- `list-claude-code-tasks`: list recent code task records.
+- `list-code-tasks`: list recent code task records.
 
 ## Known Pitfalls
 

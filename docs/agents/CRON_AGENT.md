@@ -32,7 +32,7 @@ TaskRuntime.
   `每天 HH:mm`, or `每日 HH:mm`.
 - Creates a Runtime Task when a schedule fires.
 - Invokes Task Dispatcher after creating the Runtime Task.
-- Does not directly start Claude Code or any specialist agent implementation.
+- Does not directly start code executor CLIs or any specialist agent implementation.
 - Supports `channel-gateway` scheduled messages through `taskType:
   channel.message` and payload source metadata.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
@@ -47,7 +47,9 @@ TaskRuntime.
   immediate dispatch attempt.
 - Ordinary create/list/delete/pause/resume/run-now schedule maintenance is audited
   but does not require Tool Gateway approval. Direct code schedules rely on
-  CodeAgent's allowed-workspace boundary before the local executor starts.
+  CodeAgent's allowed-workspace boundary before the local executor starts; the
+  default code task type is `code.task`, with legacy `code.claude_code_task`
+  records still accepted.
 
 ## Tools
 

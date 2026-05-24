@@ -2,9 +2,9 @@ import type { ToolGatewayPolicy } from '../types';
 import type { ToolPolicyCenter, ToolPolicyRecord, ToolPolicySummary } from './policy-center.schema';
 
 const staticPolicies: ToolPolicyRecord[] = [
-  policy('start-claude-code-task', { risk: 'medium', capability: 'code.execute_claude_code_task', audit: true }, 'Start Claude Code execution inside an allowed workspace.'),
-  policy('get-claude-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read Claude Code task status.'),
-  policy('list-claude-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List Claude Code tasks.'),
+  policy('start-code-task', { risk: 'medium', capability: 'code.execute_task', audit: true }, 'Start code execution inside an allowed workspace.'),
+  policy('get-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read code task status.'),
+  policy('list-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List code tasks.'),
   policy('create-cron-job', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Create scheduled job records.'),
   policy('list-cron-jobs', { risk: 'safe', capability: 'schedule.read', audit: true }, 'List scheduled job records.'),
   policy('update-cron-job-status', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Pause or resume scheduled jobs.'),

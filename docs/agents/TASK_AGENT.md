@@ -76,7 +76,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - Overdue runs should be marked `timed_out`.
 - Runtime status transitions must follow the TaskRuntime state machine. Do not
   write `metadata.runtimeStatus` directly from feature code.
-- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher core now resolves executable handlers through `src/mastra/runtime/task-dispatcher/handler-registry.ts`, which centralizes exact taskType, taskType prefix, and targetAgentId routing while preserving the public `dispatchRuntimeTask(taskId)` entry point. Dispatcher handlers
+- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher core now resolves executable handlers through `src/mastra/runtime/task-dispatcher/handler-registry.ts`, which centralizes exact taskType, taskType prefix, and targetAgentId routing while preserving the public `dispatchRuntimeTask(taskId)` entry point. Concrete deterministic execution lives in focused handler modules under `src/mastra/runtime/task-dispatcher/handlers/` for schedule, channel, notify, research, goal, req, PR Pool, CodeAgent, and KnowledgeAgent work. Dispatcher handlers
   must use the same Tool Gateway policies as user-facing tools.
 - Approval-required tasks should create durable approval requests. Approving a
   request injects an approval token into linked task payload metadata and moves
@@ -84,7 +84,7 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Current Behavior
 
-- CodeAgent automatically creates a Team Task if `start-claude-code-task` is
+- CodeAgent automatically creates a Team Task if `start-code-task` is
   called without `teamTaskId`.
 - CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
 - CodeAgent writes completed or failed results and inbox messages.
@@ -176,7 +176,8 @@ work is delegated, executed, reported, and recovered across all agents.
   `OMNI_ROUTER_ADMIN=1`: list/upsert/delete capabilities and evaluate a query against
   the lightweight router. The flag is off by default and these endpoints should remain
   protected from production traffic.
-- Supported runtime task types: `code.claude_code_task`,
+- Supported runtime task types: `code.task` (`code.claude_code_task` remains a
+  legacy alias),
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
   `schedule.list`, `schedule.delete`, `schedule.pause`, `schedule.resume`,
@@ -191,7 +192,7 @@ work is delegated, executed, reported, and recovered across all agents.
   `~/.omni/pr-pool/active/{prItemId}/brief.md`, and never creates CodeAgent tasks.
   PR Pool cron scan consumes only `ready` items.
 - `pr_pool.develop` now creates and immediately dispatches the child
-  `code.claude_code_task` RuntimeTask. The child payload can carry `executor:
+  `code.task` RuntimeTask. The child payload can carry `executor:
   claude_code | opencode | custom`, plus command override metadata. Confirmed PR
   Pool items are already reviewed, so develop dispatch does not require an
   additional approval token; execution is bounded by the assigned allowed

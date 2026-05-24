@@ -1,13 +1,13 @@
 # Tools
 
-## Claude Code CLI
+## Code Executor CLI
 
-Command: `claude`
+Command defaults to `claude`; alternate executors can use `opencode` or a custom command.
 
-OmniAgent starts Claude Code through `startClaudeCodeTaskTool`. Task progress is recorded as JSONL under `~/.omni/runs/code-runs`.
+OmniAgent starts code executor work through `startCodeTaskTool`. Task progress is recorded as JSONL under `~/.omni/runs/code-runs`.
 
 CodeAgent execution is medium-risk and audit-only after the workspace path passes
-`OMNI_ALLOWED_WORKSPACES`. `start-claude-code-task`, RuntimeTask code dispatch,
+`OMNI_ALLOWED_WORKSPACES`. `start-code-task`, RuntimeTask code dispatch,
 and `run-code-task-workflow` write Tool Gateway audit records but do not create
 approval requests or require an `approvalToken`. PR Pool items are reviewed before
 development, so confirmed slices execute in their assigned workspace without a

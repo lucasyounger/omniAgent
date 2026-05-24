@@ -18,9 +18,9 @@ describe('tool policy center', () => {
       dangerous: 4,
       approvalRequired: 4,
     });
-    expect(getToolPolicy('start-claude-code-task')).toMatchObject({
+    expect(getToolPolicy('start-code-task')).toMatchObject({
       risk: 'medium',
-      capability: 'code.execute_claude_code_task',
+      capability: 'code.execute_task',
       audit: true,
     });
     expect(getToolPolicy('queue-channel-notification')).toMatchObject({

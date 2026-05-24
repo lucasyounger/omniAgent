@@ -11,7 +11,10 @@
       "description": "Execution schedule. User-entered one-time and daily schedules are interpreted as CST (UTC+8) at creation and stored in UTC as YYYY-MM-DD HH:mm or daily HH:mm; cron expressions are stored unchanged."
     },
     "task": { "type": "string" },
-    "taskType": { "type": "string" },
+    "taskType": {
+      "type": "string",
+      "description": "Runtime task type created by the schedule. Code schedules default to code.task; legacy code.claude_code_task records remain accepted."
+    },
     "targetAgent": { "type": "string" },
     "targetAgentId": { "type": "string" },
     "workspacePath": { "type": "string" },

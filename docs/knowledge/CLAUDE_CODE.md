@@ -24,14 +24,14 @@ argument variables for opencode runs. `custom` uses the configured command overr
 Stdout and stderr are captured as JSONL events in `~/.omni/runs/code-runs/{taskId}.jsonl`.
 
 CodeAgent also writes Team Runtime progress events, durable run results, and
-inbox notifications. `start-claude-code-task` returns both the legacy code task
+inbox notifications. `start-code-task` returns both the legacy code task
 id and the durable `teamTaskId` / `teamRunId`.
 
 ## Safety
 
 - Workspaces must be inside `OMNI_ALLOWED_WORKSPACES`.
 - Default allowed root is `L:\Code`.
-- `start-claude-code-task`, RuntimeTask dispatch, and `run-code-task-workflow`
+- `start-code-task`, RuntimeTask dispatch, and `run-code-task-workflow`
   are audit-only after the workspace boundary passes; they do not require an
   additional Tool Gateway approval token.
 - PR Pool items are already reviewed before entering development, so CodeAgent

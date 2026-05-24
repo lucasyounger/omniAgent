@@ -58,6 +58,8 @@ describe('Cron store', () => {
       name: 'cst reminder',
       schedule: '2026-05-12 21:08',
       task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
     });
 
     expect(job.schedule).toBe('2026-05-12 13:08');
@@ -135,8 +137,22 @@ describe('Cron store', () => {
     });
   });
 
-  it('queues channel messages when channel-gateway schedules fire', async () => {
-    const { createCronJob, runDueCronJobs } = await loadCronStore();
+  it('defaults code-agent schedules to generic code.task records', async () => {
+    const { createCronJob } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'code work',
+      schedule: 'daily 09:00',
+      task: 'change files',
+      targetAgentId: 'code-agent',
+    });
+
+    expect(job).toMatchObject({
+      taskType: 'code.task',
+      targetAgentId: 'code-agent',
+    });
+  });
+
+  it('queues channel messages when channel-gateway schedules fire', async () => {    const { createCronJob, runDueCronJobs } = await loadCronStore();
     const { listAgentInbox, listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
     await createCronJob({
       name: 'reply hello',

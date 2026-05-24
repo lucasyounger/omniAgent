@@ -10,7 +10,7 @@ The following items were previously listed as gaps but are no longer accurate:
 
 - Tool Gateway is no longer just an audit wrapper. It audits calls, redacts sensitive fields, blocks missing capabilities or denied commands, and creates approval-required pending states until an `approvalToken` is supplied.
 - Cron/Scheduler no longer directly starts CodeAgent. Due schedules create Runtime Tasks and route through Task Dispatcher.
-- Gateway `/task <workspacePath> :: <objective>` now creates a Runtime Task for `code.claude_code_task` and enters the Tool Gateway approval path before direct Claude Code execution.
+- Gateway `/task <workspacePath> :: <objective>` now creates a Runtime Task for `code.task` and routes through Task Dispatcher; CodeAgent execution is audit-only after the workspace allowlist passes.
 - Gateway delivery now has idempotency, retry attempts, and dead-letter records.
 - TaskRuntime is no longer only a TeamTask facade. It writes RuntimeTask records under `~/.omni/runs/runtime-tasks`, enforces valid transitions, and mirrors compatibility metadata to Team Runtime.
 

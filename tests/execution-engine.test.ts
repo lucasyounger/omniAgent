@@ -148,8 +148,8 @@ describe('Execution Engine', () => {
         },
         {
           stepId: 'step-2',
-          capabilityId: 'code.claude_code_task',
-          taskType: 'code.claude_code_task',
+          capabilityId: 'code.task',
+          taskType: 'code.task',
           dependencies: ['step-1'],
           expectedOutput: 'Run code task',
         },
@@ -168,30 +168,30 @@ describe('Execution Engine', () => {
     expect(run.stepResults[1]).toMatchObject({ stepId: 'step-2', status: 'failed' });
   });
 
-  it('pauses multi-step ExecutionPlan workflow runs when a step waits for approval', async () => {
+  it('runs multi-step ExecutionPlan code steps once the workspace is allowed', async () => {
     const { executeExecutionPlan } = await loadEngine();
     const plan: ExecutionPlan = {
-      planId: 'plan-paused-multi',
-      messageId: 'msg-paused-multi',
+      planId: 'plan-code-multi',
+      messageId: 'msg-code-multi',
       mode: 'composite',
-      goal: 'Create then run code with approval',
+      goal: 'Create then run code',
       steps: [
         {
           stepId: 'step-1',
           capabilityId: 'goal.create',
           taskType: 'goal.create',
-          input: { title: 'Paused workflow goal' },
+          input: { title: 'Code workflow goal' },
           expectedOutput: 'Create goal',
         },
         {
           stepId: 'step-2',
-          capabilityId: 'code.claude_code_task',
-          taskType: 'code.claude_code_task',
+          capabilityId: 'code.task',
+          taskType: 'code.task',
           dependencies: ['step-1'],
           input: {
             workspacePath: tempRoot,
             objective: 'change files',
-            executionMode: 'direct',
+            executionMode: 'patch_proposal',
           },
           expectedOutput: 'Run code task',
         },
@@ -201,27 +201,26 @@ describe('Execution Engine', () => {
     const run = await executeExecutionPlan(plan);
 
     expect(run).toMatchObject({
-      status: 'paused',
-      failedStepId: 'step-2',
-      failureReason: expect.stringContaining('Approval'),
-      pausedAt: expect.any(String),
+      status: 'succeeded',
+      failedStepId: undefined,
+      failureReason: undefined,
     });
     expect(run.stepResults[0]).toMatchObject({ stepId: 'step-1', status: 'succeeded' });
-    expect(run.stepResults[1]).toMatchObject({ stepId: 'step-2', status: 'waiting_user_confirm' });
+    expect(run.stepResults[1]).toMatchObject({ stepId: 'step-2', status: 'succeeded' });
   });
 
-  it('pauses workflow runs when a RuntimeTask waits for approval', async () => {
+  it('runs RuntimeTask code execution once the workspace is allowed', async () => {
     const { executeRuntimeTask, taskRuntime } = await loadEngine();
     const task = await taskRuntime.createTask({
       sourceAgentId: 'test',
       targetAgentId: 'code-agent',
       objective: 'run code',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'change files',
-          executionMode: 'direct',
+          executionMode: 'patch_proposal',
         },
       },
     });
@@ -229,11 +228,11 @@ describe('Execution Engine', () => {
     const run = await executeRuntimeTask(task.id);
 
     expect(run).toMatchObject({
-      status: 'paused',
+      status: 'succeeded',
       stepResults: [
         expect.objectContaining({
           taskId: task.id,
-          status: 'waiting_user_confirm',
+          status: 'succeeded',
         }),
       ],
     });

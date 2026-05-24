@@ -201,7 +201,7 @@ describe('Task Dispatcher', () => {
       name: 'direct code',
       schedule: 'daily 09:00',
       task: 'change files',
-      taskType: 'code.claude_code_task',
+      taskType: 'code.task',
       targetAgentId: 'code-agent',
       payload: {
         workspacePath: tempRoot,
@@ -436,7 +436,7 @@ describe('Task Dispatcher', () => {
       targetAgentId: 'code-agent',
       objective: 'dry run dispatch',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'dry run dispatch',
@@ -465,7 +465,7 @@ describe('Task Dispatcher', () => {
       targetAgentId: 'code-agent',
       objective: 'dry run dispatch',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'dry run dispatch',
@@ -508,7 +508,7 @@ describe('Task Dispatcher', () => {
       category: 'goal',
       safetyLevel: 'medium',
     });
-    expect(getRuntimeTaskCapability('code.claude_code_task')).toMatchObject({
+    expect(getRuntimeTaskCapability('code.task')).toMatchObject({
       category: 'tool',
       tools: ['code-agent'],
       safetyLevel: 'high',
@@ -770,7 +770,7 @@ describe('Task Dispatcher', () => {
       targetAgentId: 'code-agent',
       status: 'succeeded',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'Create the implementation',
@@ -1077,7 +1077,7 @@ describe('Task Dispatcher', () => {
 
     expect(result.steps[0]).toMatchObject({
       capabilityId: 'repository_analysis',
-      taskType: 'code.claude_code_task',
+      taskType: 'code.task',
       status: 'failed',
       taskId: expect.any(String),
     });

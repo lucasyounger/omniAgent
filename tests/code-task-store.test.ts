@@ -35,7 +35,7 @@ afterEach(async () => {
 describe('Code task store', () => {
   it('persists dry-run task summaries for status and list recovery', async () => {
     const store = await loadCodeTaskStore();
-    const started = await store.startClaudeCodeTask({
+    const started = await store.startCodeTask({
       workspacePath: tempRoot,
       objective: 'dry run test',
       dryRun: true,
@@ -77,7 +77,7 @@ describe('Code task store', () => {
 
   it('records patch proposals without executing Claude Code', async () => {
     const store = await loadCodeTaskStore();
-    const started = await store.startClaudeCodeTask({
+    const started = await store.startCodeTask({
       workspacePath: tempRoot,
       objective: 'create safe patch',
       executionMode: 'patch_proposal',
@@ -96,7 +96,7 @@ describe('Code task store', () => {
     process.env.OMNI_CODE_AGENT_ARGS = '--dangerously-skip-permissions --fast';
     process.env.OMNI_CODE_AGENT_PROMPT_ARG = '--prompt';
     const store = await loadCodeTaskStore();
-    const started = await store.startClaudeCodeTask({
+    const started = await store.startCodeTask({
       workspacePath: tempRoot,
       objective: 'create safe patch',
       executionMode: 'patch_proposal',
@@ -122,7 +122,7 @@ describe('Code task store', () => {
     process.env.OMNI_CODE_AGENT_ARGS = `${scriptFile} ${argvFile}`;
     process.env.OMNI_CODE_AGENT_PROMPT_ARG = '-p';
     const store = await loadCodeTaskStore();
-    const started = await store.startClaudeCodeTask({
+    const started = await store.startCodeTask({
       workspacePath: tempRoot,
       objective: 'windows prompt arg test',
     });
@@ -143,7 +143,7 @@ describe('Code task store', () => {
     process.env.OMNI_OPENCODE_ARGS = '--model test';
     process.env.OMNI_OPENCODE_PROMPT_ARG = 'run';
     const store = await loadCodeTaskStore();
-    const started = await store.startClaudeCodeTask({
+    const started = await store.startCodeTask({
       workspacePath: tempRoot,
       objective: 'create safe patch',
       executionMode: 'patch_proposal',

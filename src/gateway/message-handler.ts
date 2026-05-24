@@ -465,7 +465,7 @@ async function buildOrchestratorPrompt(message: ChannelMessage): Promise<string>
     'Map the user message to a supported runtime task when appropriate; otherwise return intent unknown with clarifyingQuestion.',
     'Use taskType for executable runtime tasks and include objective plus payload.',
     'If the message is a continuation such as "also", "顺便", "再看看", or "继续", reuse the conversation context and active goal/module instead of treating it as isolated.',
-    'Supported taskType values: code.claude_code_task, knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
+    'Supported taskType values: code.task, code.claude_code_task (legacy), knowledge.task, knowledge.memory_index, knowledge.episode, knowledge.doc_update_proposal, channel.message, schedule.create, schedule.list, schedule.delete, schedule.pause, schedule.resume, schedule.run_now, research.ai_daily_digest, notify.send_channel_message, pr_pool.create, pr_pool.list, pr_pool.confirm, pr_pool.develop, pr_pool.archive, pr_pool.cron_scan, goal.create, goal.list, goal.status, goal.run, goal.feedback.',
     'Only return schedule.create when the message explicitly asks for a timed, recurring, reminder, or cron-style task and payload.schedule is present.',
     'For durable objectives, long-running improvements, phased work, or goal-like requests, return goal.create or capability.plan instead of schedule.create; if unsure, return clarifyingQuestion.',
     'Return shape for executable single-step tasks: {"intent":"...","confidence":0-1,"taskType":"...","targetAgentId":"...","objective":"...","payload":{},"clarifyingQuestion":"...","reason":"..."}',
@@ -788,7 +788,7 @@ async function handleTaskCommand(message: ChannelMessage, raw: string) {
     requestedBy: `${message.channel}:${message.senderId}`,
     objective,
     metadata: {
-      taskType: runtimeTaskTypes.codeClaudeCodeTask,
+      taskType: runtimeTaskTypes.codeTask,
       source: channelSourceFromMessage(message),
       payload: {
         workspacePath,
