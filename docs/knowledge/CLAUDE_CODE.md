@@ -8,7 +8,16 @@ claude -p "<objective and context brief>"
 
 On Windows, CodeAgent invokes `powershell.exe` and reads the prompt from a
 temporary file under `~/.omni/runs/code-runs`. This avoids `cmd.exe` argument
-splitting that can truncate prompts containing spaces.
+splitting that can truncate prompts containing spaces. The PowerShell wrapper
+loads the prompt file path and command payload from environment variables, then
+builds an argv array before invocation so prompt flags such as `-p` are passed to
+Claude Code instead of being rebound as wrapper parameters.
+
+CodeAgent can also record executor metadata for alternate local coding CLIs.
+`executor: 'claude_code'` keeps the default `claude` command path, while
+`executor: 'opencode'` resolves to `OMNI_OPENCODE_COMMAND || OMNI_CODE_AGENT_COMMAND || 'opencode'`.
+`OMNI_OPENCODE_ARGS` and `OMNI_OPENCODE_PROMPT_ARG` override the generic CodeAgent
+argument variables for opencode runs. `custom` uses the configured command override.
 
 ## Progress
 
@@ -22,5 +31,11 @@ id and the durable `teamTaskId` / `teamRunId`.
 
 - Workspaces must be inside `OMNI_ALLOWED_WORKSPACES`.
 - Default allowed root is `L:\Code`.
+- `start-claude-code-task`, RuntimeTask dispatch, and `run-code-task-workflow`
+  are audit-only after the workspace boundary passes; they do not require an
+  additional Tool Gateway approval token.
+- PR Pool items are already reviewed before entering development, so CodeAgent
+  should execute the confirmed slice in its assigned workspace without a second
+  approval gate.
 - CodeAgent should use dry runs when validating routing behavior.
 - CodeAgent should not store raw logs in long-term memory.

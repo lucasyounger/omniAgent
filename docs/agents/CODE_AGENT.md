@@ -15,12 +15,16 @@ execution through Team Runtime.
 ## Key Behavior
 
 - Starts Claude Code with `start-claude-code-task`.
-- Claude Code execution must pass through Tool Gateway before spawning the CLI.
-- `run-code-task-workflow` also uses Tool Gateway and requires the same
-  approval path as the tool call.
-- Task Dispatcher can dispatch approved `code-agent` Runtime Tasks into
-  Claude Code execution. Gateway-created `/task` requests use this path and
-  must pass Tool Gateway approval before the CLI can spawn.
+- Claude Code execution must stay under `OMNI_ALLOWED_WORKSPACES` and passes
+  through Tool Gateway for audit records before spawning the CLI.
+- `run-code-task-workflow` uses the same audit-only execution policy as the tool
+  call.
+- Task Dispatcher can dispatch `code-agent` Runtime Tasks into Claude Code
+  execution. Gateway-created `/task` requests use this path and rely on the same
+  allowed-workspace boundary plus Tool Gateway audit record before the CLI spawns.
+- Supports `executor: claude_code | opencode | custom` metadata. `opencode`
+  resolves to opencode-specific command/argument env overrides when present, while
+  `custom` uses the explicit command override path.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn Claude Code or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
@@ -41,10 +45,14 @@ execution through Team Runtime.
 - On Windows, direct `spawn('claude')` fails with `spawn claude ENOENT`.
 - Using `cmd.exe` shell can truncate prompts containing spaces.
 - Current implementation uses PowerShell plus a temporary prompt file under
-  `~/.omni/runs/code-runs` to preserve full prompts.
+  `~/.omni/runs/code-runs` to preserve full prompts. On Windows, CLI arguments
+  and the prompt flag are assembled into an argv array before invocation so
+  flags like `-p` are forwarded to Claude Code instead of being rebound by the
+  PowerShell wrapper.
 - Workspace paths must stay under `OMNI_ALLOWED_WORKSPACES`.
-- Approval-required execution without an `approvalToken` is blocked before
-  Claude Code is spawned.
+- CodeAgent execution is audit-only once the workspace path passes the allowed-root
+  boundary; PR Pool items and `/task` commands should not require a second Tool
+  Gateway approval before the local executor starts.
 - Prefer `patch_proposal` for untrusted or remote code requests until a real
   sandbox/worktree apply flow is in place.
 - In-memory code task status is lost after service restart; Team Runtime files

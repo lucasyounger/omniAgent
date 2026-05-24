@@ -22,7 +22,13 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
-  await fs.rm(tempRoot, { recursive: true, force: true });
+  delete process.env.OMNI_CODE_AGENT_COMMAND;
+  delete process.env.OMNI_CODE_AGENT_ARGS;
+  delete process.env.OMNI_CODE_AGENT_PROMPT_ARG;
+  delete process.env.OMNI_CODE_AGENT_EXECUTOR;
+  delete process.env.OMNI_OPENCODE_ARGS;
+  delete process.env.OMNI_OPENCODE_PROMPT_ARG;
+  await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   vi.restoreAllMocks();
 });
 
@@ -105,6 +111,55 @@ describe('Code task store', () => {
       command: 'cc',
       args: ['--dangerously-skip-permissions', '--fast'],
       promptArg: '--prompt',
+    });
+  });
+
+  it.runIf(process.platform === 'win32')('passes -prefixed prompt args through PowerShell without rebinding', async () => {
+    const argvFile = path.join(tempRoot, 'argv.json');
+    const scriptFile = path.join(tempRoot, 'record-argv.js');
+    await fs.writeFile(scriptFile, "require('node:fs').writeFileSync(process.argv[2],JSON.stringify(process.argv.slice(3)))", 'utf8');
+    process.env.OMNI_CODE_AGENT_COMMAND = process.execPath;
+    process.env.OMNI_CODE_AGENT_ARGS = `${scriptFile} ${argvFile}`;
+    process.env.OMNI_CODE_AGENT_PROMPT_ARG = '-p';
+    const store = await loadCodeTaskStore();
+    const started = await store.startClaudeCodeTask({
+      workspacePath: tempRoot,
+      objective: 'windows prompt arg test',
+    });
+
+    let current = started;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (current.status !== 'running') break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      current = await store.getCodeTask(started.taskId);
+    }
+
+    expect(current).toMatchObject({ status: 'completed' });
+    await expect(fs.readFile(argvFile, 'utf8')).resolves.toBe(JSON.stringify(['-p', 'windows prompt arg test\n']));
+  });
+
+  it('records opencode executor command metadata', async () => {
+    process.env.OMNI_CODE_AGENT_EXECUTOR = 'opencode';
+    process.env.OMNI_OPENCODE_ARGS = '--model test';
+    process.env.OMNI_OPENCODE_PROMPT_ARG = 'run';
+    const store = await loadCodeTaskStore();
+    const started = await store.startClaudeCodeTask({
+      workspacePath: tempRoot,
+      objective: 'create safe patch',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(started).toMatchObject({
+      executor: 'opencode',
+      command: 'opencode',
+      args: ['--model', 'test'],
+      promptArg: 'run',
+    });
+    await expect(store.getCodeTask(started.taskId)).resolves.toMatchObject({
+      executor: 'opencode',
+      command: 'opencode',
+      args: ['--model', 'test'],
+      promptArg: 'run',
     });
   });
 });
