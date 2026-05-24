@@ -279,7 +279,8 @@ export {
 } from './approval-store';
 export type { ApprovalRequest, ApprovalRequestStatus } from './approval-store';
 export { createAgentMemory } from './memory';
-export { memoryRuntime } from './memory-runtime';
+export { memoryRuntime, memoryRuntimeBoundary } from './memory-runtime';
+export type { MemoryRuntimeBoundary } from './memory-runtime';
 export { omniStorage, runtimeStorageBackend } from './store';
 export type { RuntimeStorageBackend, RuntimeStorageBackendKind } from './store';
 export { schedulerRuntime } from './scheduler-runtime';

@@ -3,7 +3,9 @@
 Status: active Mastra Agent.
 
 KnowledgeAgent maintains file-backed long-term memory. It should keep stable
-knowledge, decisions, and procedures synchronized with code behavior.
+knowledge, decisions, and procedures synchronized with code behavior. Mastra
+Memory is reserved for conversation continuity through LibSQL-backed agent
+threads; docs memory remains the auditable long-term knowledge layer.
 
 ## Source Files
 
@@ -19,7 +21,11 @@ knowledge, decisions, and procedures synchronized with code behavior.
 - Writes typed reviewable proposals to `~/.omni/memory/doc-update-proposals.jsonl`.
   Proposal types are `user`, `project`, `lesson`, and `reference`.
 - Refreshes `~/.omni/memory/MEMORY_INDEX.json`.
-- Persists explicit user-provided profile facts with `upsert-user-profile-fact`.
+- Exposes `memoryRuntime.boundary` so callers can distinguish Mastra Memory
+  conversation continuity from file-backed docs memory writes.
+- Keeps inferred user/project/reference updates reviewable through doc update
+  proposals; direct writes are reserved for explicit user-provided facts and
+  low-risk episodic summaries.
 
 ## Tools
 

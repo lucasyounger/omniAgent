@@ -31,6 +31,30 @@ afterEach(async () => {
 });
 
 describe('docs memory', () => {
+  it('keeps Mastra Memory and docs memory boundaries explicit', async () => {
+    vi.resetModules();
+    process.env.OMNI_PROJECT_ROOT = tempRoot;
+    process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+    const { memoryRuntime } = await import('../src/mastra/runtime/memory-runtime');
+
+    expect(memoryRuntime.boundary).toMatchObject({
+      conversationalMemory: {
+        backend: 'mastra-memory',
+        purpose: 'conversation_continuity',
+        storage: {
+          kind: 'libsql',
+          id: 'omni-storage',
+        },
+      },
+      docsMemory: {
+        backend: 'file',
+        purpose: 'auditable_long_term_knowledge',
+        requiresReviewForInferredWrites: true,
+        secretsPolicy: 'do_not_store',
+      },
+    });
+  });
+
   it('upserts explicit user profile facts into USER.md', async () => {
     const { upsertUserProfileFact } = await loadDocsMemory();
 

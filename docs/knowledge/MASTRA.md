@@ -7,6 +7,9 @@ OmniAgent uses:
 - Runtime storage backend metadata: `src/mastra/runtime/store.ts` exposes
   `runtimeStorageBackend`, the LibSQL `omniStorage` configuration, and the legacy
   file-backed root groups that remain compatibility sources during R6 migration.
+- Mastra Memory uses `omniStorage` for agent conversation continuity. R7 keeps
+  that boundary explicit through `memoryRuntime.boundary`; auditable long-term
+  knowledge stays in file-backed docs memory and reviewable proposals.
 
 ## Current Pattern
 

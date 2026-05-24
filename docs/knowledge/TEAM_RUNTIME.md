@@ -179,6 +179,11 @@ approval linkage.
   reason without aborting the channel response. This keeps direct task dispatch
   behavior stable while providing a minimal Goal → Capability → Plan → Task closed loop.
 
+- Knowledge and memory dispatch use `memoryRuntime.boundary` to keep Mastra
+  Memory scoped to conversation continuity while docs memory remains the
+  auditable long-term knowledge and proposal layer. Runtime logs, episodic logs,
+  explicit profile facts, and inferred doc update proposals must not be mixed.
+
 - LLM Router provides schema-validated arbitration after deterministic/lightweight
   capability routing when candidates are low-confidence, close-scored,
   multi-capability, or context-dependent. It receives the user request, Top-K
