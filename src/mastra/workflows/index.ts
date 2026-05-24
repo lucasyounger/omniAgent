@@ -1,3 +1,5 @@
+export { cronMaintenanceWorkflow, runCronMaintenanceWorkflow } from './cron-maintenance-workflow';
+export type { CronMaintenanceInput, CronMaintenanceOutput } from './cron-maintenance-workflow';
 export { getRegistryCatalog, getRegistryEntry, listRegistryEntries, searchRegistryEntries } from '../registry';
 export type { RegistryCatalog, RegistryEntry, RegistryEntryKind } from '../registry';
 export { compositeTaskWorkflow, executeCompositePlan } from './composite-task-workflow';

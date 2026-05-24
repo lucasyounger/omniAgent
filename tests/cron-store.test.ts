@@ -271,4 +271,45 @@ describe('Cron store', () => {
     expect(jobs.filter(job => job.taskType === 'goal.cron_scan')).toHaveLength(1);
     expect(first?.payload).toMatchObject({ goalType: 'module_improvement', action: 'scan_due_goals', timezone: 'UTC' });
   });
+
+  it('exposes due-job scans as an optional Mastra scheduled workflow driver', async () => {
+    const { createCronJob } = await loadCronStore();
+    await createCronJob({
+      name: 'workflow scan',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      payload: { scope: 'repo' },
+    });
+
+    const { cronMaintenanceWorkflow, runCronMaintenanceWorkflow } = await import('../src/mastra/workflows/cron-maintenance-workflow');
+    const result = await runCronMaintenanceWorkflow({ now: '2026-05-12T13:08:00.000Z' });
+
+    expect(cronMaintenanceWorkflow.id).toBe('cron-maintenance-workflow');
+    expect(result).toMatchObject({
+      checkedAt: '2026-05-12T13:08:00.000Z',
+      dueJobCount: 1,
+      startedJobIds: [expect.stringContaining('cron-')],
+    });
+  });
+
+  it('adds a declarative Mastra schedule only when the Mastra scheduler driver is enabled', async () => {
+    await loadCronStore();
+    const defaultWorkflow = await import('../src/mastra/workflows/cron-maintenance-workflow');
+    expect(defaultWorkflow.cronMaintenanceScheduleConfig).toEqual({});
+
+    vi.resetModules();
+    process.env.OMNI_PROJECT_ROOT = tempRoot;
+    process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+    process.env.OMNI_CRON_SCHEDULER_DRIVER = 'mastra';
+    process.env.OMNI_MASTRA_CRON_SCAN_CRON = '*/5 * * * *';
+    const mastraWorkflow = await import('../src/mastra/workflows/cron-maintenance-workflow');
+
+    expect(mastraWorkflow.cronMaintenanceScheduleConfig).toMatchObject({
+      schedule: {
+        cron: '*/5 * * * *',
+      },
+    });
+  });
 });

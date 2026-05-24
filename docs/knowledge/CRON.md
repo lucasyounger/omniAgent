@@ -31,8 +31,24 @@ exist, then continues the requested create/list/update/delete operation.
 
 Daily Goal scan can be provisioned by `ensureGoalDailyScanCronJob()` when `OMNI_GOAL_DAILY_SCAN_ENABLED=true`. It creates a single `goal.cron_scan` job named `Daily Goal scan`, using `OMNI_GOAL_DAILY_SCAN_CRON` (default `0 0 * * *`) and `OMNI_GOAL_DAILY_SCAN_TIMEZONE` (default `local`).
 
-OmniAgent starts an in-process scheduler on Mastra startup. It scans active jobs
+OmniAgent starts an in-process scheduler on Mastra startup by default. It scans active jobs
 every `OMNI_CRON_POLL_INTERVAL_MS` milliseconds, defaulting to 30000.
+
+When `OMNI_CRON_SCHEDULER_DRIVER=mastra`, OmniAgent does not start the legacy
+cron poller. Instead it registers `cron-maintenance-workflow` with a declarative
+Mastra schedule. That workflow scans due cron records and still creates
+RuntimeTasks rather than directly executing business logic. The Mastra-driver
+cadence is `OMNI_MASTRA_CRON_SCAN_CRON` or `* * * * *`, with optional
+`OMNI_MASTRA_CRON_SCAN_TIMEZONE`.
+
+R5 migration policy:
+
+- Misfires use skip-missed-runs semantics: a restarted process scans current due
+  records, but does not enqueue one RuntimeTask for every missed scheduler tick.
+- Concurrency and duplicate prevention use Mastra Scheduler's schedule-row claim
+  in Mastra-driver mode plus cron-store `lastRunAt` due checks.
+- One-time jobs still pause after a started run, preserving existing repeat
+  protection.
 
 Supported due checks in the current version:
 

@@ -15,8 +15,18 @@ TaskRuntime.
 ## Key Behavior
 
 - Stores cron jobs in `~/.omni/runs/cron-runs/jobs.json`.
-- Starts an in-process scheduler on Mastra startup.
-- Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms.
+- Starts an in-process scheduler on Mastra startup by default.
+- Can use Mastra Scheduler as the due-job scan driver when
+  `OMNI_CRON_SCHEDULER_DRIVER=mastra`; in that mode the legacy poller is not
+  started, and `cron-maintenance-workflow` is registered with a declarative
+  Mastra schedule.
+- Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms for the
+  legacy poller. Mastra-driver scans use `OMNI_MASTRA_CRON_SCAN_CRON` or
+  `* * * * *` plus optional `OMNI_MASTRA_CRON_SCAN_TIMEZONE`.
+- Misfire policy is skip-missed-runs: the next scan dispatches jobs that are due
+  at scan time, but does not enqueue one RuntimeTask per missed tick.
+- Duplicate-trigger protection relies on Mastra Scheduler row claiming in
+  Mastra-driver mode plus cron-store `lastRunAt` checks for due jobs.
 - Supports one-time schedules containing `YYYY-MM-DD HH:mm`.
 - Supports daily schedules containing `daily HH:mm`, `every day HH:mm`,
   `每天 HH:mm`, or `每日 HH:mm`.

@@ -26,6 +26,14 @@ orchestrator traces store an input hash, candidate capability IDs/scores, decisi
 kind/confidence, and fallback reason without storing raw message text; planner
 traces store plan ID, mode, step count, capabilities, and dependency edges for
 golden regression tests. `src/mastra/index.ts` registers `compositeTaskWorkflow`
-alongside the existing Task, Code, memory, and research daily digest workflows so
-ExecutionPlan dispatch and research digest generation are available through
-Mastra workflow registration.
+alongside the existing Task, Code, memory, research daily digest, and cron
+maintenance workflows so ExecutionPlan dispatch, research digest generation, and
+optional Mastra-scheduled cron scans are available through Mastra workflow
+registration.
+
+`cron-maintenance-workflow` is registered as the R5 scheduler migration bridge.
+It only declares a Mastra schedule when `OMNI_CRON_SCHEDULER_DRIVER=mastra`, so
+default deployments keep the legacy cron poller while the Mastra Scheduler path
+can be enabled without double-scanning. The workflow keeps Cron Store as the
+compatibility record layer and still creates RuntimeTasks before Task Dispatcher
+executes any business logic.
