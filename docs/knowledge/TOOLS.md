@@ -56,16 +56,30 @@ CodeAgent work; this audit boundary does not change that approval flow.
 ## Req Runtime Tools
 
 Req document create/list/status, confirmation/rejection, item status updates, and
-imports are exposed as Mastra Tools. Task Dispatcher uses those tools for `req.*`
-Runtime Tasks while preserving Team Runtime run/result records and lifecycle
-transitions.
+imports are exposed as Mastra Tools with Tool Gateway policy declarations. Read
+operations use `req.read`; create/import/confirmation/rejection/status updates use
+`req.write` audit-only policies so Req library side effects are centrally visible
+without adding a security approval gate.
+
+Task Dispatcher uses those tools for `req.*` Runtime Tasks while preserving Team
+Runtime run/result records and lifecycle transitions.
 
 ## Gateway Delivery Tools
 
 `queue-channel-notification` is a Mastra Tool that queues outbound Gateway
-deliveries. `notify.send_channel_message` Runtime Tasks call this tool from Task
-Dispatcher while preserving Team Runtime run/result records and task lifecycle
-transitions.
+deliveries under the `gateway_delivery.write` Tool Gateway policy. It remains
+audit-only today because delivery retry/dead-letter semantics live in Gateway
+Store and outbound channel sends are handled by the delivery worker boundary.
+`notify.send_channel_message` Runtime Tasks call this tool from Task Dispatcher
+while preserving Team Runtime run/result records and task lifecycle transitions.
+
+## Goal Tools
+
+Goal create/run/feedback tools declare Tool Gateway policies for durable Goal
+side effects. Goal reads use `goal.read`, Goal creation uses `goal.write`, GoalRun
+queueing uses `goal.run`, and feedback-driven lifecycle updates use
+`goal.feedback`. These policies provide the R8 audit boundary without changing the
+existing Goal Runtime artifact, proof-of-work, or feedback behavior.
 
 ## Cron Records
 

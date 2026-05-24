@@ -23,6 +23,21 @@ describe('tool policy center', () => {
       capability: 'code.execute_claude_code_task',
       requireApproval: true,
     });
+    expect(getToolPolicy('queue-channel-notification')).toMatchObject({
+      risk: 'medium',
+      capability: 'gateway_delivery.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-goal')).toMatchObject({
+      risk: 'medium',
+      capability: 'goal.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-req-draft')).toMatchObject({
+      risk: 'medium',
+      capability: 'req.write',
+      audit: true,
+    });
   });
 
   it('registers policy metadata from gateway tool definitions', () => {

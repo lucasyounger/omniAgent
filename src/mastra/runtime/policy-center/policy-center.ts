@@ -31,6 +31,22 @@ const staticPolicies: ToolPolicyRecord[] = [
   policy('retry-team-task', { risk: 'medium', capability: 'team_runtime.write', audit: true }, 'Retry team tasks.'),
   policy('recover-interrupted-team-runs', { risk: 'dangerous', capability: 'team_runtime.control', requireApproval: true, audit: true }, 'Recover interrupted team runs.'),
   policy('mark-timed-out-team-runs', { risk: 'dangerous', capability: 'team_runtime.control', requireApproval: true, audit: true }, 'Mark timed out team runs.'),
+  policy('create-req-draft', { risk: 'medium', capability: 'req.write', audit: true }, 'Create Req draft documents.'),
+  policy('list-reqs', { risk: 'safe', capability: 'req.read', audit: true }, 'List Req documents.'),
+  policy('get-req-status', { risk: 'safe', capability: 'req.read', audit: true }, 'Read Req document status.'),
+  policy('confirm-req-document', { risk: 'medium', capability: 'req.write', audit: true }, 'Confirm Req documents.'),
+  policy('reject-req-document', { risk: 'medium', capability: 'req.write', audit: true }, 'Reject Req documents.'),
+  policy('confirm-req-item', { risk: 'medium', capability: 'req.write', audit: true }, 'Confirm Req items.'),
+  policy('reject-req-item', { risk: 'medium', capability: 'req.write', audit: true }, 'Reject Req items.'),
+  policy('update-req-item-status', { risk: 'medium', capability: 'req.write', audit: true }, 'Update Req item implementation status.'),
+  policy('import-req-markdown', { risk: 'medium', capability: 'req.write', audit: true }, 'Import Req Markdown documents.'),
+  policy('import-req-file', { risk: 'medium', capability: 'req.write', audit: true }, 'Import Req files.'),
+  policy('queue-channel-notification', { risk: 'medium', capability: 'gateway_delivery.write', audit: true }, 'Queue outbound Gateway deliveries.'),
+  policy('create-goal', { risk: 'medium', capability: 'goal.write', audit: true }, 'Create durable Goals.'),
+  policy('list-goals', { risk: 'safe', capability: 'goal.read', audit: true }, 'List durable Goals.'),
+  policy('get-goal-status', { risk: 'safe', capability: 'goal.read', audit: true }, 'Read Goal status.'),
+  policy('run-goal', { risk: 'medium', capability: 'goal.run', audit: true }, 'Queue Goal runs.'),
+  policy('apply-goal-feedback', { risk: 'medium', capability: 'goal.feedback', audit: true }, 'Apply Goal feedback and lifecycle updates.'),
 ];
 
 const registeredPolicies = new Map<string, ToolPolicyRecord>();

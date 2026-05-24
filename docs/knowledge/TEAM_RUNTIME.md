@@ -134,7 +134,9 @@ approval linkage.
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
   Team Run result contract while queueing outbound Gateway deliveries through the
-  Mastra Tool `queue-channel-notification`. PR Pool proposal
+  Mastra Tool `queue-channel-notification`; that tool declares a Tool Gateway
+  `gateway_delivery.write` policy so delivery queue writes remain centrally
+  auditable. PR Pool proposal
   ingest accepts `pr_pool.ingest_proposal`, creates a draft PR item through the
   PR Pool Runtime, preserves origin/idempotency/proposal metadata, and returns
   an existing item for repeated explicit idempotency keys. PR Pool develop
