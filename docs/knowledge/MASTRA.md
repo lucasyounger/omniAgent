@@ -4,7 +4,9 @@ OmniAgent uses:
 
 - `@mastra/core` for agents and tools.
 - `@mastra/memory` for runtime thread memory.
-- `@mastra/libsql` for local persistent storage.
+- Runtime storage backend metadata: `src/mastra/runtime/store.ts` exposes
+  `runtimeStorageBackend`, the LibSQL `omniStorage` configuration, and the legacy
+  file-backed root groups that remain compatibility sources during R6 migration.
 
 ## Current Pattern
 

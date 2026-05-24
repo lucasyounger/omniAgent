@@ -3,6 +3,7 @@
 ## OmniAgent
 
 - Mastra entrypoint: `src/mastra/index.ts`
+- Mastra runtime storage boundary: `src/mastra/runtime/store.ts` (`runtimeStorageBackend`, `omniStorage`)
 - Agents: `src/mastra/agents`
 - Tools: `src/mastra/tools`
 - Internal libraries: `src/mastra/lib`

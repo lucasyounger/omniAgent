@@ -56,6 +56,11 @@ so storage can later move to LibSQL without changing agent behavior.
 
 `teamRuntimeStoreBackend` exposes the current backend boundary. It is `file`
 today and should become the migration point for a future LibSQL implementation.
+Mastra runtime storage is already represented by `runtimeStorageBackend` in
+`src/mastra/runtime/store.ts`, which points to the LibSQL `omniStorage` database
+under `~/.omni/storage/`. R6 keeps Team Runtime, RuntimeTask, Cron, Goal, PR Pool,
+Gateway, Req, and docs-memory records file-readable until each store receives an
+explicit compatibility adapter or migration path.
 
 ## Rules
 

@@ -280,7 +280,8 @@ export {
 export type { ApprovalRequest, ApprovalRequestStatus } from './approval-store';
 export { createAgentMemory } from './memory';
 export { memoryRuntime } from './memory-runtime';
-export { omniStorage } from './store';
+export { omniStorage, runtimeStorageBackend } from './store';
+export type { RuntimeStorageBackend, RuntimeStorageBackendKind } from './store';
 export { schedulerRuntime } from './scheduler-runtime';
 export { assertTransitionAllowed, taskRuntime, toRuntimeTask } from './task-runtime';
 export { dispatchPendingRuntimeTasks, dispatchRuntimeTask } from './task-dispatcher';

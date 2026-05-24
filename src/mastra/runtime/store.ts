@@ -1,11 +1,13 @@
 import { LibSQLStore } from '@mastra/libsql';
 import fs from 'node:fs';
-import path from 'node:path';
-import { storageRoot } from '../lib/paths';
+import { runtimeStorageBackend } from './storage-backend';
 
-fs.mkdirSync(storageRoot, { recursive: true });
+fs.mkdirSync(runtimeStorageBackend.root, { recursive: true });
+
+export { runtimeStorageBackend } from './storage-backend';
+export type { RuntimeStorageBackend, RuntimeStorageBackendKind } from './storage-backend';
 
 export const omniStorage = new LibSQLStore({
-  id: 'omni-storage',
-  url: `file:${path.join(storageRoot, 'omni-agent.db')}`,
+  id: runtimeStorageBackend.id,
+  url: runtimeStorageBackend.url,
 });
