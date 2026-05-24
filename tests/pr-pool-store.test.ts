@@ -37,7 +37,20 @@ describe('PR pool store', () => {
 
     expect(item.id).toMatch(/^pr-[a-z0-9]+-[a-f0-9]{4}$/);
     expect(item.status).toBe('draft');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Objective');
     await expect(store.listPrPoolItems({ status: 'draft' })).resolves.toHaveLength(1);
+
+    const readyItem = await store.createPrPoolItem({
+      title: 'Ready from ingest',
+      objective: 'Start ready after confirmed ingest',
+      workspaceRepoPath: tempRoot,
+      initialStatus: 'ready',
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['ready'],
+      codeAgentPrompt: 'Implement ready item',
+    });
+    expect(readyItem.status).toBe('ready');
+    await expect(store.listPrPoolItems({ status: 'ready' })).resolves.toHaveLength(1);
 
     const updated = await store.updatePrPoolItem(item.id, { priority: 'high' });
     expect(updated.priority).toBe('high');
@@ -53,15 +66,20 @@ describe('PR pool store', () => {
       impact: { modules: ['runtime'], risk: 'low' },
       acceptanceCriteria: ['archived'],
       codeAgentPrompt: 'Archive this item',
+      nonGoals: ['Do not change scheduler'],
+      constraints: ['Keep develop path unchanged'],
+      references: [{ type: 'file', path: '.omc/archive-source.md', summary: 'Source slice' }],
     });
     const archiveEntry = await store.archivePrPoolItem(archiveItem.id, 'completed');
     const archiveDir = path.join(tempRoot, '.omni', 'pr-pool', 'archive', archiveItem.id);
     expect(archiveEntry).toMatchObject({ prItemId: archiveItem.id, archiveReason: 'completed' });
     await expect(fs.readdir(archiveDir)).resolves.toEqual(
-      expect.arrayContaining(['archive-entry.json', 'item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md']),
+      expect.arrayContaining(['archive-entry.json', 'item.json', 'brief.md', 'references.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md']),
     );
-    await expect(fs.readFile(path.join(archiveDir, 'code-agent-pr-brief.md'), 'utf8')).resolves.toContain('## Stop Conditions');
-    expect(archiveEntry.artifacts).toContain('code-agent-pr-brief.md');
+    await expect(fs.readFile(path.join(archiveDir, 'brief.md'), 'utf8')).resolves.toContain('Do not change scheduler');
+    await expect(fs.readFile(path.join(archiveDir, 'references.json'), 'utf8')).resolves.toContain('.omc/archive-source.md');
+    expect(archiveEntry.artifacts).toContain('brief.md');
+    expect(archiveEntry.artifacts).toContain('references.json');
     await expect(fs.readFile(path.join(archiveDir, 'final-summary.md'), 'utf8')).resolves.toContain('Merge Recommendation');
     await expect(store.getPrPoolItem(archiveItem.id)).resolves.toBeUndefined();
     await expect(store.listArchivedItems()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ prItemId: archiveItem.id })]));
@@ -83,6 +101,10 @@ describe('PR pool store', () => {
         impact: { modules: ['PR Pool'], files: ['src/mastra/runtime/pr-pool/pr-pool-store.ts'], risk: 'medium' },
         acceptanceCriteria: ['draft item is created'],
         codeAgentPrompt: 'Implement proposal ingest',
+        confirmation: 'confirmed',
+        nonGoals: ['Do not develop immediately'],
+        constraints: ['Keep CodeAgent task creation out of ingest'],
+        references: [{ type: 'artifact', id: 'artifact-1', summary: 'Confirmed design' }],
         idempotencyKey: 'file:.omc/proposals/add-proposal-ingest.md:abc',
       },
       tempRoot,
@@ -92,12 +114,25 @@ describe('PR pool store', () => {
       title: 'Add proposal ingest',
       objective: 'Create draft PR items from proposals',
       workspaceRepoPath: tempRoot,
+      initialStatus: 'ready',
+      nonGoals: ['Do not develop immediately'],
+      constraints: ['Keep CodeAgent task creation out of ingest'],
+      references: [{ type: 'artifact', id: 'artifact-1', summary: 'Confirmed design' }],
       metadata: {
+        confirmation: 'confirmed',
         origin: { type: 'claudecode', artifactPath: '.omc/proposals/add-proposal-ingest.md' },
+        source: 'exploration',
+        impact: { modules: ['PR Pool'], files: ['src/mastra/runtime/pr-pool/pr-pool-store.ts'], risk: 'medium' },
+        acceptanceCriteria: ['draft item is created'],
+        nonGoals: ['Do not develop immediately'],
+        constraints: ['Keep CodeAgent task creation out of ingest'],
+        references: [{ type: 'artifact', id: 'artifact-1', summary: 'Confirmed design' }],
         idempotencyKey: 'file:.omc/proposals/add-proposal-ingest.md:abc',
+        codeAgentPrompt: 'Implement proposal ingest',
         proposalSummary: {
           title: 'Add proposal ingest',
           source: 'exploration',
+          confirmation: 'confirmed',
         },
       },
     });
@@ -110,15 +145,34 @@ describe('PR pool store', () => {
       proposalToCreatePRItemInput(
         {
           title: '',
-          objective: 'Create draft PR items from proposals',
-          source: 'exploration',
-          origin: { type: 'manual' },
-          impact: { modules: ['PR Pool'], risk: 'medium' },
+          objective: '',
+          source: '' as 'exploration',
+          origin: {} as never,
+          impact: { modules: [], risk: '' as 'medium' },
           acceptanceCriteria: [],
           codeAgentPrompt: '',
         },
         tempRoot,
       ),
     ).toThrow(PRPoolProposalValidationError);
+
+    try {
+      proposalToCreatePRItemInput(
+        {
+          title: '',
+          objective: '',
+          source: '' as 'exploration',
+          origin: {} as never,
+          impact: { modules: [], risk: '' as 'medium' },
+          acceptanceCriteria: [],
+          codeAgentPrompt: '',
+        },
+        tempRoot,
+      );
+    } catch (error) {
+      expect(error).toMatchObject({
+        missingFields: ['title', 'objective', 'source', 'origin.type', 'impact.modules', 'impact.risk', 'acceptanceCriteria', 'codeAgentPrompt'],
+      });
+    }
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let tempRoot: string;
 let cwd: string;
+let errorSpy: ReturnType<typeof vi.spyOn>;
 
 async function loadCli() {
   vi.resetModules();
@@ -17,6 +18,7 @@ beforeEach(async () => {
   cwd = process.cwd();
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-pr-pool-ingest-cli-test-'));
   await fs.writeFile(path.join(tempRoot, 'package.json'), JSON.stringify({ name: 'omni-agent' }), 'utf8');
+  errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   process.chdir(tempRoot);
 });
 
@@ -25,6 +27,7 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   await fs.rm(tempRoot, { recursive: true, force: true });
+  vi.restoreAllMocks();
 });
 
 describe('PR pool ingest CLI', () => {
@@ -65,6 +68,20 @@ describe('PR pool ingest CLI', () => {
     });
   });
 
+  it('creates ready PR items when --confirmed is passed', async () => {
+    const { runPrPoolIngestCli } = await loadCli();
+    const proposalPath = path.join(tempRoot, 'proposal.json');
+    await fs.writeFile(proposalPath, JSON.stringify(proposal()), 'utf8');
+
+    await expect(runPrPoolIngestCli(['--file', proposalPath, '--confirmed'])).resolves.toBe(0);
+
+    const items = JSON.parse(await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', 'items.json'), 'utf8'));
+    expect(items[0]).toMatchObject({
+      status: 'ready',
+      metadata: { confirmation: 'confirmed' },
+    });
+  });
+
   it('dry-runs without writing PR Pool items', async () => {
     const { runPrPoolIngestCli } = await loadCli();
     const proposalPath = path.join(tempRoot, 'proposal.json');
@@ -75,12 +92,26 @@ describe('PR pool ingest CLI', () => {
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', 'items.json'), 'utf8')).rejects.toThrow();
   });
 
+  it('dry-runs the JSON proposal template without writing PR Pool items', async () => {
+    const { runPrPoolIngestCli } = await loadCli();
+    const templatePath = path.join(cwd, 'docs', 'templates', 'pr-pool-proposal.json');
+
+    await expect(runPrPoolIngestCli(['--file', templatePath, '--dry-run'])).resolves.toBe(0);
+
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', 'items.json'), 'utf8')).rejects.toThrow();
+  });
+
   it('returns non-zero and lists missing required fields', async () => {
     const { runPrPoolIngestCli } = await loadCli();
     const proposalPath = path.join(tempRoot, 'proposal.json');
     await fs.writeFile(proposalPath, JSON.stringify({ title: 'Missing fields' }), 'utf8');
 
     await expect(runPrPoolIngestCli(['--file', proposalPath])).resolves.toBe(1);
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('objective'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('source'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('origin.type'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('impact.modules'));
   });
 });
 

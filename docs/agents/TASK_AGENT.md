@@ -185,13 +185,21 @@ work is delegated, executed, reported, and recovered across all agents.
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
   `pr_pool.ingest_proposal`, `pr_pool.cron_scan`, `goal.create`, `goal.list`,
   `goal.status`, `goal.run`, `goal.feedback`.
-- PR Pool RuntimeTask handlers route read/write/develop side effects through Tool Gateway audit policies (`pr_pool.read`, `pr_pool.write`, `pr_pool.develop`) while keeping existing develop approval-token semantics unchanged.
+- PR Pool proposal ingest now treats `confirmation: required` as `draft` and
+  `confirmation: confirmed` as `ready`; Goal-origin and unknown proposals default
+  to `required`. Ingest preserves non-goals, constraints, and references, writes
+  `~/.omni/pr-pool/active/{prItemId}/brief.md`, and never creates CodeAgent tasks.
+  PR Pool cron scan consumes only `ready` items.
 - `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
 - PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
-  `pr_pool.ingest_proposal`, creates a `draft` PR item through the runtime, and
-  preserves origin/idempotency/proposal summary metadata without confirming or
-  developing the item. Re-ingesting the same explicit `idempotencyKey` returns
-  the existing PR item and records a deduplication event.
+  `pr_pool.ingest_proposal`, validates required title/objective/source/origin/
+  impact/acceptance/prompt fields, creates a `draft` PR item through
+  `ingestPrPoolProposal`, and returns `prItemId/status/origin` in the Team Run
+  result. The ingest route is the shared Skill/CLI/Goal entrypoint, preserves
+  origin/source/impact/acceptance/test metadata and the CodeAgent handoff prompt,
+  and does not confirm, develop, or create a CodeAgent task. Re-ingesting the same
+  explicit `idempotencyKey` returns the existing PR item and records a
+  deduplication event.
 - PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
   under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
   The CodeAgent payload includes `codeAgentBriefPath`, and the context brief

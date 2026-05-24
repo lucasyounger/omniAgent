@@ -3,11 +3,12 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { prPoolRuntime } from '../src/mastra/runtime/pr-pool/pr-pool-runtime';
 import type { PRPoolProposal } from '../src/mastra/runtime/pr-pool/pr-pool-proposal';
-import { validatePrPoolProposal } from '../src/mastra/runtime/pr-pool/pr-pool-proposal';
+import { proposalTargetStatus, resolveProposalConfirmation, validatePrPoolProposal } from '../src/mastra/runtime/pr-pool/pr-pool-proposal';
 
 type CliOptions = {
   file?: string;
   dryRun: boolean;
+  confirmed: boolean;
 };
 
 export async function runPrPoolIngestCli(argv = process.argv.slice(2)): Promise<number> {
@@ -19,24 +20,32 @@ export async function runPrPoolIngestCli(argv = process.argv.slice(2)): Promise<
 
   try {
     const proposal = await loadProposalFile(options.file);
+    if (options.confirmed) {
+      proposal.confirmation = 'confirmed';
+    }
     const missingFields = validatePrPoolProposal(proposal);
     if (missingFields.length) {
       console.error(`Proposal is missing required fields: ${missingFields.join(', ')}`);
       return 1;
     }
 
+    const confirmation = resolveProposalConfirmation(proposal);
+    const targetStatus = proposalTargetStatus(proposal);
+
     if (options.dryRun) {
       console.log('Parsed PR Pool proposal:');
       console.log(JSON.stringify(proposal, null, 2));
+      console.log(`Confirmation: ${confirmation}`);
+      console.log(`Target Status: ${targetStatus}`);
       console.log('Dry run: no PR Pool item was created.');
       return 0;
     }
 
-    const item = await prPoolRuntime.ingestProposal(proposal, process.env.OMNI_PROJECT_ROOT || process.cwd());
-    console.log(`Created PR Pool item: ${item.id}`);
-    console.log(`Status: ${item.status}`);
-    console.log(`Source: ${item.source}`);
-    console.log('Next: confirm the PR item when ready to develop.');
+    const result = await prPoolRuntime.ingestPrPoolProposal(proposal, process.env.OMNI_PROJECT_ROOT || process.cwd());
+    console.log(`Created PR Pool item: ${result.prItemId}`);
+    console.log(`Status: ${result.status}`);
+    console.log(`Origin: ${JSON.stringify(result.origin)}`);
+    console.log(result.status === 'ready' ? 'Next: PR Pool scan can develop this item.' : 'Next: confirm the PR item when ready to develop.');
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -74,6 +83,10 @@ export function parseMarkdownProposal(content: string): PRPoolProposal {
     acceptanceCriteria,
     testCommand: optionalString(frontmatter.testCommand),
     codeAgentPrompt: section(body, 'CodeAgent Prompt'),
+    confirmation: confirmationValue(frontmatter.confirmation),
+    nonGoals: listSection(body, 'Non-goals'),
+    constraints: listSection(body, 'Constraints'),
+    references: referenceList(frontmatter.references),
     design4Plus1: design,
     tags: optionalStringList(frontmatter.tags),
     idempotencyKey: optionalString(frontmatter.idempotencyKey),
@@ -81,11 +94,13 @@ export function parseMarkdownProposal(content: string): PRPoolProposal {
 }
 
 function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = { dryRun: false };
+  const options: CliOptions = { dryRun: false, confirmed: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--confirmed') {
+      options.confirmed = true;
     } else if (arg === '--file') {
       options.file = argv[index + 1];
       index += 1;
@@ -205,6 +220,32 @@ function priorityValue(value: unknown): PRPoolProposal['priority'] | undefined {
 
 function riskValue(value: unknown): PRPoolProposal['impact']['risk'] | undefined {
   return value === 'low' || value === 'medium' || value === 'high' ? value : undefined;
+}
+
+function confirmationValue(value: unknown): PRPoolProposal['confirmation'] | undefined {
+  return value === 'required' || value === 'confirmed' ? value : undefined;
+}
+
+function referenceList(value: unknown): PRPoolProposal['references'] {
+  if (!Array.isArray(value)) return undefined;
+  const references: NonNullable<PRPoolProposal['references']> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const type = referenceType(record.type);
+    if (!type) continue;
+    references.push({
+      type,
+      path: optionalString(record.path),
+      id: optionalString(record.id),
+      summary: optionalString(record.summary),
+    });
+  }
+  return references;
+}
+
+function referenceType(value: unknown): NonNullable<PRPoolProposal['references']>[number]['type'] | undefined {
+  return value === 'file' || value === 'goal_run' || value === 'artifact' || value === 'conversation' || value === 'external' ? value : undefined;
 }
 
 function stringList(value: unknown): string[] {

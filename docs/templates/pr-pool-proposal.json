@@ -1,0 +1,38 @@
+{
+  "title": "Add PR Pool confirmed ingest semantics",
+  "objective": "Allow confirmed implementation proposals to enter PR Pool as ready requirement slices while Goal-generated proposals remain draft until user confirmation.",
+  "priority": "normal",
+  "source": "manual",
+  "confirmation": "confirmed",
+  "origin": {
+    "type": "manual",
+    "artifactPath": ".omc/pr-pool-confirmed-ingest-requirements.md"
+  },
+  "impact": {
+    "modules": ["PR Pool", "Task Runtime", "CLI"],
+    "risk": "medium"
+  },
+  "nonGoals": [
+    "Do not embed full exploration transcripts in the PR item brief.",
+    "Do not create a CodeAgent task during ingest."
+  ],
+  "constraints": [
+    "Goal-origin proposals default to confirmation required.",
+    "Only ready PR items may be consumed by PR Pool cron scan."
+  ],
+  "references": [
+    {
+      "type": "file",
+      "path": ".omc/pr-pool-confirmed-ingest-requirements.md",
+      "summary": "Confirmed ingest requirements slice."
+    }
+  ],
+  "acceptanceCriteria": [
+    "A confirmed proposal creates a ready PRItem.",
+    "A Goal proposal without confirmation creates a draft PRItem.",
+    "The PRItem preserves confirmation, nonGoals, constraints, and references metadata.",
+    "Dry-run validates without writing and reports the target status."
+  ],
+  "testCommand": "npx vitest run tests/pr-pool-store.test.ts tests/pr-pool-runtime.test.ts tests/task-dispatcher.test.ts tests/pr-pool-ingest-cli.test.ts",
+  "codeAgentPrompt": "Implement PR Pool confirmed ingest semantics from .omc/pr-pool-confirmed-ingest-requirements.md with code, docs, and tests kept in sync."
+}

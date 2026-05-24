@@ -60,12 +60,21 @@ used only by unregistered workflows:
 - **PR Pool** (`src/mastra/runtime/pr-pool/`): patch-proposal pool management
   with `pr-pool-runtime.ts` and `pr-pool-store.ts`. Has registered task types
   (`pr_pool.create/list/confirm/develop/archive/cron_scan/ingest_proposal`) but
-  no agent card. `pr_pool.ingest_proposal` turns a normalized `PRPoolProposal`
-  into a draft PR item while preserving origin metadata and idempotency keys.
-  Re-ingesting an explicit `idempotencyKey` returns the existing item and records
+  no agent card. `pr_pool.ingest_proposal` is the unified confirmed-proposal
+  entrypoint for future Skill, CLI, and Goal flows: callers submit a normalized
+  `PRPoolProposal` to the Runtime ingest API rather than writing PR Pool storage
+  directly. The ingest path validates required fields, resolves confirmation
+  semantics (`required` -> `draft`, `confirmed` -> `ready`), preserves origin/
+  source/impact/acceptance/test/non-goal/constraint/reference metadata and the
+  CodeAgent handoff prompt, writes a concise active `brief.md` for AI codegen, and
+  never develops or creates a CodeAgent task. Goal-origin or unknown proposals
+  default to `required` so generated work waits for user confirmation. Re-ingesting
+  an explicit `idempotencyKey` returns the existing item and records
   `proposal_ingest_deduplicated`. The shared CLI entrypoint is
   `npm run prpool:ingest -- --file <proposal.json|proposal.md>` and supports
-  `--dry-run` validation.
+  `--dry-run` validation. Passing `--confirmed` marks the proposal as confirmed,
+  creates a `ready` item, and lets the PR Pool cron scan pick it up later; without
+  the flag, proposals follow their embedded confirmation/default rule.
 - **Req Runtime** (`src/mastra/runtime/req/`): `.omni/reqs` requirement library
   with path-safe document IDs, `reqs.json` index, per-document markdown/design
   files, source metadata, and append-only status events for document and item

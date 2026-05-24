@@ -136,10 +136,21 @@ approval linkage.
   Team Run result contract while queueing outbound Gateway deliveries through the
   Mastra Tool `queue-channel-notification`; that tool declares a Tool Gateway
   `gateway_delivery.write` policy so delivery queue writes remain centrally
-  auditable. PR Pool proposal
-  ingest accepts `pr_pool.ingest_proposal`, creates a draft PR item through the
-  PR Pool Runtime, preserves origin/idempotency/proposal metadata, and returns
-  an existing item for repeated explicit idempotency keys. PR Pool develop
+  auditable. PR Pool proposal ingest accepts `pr_pool.ingest_proposal`, validates
+  the normalized `PRPoolProposal` payload, resolves confirmation semantics, and
+  creates either a `draft` PR item (`confirmation: required`) or a `ready` PR item
+  (`confirmation: confirmed`) through `ingestPrPoolProposal`. Goal-origin and
+  unknown-source proposals default to `required` so generated work cannot skip user
+  confirmation. The ingest route preserves origin/source/impact/acceptance/test/
+  non-goal/constraint/reference metadata plus the CodeAgent handoff prompt, writes
+  a concise active `~/.omni/pr-pool/active/{prItemId}/brief.md`, and returns
+  `prItemId/status/origin` through the Team Run result. It never develops or
+  creates a CodeAgent task; only `ready` items are consumed by the PR Pool cron
+  scan, and ready items still enter development through the existing develop
+  dispatcher path. Skill, CLI, and Goal integrations should call the Runtime ingest
+  API rather than writing PR Pool files directly. Re-ingesting the same explicit
+  `idempotencyKey` returns an existing item and records a deduplication event. PR
+  Pool develop
   dispatch now creates a durable `code-agent-pr-brief.md` under
   `~/.omni/runs/pr-pool/{prItemId}/`, passes `codeAgentBriefPath` to the
   generated CodeAgent RuntimeTask, and archives the same brief with the PR Pool

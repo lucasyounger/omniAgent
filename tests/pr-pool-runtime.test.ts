@@ -78,7 +78,7 @@ describe('PR pool runtime', () => {
     expect(retried.blocking).toMatchObject({ reason: 'Tests failed', category: 'test_failed' });
   });
 
-  it('deduplicates proposal ingest by idempotencyKey', async () => {
+  it('deduplicates proposal ingest by idempotencyKey and returns actual item status', async () => {
     const { prPoolRuntime } = await loadRuntime();
     const proposal = {
       title: 'Deduplicate me',
@@ -92,34 +92,85 @@ describe('PR pool runtime', () => {
     };
 
     const first = await prPoolRuntime.ingestProposal(proposal, tempRoot);
-    const second = await prPoolRuntime.ingestProposal(proposal, tempRoot);
+    await prPoolRuntime.confirm(first.id);
+    const second = await prPoolRuntime.ingestPrPoolProposal(proposal, tempRoot);
 
-    expect(second.id).toBe(first.id);
-    await expect(prPoolRuntime.list({ status: 'draft' })).resolves.toHaveLength(1);
+    expect(second).toMatchObject({ prItemId: first.id, status: 'ready' });
+    await expect(prPoolRuntime.list()).resolves.toHaveLength(1);
     const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
     expect(events).toContain('proposal_ingest_deduplicated');
   });
 
-  it('ingests proposals as draft items and records proposal events', async () => {
+  it('ingests confirmed proposals as ready items and goal proposals as draft by default', async () => {
     const { prPoolRuntime } = await loadRuntime();
-    const item = await prPoolRuntime.ingestProposal(
+
+    const confirmed = await prPoolRuntime.ingestPrPoolProposal(
       {
-        title: 'Ingest me',
-        objective: 'Turn a proposal into a draft item',
-        source: 'exploration',
-        origin: { type: 'claudecode', artifactPath: '.omc/proposals/ingest-me.json' },
+        title: 'Confirmed ingest',
+        objective: 'Create ready item',
+        source: 'manual',
+        origin: { type: 'manual' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['ready item created'],
+        codeAgentPrompt: 'Implement confirmed proposal',
+        confirmation: 'confirmed',
+        nonGoals: ['Do not create a CodeAgent task during ingest'],
+        constraints: ['Cron scan must remain the develop trigger'],
+        references: [{ type: 'conversation', id: 'conv-1', summary: 'User confirmed this slice' }],
+      },
+      tempRoot,
+    );
+    const goal = await prPoolRuntime.ingestPrPoolProposal(
+      {
+        title: 'Goal ingest',
+        objective: 'Create draft item',
+        source: 'goal_driven',
+        origin: { type: 'goal', goalId: 'goal-1' },
         impact: { modules: ['PR Pool'], risk: 'medium' },
         acceptanceCriteria: ['draft item created'],
-        codeAgentPrompt: 'Implement the proposal',
-        idempotencyKey: 'file:.omc/proposals/ingest-me.json:abc',
+        codeAgentPrompt: 'Implement after confirmation',
       },
       tempRoot,
     );
 
-    expect(item.status).toBe('draft');
-    expect(item.metadata).toMatchObject({
-      origin: { type: 'claudecode', artifactPath: '.omc/proposals/ingest-me.json' },
-      idempotencyKey: 'file:.omc/proposals/ingest-me.json:abc',
+    expect(confirmed.status).toBe('ready');
+    expect(goal.status).toBe('draft');
+    await expect(prPoolRuntime.get(confirmed.prItemId)).resolves.toMatchObject({
+      status: 'ready',
+      metadata: { confirmation: 'confirmed' },
+      nonGoals: ['Do not create a CodeAgent task during ingest'],
+      constraints: ['Cron scan must remain the develop trigger'],
+      references: [{ type: 'conversation', id: 'conv-1', summary: 'User confirmed this slice' }],
+    });
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', confirmed.prItemId, 'brief.md'), 'utf8')).resolves.toContain('User confirmed this slice');
+    const tasksFile = path.join(tempRoot, '.omni', 'runs', 'runtime-tasks', 'tasks.json');
+    await expect(fs.readFile(tasksFile, 'utf8')).rejects.toThrow();
+  });
+
+  it('exposes ingestPrPoolProposal API result shape', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+
+    const result = await prPoolRuntime.ingestPrPoolProposal(
+      {
+        title: 'API ingest me',
+        objective: 'Return the minimal ingest response',
+        source: 'exploration',
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['draft item created'],
+        codeAgentPrompt: 'Implement the proposal',
+      },
+      tempRoot,
+    );
+
+    expect(result).toMatchObject({
+      prItemId: expect.stringMatching(/^pr-/),
+      status: 'draft',
+      origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' },
+    });
+    await expect(prPoolRuntime.get(result.prItemId)).resolves.toMatchObject({
+      status: 'draft',
+      metadata: { origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' } },
     });
     const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
     expect(events).toContain('proposal_ingested');

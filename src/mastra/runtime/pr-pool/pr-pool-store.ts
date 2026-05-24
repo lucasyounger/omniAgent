@@ -21,6 +21,13 @@ export type PRItemImpact = {
   risk: 'low' | 'medium' | 'high';
 };
 
+export type PRItemReference = {
+  type: 'file' | 'goal_run' | 'artifact' | 'conversation' | 'external';
+  path?: string;
+  id?: string;
+  summary?: string;
+};
+
 export type PRItemApproval = {
   reviewApprovalId?: string;
   developApprovalId?: string;
@@ -68,6 +75,9 @@ export type PRItem = {
   acceptanceCriteria: string[];
   testCommand?: string;
   codeAgentPrompt: string;
+  nonGoals: string[];
+  constraints: string[];
+  references: PRItemReference[];
   approval: PRItemApproval;
   run: PRItemRun;
   blocking?: PRItemBlocking;
@@ -120,6 +130,10 @@ export type CreatePRItemInput = {
   acceptanceCriteria: string[];
   testCommand?: string;
   codeAgentPrompt: string;
+  initialStatus?: Extract<PRItemStatus, 'draft' | 'ready'>;
+  nonGoals?: string[];
+  constraints?: string[];
+  references?: PRItemReference[];
   design4Plus1?: PRItem['design4Plus1'];
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -181,7 +195,7 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
     id: createId('pr'),
     title: input.title,
     objective: input.objective,
-    status: 'draft',
+    status: input.initialStatus || 'draft',
     priority: input.priority || 'normal',
     source: input.source || 'manual',
     goalId: input.goalId,
@@ -193,6 +207,9 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
     acceptanceCriteria: input.acceptanceCriteria,
     testCommand: input.testCommand,
     codeAgentPrompt: input.codeAgentPrompt,
+    nonGoals: input.nonGoals || [],
+    constraints: input.constraints || [],
+    references: input.references || [],
     approval: {},
     run: {
       retryCount: 0,
@@ -207,6 +224,7 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
   items.push(item);
   await writeItems(items);
   await appendPrPoolEvent({ prItemId: item.id, type: 'created', to: item.status });
+  await writePrItemBrief(item);
   return item;
 }
 
@@ -286,11 +304,13 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
     },
     codeTaskId: item.run.codeTaskId || '',
     codeRunSummary: buildCodeRunSummary(item),
-    artifacts: ['item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md'],
+    artifacts: ['item.json', 'brief.md', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md', 'archive-entry.json', 'references.json'],
     archivedAt,
     archiveReason: reason,
   };
   await fs.writeFile(path.join(archiveDir, 'item.json'), JSON.stringify(item, null, 2), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'brief.md'), buildPrItemBriefMarkdown(item), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'references.json'), JSON.stringify(item.references, null, 2), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'objective.md'), buildObjectiveMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'context-brief.md'), buildContextBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'design-4plus1.md'), buildDesignMarkdown(archiveEntry.design4Plus1), 'utf8');
@@ -311,16 +331,24 @@ export async function writeCodeAgentPrBrief(item: PRItem): Promise<string> {
   return briefPath;
 }
 
-export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
+export async function writePrItemBrief(item: PRItem): Promise<string> {
+  const itemDir = path.join(activeRoot, item.id);
+  await fs.mkdir(itemDir, { recursive: true });
+  const briefPath = path.join(itemDir, 'brief.md');
+  await fs.writeFile(briefPath, buildPrItemBriefMarkdown(item), 'utf8');
+  return briefPath;
+}
+
+export function buildPrItemBriefMarkdown(item: PRItem): string {
   const workspacePath = item.workspace.worktreePath || item.workspace.repoPath;
-  const design = item.design4Plus1;
   return [
-    '# CodeAgent PR Brief',
+    '# PR Pool Requirement Brief',
     '',
     '## PR Identity',
     '',
     `- PR Item: ${item.id}`,
     `- Title: ${item.title}`,
+    `- Status: ${item.status}`,
     `- Priority: ${item.priority}`,
     `- Source: ${item.source}`,
     item.goalId ? `- Goal ID: ${item.goalId}` : undefined,
@@ -333,6 +361,14 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     '',
     item.objective,
     '',
+    '## Non-goals',
+    '',
+    ...(item.nonGoals.length ? item.nonGoals.map(nonGoal => `- ${nonGoal}`) : ['- n/a']),
+    '',
+    '## Constraints',
+    '',
+    ...(item.constraints.length ? item.constraints.map(constraint => `- ${constraint}`) : ['- n/a']),
+    '',
     '## Implementation Prompt',
     '',
     item.codeAgentPrompt,
@@ -343,6 +379,36 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     `- Modules: ${item.impact.modules.join(', ') || 'n/a'}`,
     item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
     item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    '',
+    '## Acceptance Criteria',
+    '',
+    ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+    '',
+    '## Verification',
+    '',
+    item.testCommand ? `Run: \`${item.testCommand}\`` : 'No explicit test command was provided. Select the smallest relevant test set and report it.',
+    '',
+    '## Stop Conditions',
+    '',
+    '- Stop if requirements or implementation boundaries are unclear.',
+    '- Stop if impact analysis reveals unapproved high-risk changes.',
+    '- Do not mark the PR item completed unless acceptance criteria and verification evidence are satisfied.',
+    '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
+    '',
+    '## References',
+    '',
+    ...(item.references.length ? item.references.map(formatReference) : ['- n/a']),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
+
+export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
+  const design = item.design4Plus1;
+  return [
+    '# CodeAgent PR Brief',
+    '',
+    buildPrItemBriefMarkdown(item),
     '',
     '## Design Summary',
     '',
@@ -360,24 +426,7 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     '',
     '### Scenarios',
     ...(design?.scenarios.length ? design.scenarios.map(scenario => `- ${scenario}`) : ['- n/a']),
-    '',
-    '## Acceptance Criteria',
-    '',
-    ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
-    '',
-    '## Verification',
-    '',
-    item.testCommand ? `Run: \`${item.testCommand}\`` : 'No explicit test command was provided. Select the smallest relevant test set and report it.',
-    '',
-    '## Stop Conditions',
-    '',
-    '- Stop if requirements or implementation boundaries are unclear.',
-    '- Stop if impact analysis reveals unapproved high-risk changes.',
-    '- Do not mark the PR item completed unless acceptance criteria and verification evidence are satisfied.',
-    '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
-  ]
-    .filter((line): line is string => line !== undefined)
-    .join('\n');
+  ].join('\n');
 }
 export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
   await ensureStore();
@@ -419,9 +468,22 @@ function buildContextBriefMarkdown(item: PRItem): string {
     `- Modules: ${item.impact.modules.join(', ')}`,
     item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
     item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    item.nonGoals.length ? `- Non-goals: ${item.nonGoals.join('; ')}` : undefined,
+    item.constraints.length ? `- Constraints: ${item.constraints.join('; ')}` : undefined,
+    item.references.length ? `- References: ${item.references.map(reference => reference.summary || reference.path || reference.id || reference.type).join('; ')}` : undefined,
   ]
     .filter((line): line is string => Boolean(line))
     .join('\n');
+}
+
+function formatReference(reference: PRItemReference): string {
+  const parts = [
+    `type=${reference.type}`,
+    reference.path ? `path=${reference.path}` : undefined,
+    reference.id ? `id=${reference.id}` : undefined,
+    reference.summary ? `summary=${reference.summary}` : undefined,
+  ].filter(Boolean);
+  return `- ${parts.join('; ')}`;
 }
 
 function buildDesignMarkdown(design: NonNullable<PRItem['design4Plus1']>): string {

@@ -583,7 +583,7 @@ describe('Task Dispatcher', () => {
 
     await expect(dispatchRuntimeTask(invalidIngestTask.id)).resolves.toMatchObject({
       status: 'failed',
-      reason: expect.stringContaining('pr_pool.ingest_proposal requires payload.proposal'),
+      reason: expect.stringContaining('objective'),
     });
     const confirmTask = await taskRuntime.createTask({
       sourceAgentId: 'test',
@@ -625,6 +625,30 @@ describe('Task Dispatcher', () => {
       acceptanceCriteria: ['not queued'],
       codeAgentPrompt: 'Ignore draft item',
     });
+    const waiting = await prPoolRuntime.create({
+      title: 'Waiting cron item',
+      objective: 'Do not scan waiting item',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['not queued'],
+      codeAgentPrompt: 'Ignore waiting item',
+    });
+    const failed = await prPoolRuntime.create({
+      title: 'Failed cron item',
+      objective: 'Do not scan failed item',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['not queued'],
+      codeAgentPrompt: 'Ignore failed item',
+    });
+    await prPoolRuntime.confirm(waiting.id);
+    await prPoolRuntime.transition(waiting.id, 'scheduled');
+    await prPoolRuntime.transition(waiting.id, 'developing');
+    await prPoolRuntime.transition(waiting.id, 'waiting_user_confirm');
+    await prPoolRuntime.confirm(failed.id);
+    await prPoolRuntime.transition(failed.id, 'scheduled');
+    await prPoolRuntime.transition(failed.id, 'developing');
+    await prPoolRuntime.transition(failed.id, 'failed');
     await prPoolRuntime.confirm(ready.id);
     await prPoolRuntime.update(ready.id, {
       workspace: {
@@ -661,6 +685,8 @@ describe('Task Dispatcher', () => {
     });
     expect(updatedReady).toMatchObject({ status: 'developing' });
     expect(updatedDraft).toMatchObject({ status: 'draft' });
+    await expect(prPoolRuntime.get(waiting.id)).resolves.toMatchObject({ status: 'waiting_user_confirm' });
+    await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({ status: 'failed' });
   });
 
   it('registers a PR pool cron job without duplicates', async () => {

@@ -100,6 +100,15 @@ export const prPoolRuntime = {
     return item;
   },
 
+  async ingestPrPoolProposal(proposal: PRPoolProposal, workspaceRepoPath = process.env.OMNI_PROJECT_ROOT || process.cwd()): Promise<{
+    prItemId: string;
+    status: PRItem['status'];
+    origin: PRPoolProposal['origin'];
+  }> {
+    const item = await this.ingestProposal(proposal, workspaceRepoPath);
+    return { prItemId: item.id, status: item.status, origin: proposal.origin };
+  },
+
   list(filter?: ListPRItemsFilter): Promise<PRItem[]> {
     return listPrPoolItems(filter);
   },
