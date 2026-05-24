@@ -16,6 +16,10 @@ describe('agent and workflow registry', () => {
       'cron-agent',
       'knowledge-agent',
     ]);
+    expect(getRegistryEntry('omni-router-agent')).toMatchObject({
+      kind: 'agent',
+      capabilities: expect.arrayContaining(['routing', 'task_planning', 'final_response']),
+    });
     expect(catalog.workflows.map(entry => entry.id)).toContain('task-orchestration-workflow');
     expect(catalog.workflows.map(entry => entry.id)).toContain('topic-research-goal-workflow');
   });

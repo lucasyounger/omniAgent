@@ -2,9 +2,11 @@
 
 Status: active Mastra Agent.
 
-OmniRouterAgent is the supervisor-style main agent. It routes intent, delegates
-work to specialist sub-agents and workflows, and reads Team Runtime inbox
-messages to report completed delegated tasks.
+OmniRouterAgent is the Mastra-native entry coordinator. It routes intent, creates
+Runtime/Team tasks, can start orchestration workflows, and reads Team Runtime
+inbox/result records to report completed delegated tasks. Specialist handlers own
+business execution; Router should not directly call Goal, Req, Code, schedule,
+notification, or memory write tools.
 
 ## Source Files
 
@@ -13,11 +15,13 @@ messages to report completed delegated tasks.
 - `src/mastra/tools/team-runtime-tools.ts`
 - `src/mastra/runtime/index.ts`
 
-## Sub-Agents
+## Specialist Execution Boundary
 
-- `codeAgent`: coding tasks via Claude Code CLI
-- `cronAgent`: schedule management
-- `knowledgeAgent`: file-backed long-term memory
+OmniRouterAgent intentionally exposes only team discovery, Team Runtime tools, and
+task orchestration workflow access. Goal, Req, Code, schedule, notification, and
+memory side effects should be requested as Runtime Tasks so Task Dispatcher,
+Tool Gateway, and specialist handlers preserve approval, audit, resultRef, and
+Team Runtime lifecycle behavior.
 
 ## Workflows
 
@@ -54,10 +58,12 @@ Router chooses one of these intents:
 - `chat`: answer directly.
 - `code`: create Runtime/Team tasks for CodeAgent execution.
 - `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
-- Goal: use goal tools for durable create/list/status/run/feedback workflows.
-  Ambiguous analysis requests should ask for confirmation before creating a Goal.
-- Req: use Req tools for list/status/confirm/reject/import. Imported Req documents
-  stay pending unless the user explicitly asks to confirm and archive.
+- Goal: create `goal.*` Runtime Tasks targeting `goal-runtime` for durable
+  create/list/status/run/feedback workflows. Ambiguous analysis requests should
+  ask for confirmation before creating a Goal.
+- Req: create `req.*` Runtime Tasks for list/status/confirm/reject/import.
+  Imported Req documents stay pending unless the user explicitly asks to confirm
+  and archive.
 - `mixed`: split into explicit sub-tasks.
 
 Router should keep final replies short, include task ids for long-running work,
