@@ -5,6 +5,7 @@ import { routeDeterministicCapability, routeLightweightCapability, type RouterRe
 import type { RouterTrace } from './decision-trace';
 import type { ChannelMessage, ChannelTarget, RouteCapabilitySelection, UnifiedRequest } from '../../gateway/types';
 import { toUnifiedRequest } from '../../gateway/types';
+import { formatCstTime } from '../../lib/time';
 
 const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
 
@@ -637,7 +638,7 @@ function parseSchedule(text: string, receivedAt: string): { value: string; kind:
   if (daily) {
     return {
       kind: 'daily',
-      value: `daily ${formatTime(Number(daily[1]), Number(daily[2] || 0))}`,
+      value: `daily ${formatCstTime(Number(daily[1]), Number(daily[2] || 0))}`,
     };
   }
 
@@ -845,11 +846,7 @@ function formatLocalSchedule(date: Date, hours: number, minutes: number) {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${formatTime(hours, minutes)}`;
-}
-
-function formatTime(hours: number, minutes: number) {
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `${yyyy}-${mm}-${dd} ${formatCstTime(hours, minutes)}`;
 }
 
 function cleanText(text: string) {

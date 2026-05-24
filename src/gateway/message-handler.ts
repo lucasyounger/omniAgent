@@ -33,6 +33,7 @@ import {
   type ConversationContextInference,
   type ConversationSemanticState,
 } from './conversation-semantic-state';
+import { formatCstDateTime, formatCstTime, parseCstDateTime, parseCstDailyTime, utcDailyToCst } from '../lib/time';
 import type { GatewayConfig } from './config';
 import { getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage, UnifiedRequest } from './types';
@@ -961,37 +962,22 @@ async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {
 }
 
 function formatScheduleForDisplay(schedule: string): string {
-  const once = schedule.match(/(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+  const once = parseCstDateTime(schedule);
   if (once) {
-    const [, year, month, day, hours, minutes] = once;
-    const cstDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours) + 8, Number(minutes), 0, 0));
-    return `${cstDate.getUTCFullYear()}-${String(cstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(cstDate.getUTCDate()).padStart(2, '0')} ${formatTime(cstDate.getUTCHours(), cstDate.getUTCMinutes())}`;
+    return formatCstDateTime(once);
   }
 
-  const daily = schedule.match(/(?:daily|every day|每天|每日).*?(\d{1,2}):(\d{2})/i);
+  const daily = parseCstDailyTime(schedule);
   if (daily) {
-    const utcMinutes = Number(daily[1]) * 60 + Number(daily[2]);
-    const cstMinutes = (utcMinutes + 8 * 60) % (24 * 60);
-    return `daily ${formatTime(Math.floor(cstMinutes / 60), cstMinutes % 60)}`;
+    const cst = utcDailyToCst(daily.hours, daily.minutes);
+    return `daily ${formatCstTime(cst.hours, cst.minutes)}`;
   }
 
   return schedule;
 }
 
-function formatTime(hours: number, minutes: number): string {
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
 function formatLocalTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const cstDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  const yyyy = cstDate.getUTCFullYear();
-  const mm = String(cstDate.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(cstDate.getUTCDate()).padStart(2, '0');
-  const hh = String(cstDate.getUTCHours()).padStart(2, '0');
-  const min = String(cstDate.getUTCMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+  return formatCstDateTime(value);
 }
 
 function helpText() {
