@@ -14,7 +14,10 @@ Task Dispatcher sits next to TaskRuntime and moves pending Runtime Tasks into
 handler execution through `src/mastra/runtime/task-dispatcher/handler-registry.ts`,
 which centralizes exact `taskType`, `taskType` prefix, and `targetAgentId`
 routing while retaining target agents as executor hints and compatibility fields.
-It includes Goal handlers for `goal.*` and Req handlers for `req.*`
+The public dispatcher entry remains `src/mastra/runtime/task-dispatcher.ts`, while
+concrete deterministic handlers live under
+`src/mastra/runtime/task-dispatcher/handlers/` by runtime surface. It includes Goal
+handlers for `goal.*` and Req handlers for `req.*`
 confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle
 while invoking the matching Mastra Req Tools for document create/list/status,
 confirmation, item updates, and imports. Knowledge dispatch preserves the same

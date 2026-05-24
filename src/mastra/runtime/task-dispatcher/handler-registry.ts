@@ -1,8 +1,6 @@
 import type { RuntimeTask } from '../types';
-import type { DispatchResult } from '../task-dispatcher';
+import type { DispatchResult, RuntimeTaskHandler } from './types';
 import { runtimeTaskTypes } from '../task-types';
-
-export type RuntimeTaskHandler = (task: RuntimeTask) => Promise<DispatchResult>;
 
 export type RuntimeTaskHandlerRegistry = {
   byTaskType?: Record<string, RuntimeTaskHandler | undefined>;
