@@ -11,7 +11,7 @@ import {
 } from './team-runtime-store';
 
 export type CodeTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type CodeTaskExecutor = 'claude_code' | 'opencode' | 'custom';
+export type CodeTaskExecutor = 'claude_code' | 'opencode' | 'codex' | 'custom';
 
 export type CodeTaskEvent = {
   type: 'task_started' | 'stdout' | 'stderr' | 'task_completed' | 'task_failed';
@@ -148,8 +148,8 @@ export async function startCodeTask(input: {
   const executionMode = input.executionMode || (process.env.OMNI_CODE_EXECUTION_MODE === 'patch_proposal' ? 'patch_proposal' : 'direct');
   const executor = resolveCodeTaskExecutor(input.executor, input.command);
   const command = input.command || resolveExecutorCommand(executor);
-  const args = input.args || splitArgs(executor === 'opencode' ? process.env.OMNI_OPENCODE_ARGS || process.env.OMNI_CODE_AGENT_ARGS : process.env.OMNI_CODE_AGENT_ARGS);
-  const promptArg = input.promptArg || (executor === 'opencode' ? process.env.OMNI_OPENCODE_PROMPT_ARG || process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p' : process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p');
+  const args = input.args ?? resolveExecutorArgs(executor);
+  const promptArg = input.promptArg || resolveExecutorPromptArg(executor);
   const task: CodeTask = {
     taskId,
     teamTaskId: teamTask.taskId,
@@ -417,6 +417,7 @@ function resolveCodeTaskExecutor(executor: CodeTaskExecutor | undefined, command
   if (executor) return executor;
   if (command) return 'custom';
   if (process.env.OMNI_CODE_AGENT_EXECUTOR === 'opencode') return 'opencode';
+  if (process.env.OMNI_CODE_AGENT_EXECUTOR === 'codex') return 'codex';
   if (process.env.OMNI_CODE_AGENT_EXECUTOR === 'custom') return 'custom';
   return 'claude_code';
 }
@@ -425,10 +426,39 @@ function resolveExecutorCommand(executor: CodeTaskExecutor): string {
   if (executor === 'opencode') {
     return process.env.OMNI_OPENCODE_COMMAND || process.env.OMNI_CODE_AGENT_COMMAND || 'opencode';
   }
-  if (executor === 'custom') {
-    return process.env.OMNI_CODE_AGENT_COMMAND || process.env.OMNI_CLAUDE_COMMAND || 'claude';
+  if (executor === 'codex') {
+    return process.env.OMNI_CODEX_COMMAND || process.env.OMNI_CODE_AGENT_COMMAND || 'codex';
   }
-  return process.env.OMNI_CODE_AGENT_COMMAND || process.env.OMNI_CLAUDE_COMMAND || 'claude';
+  if (executor === 'custom') {
+    return process.env.OMNI_CODE_AGENT_COMMAND || process.env.OMNI_CLAUDE_COMMAND || 'cc';
+  }
+  return process.env.OMNI_CLAUDE_COMMAND || process.env.OMNI_CODE_AGENT_COMMAND || 'cc';
+}
+
+function resolveExecutorArgs(executor: CodeTaskExecutor): string[] {
+  if (executor === 'opencode') {
+    return splitArgs(process.env.OMNI_OPENCODE_ARGS || process.env.OMNI_CODE_AGENT_ARGS);
+  }
+  if (executor === 'codex') {
+    return splitArgs(process.env.OMNI_CODEX_ARGS || process.env.OMNI_CODE_AGENT_ARGS);
+  }
+  if (executor === 'custom') {
+    return splitArgs(process.env.OMNI_CODE_AGENT_ARGS);
+  }
+  return ['--dangerously-skip-permissions'];
+}
+
+function resolveExecutorPromptArg(executor: CodeTaskExecutor): string {
+  if (executor === 'opencode') {
+    return process.env.OMNI_OPENCODE_PROMPT_ARG || process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p';
+  }
+  if (executor === 'codex') {
+    return process.env.OMNI_CODEX_PROMPT_ARG || process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p';
+  }
+  if (executor === 'custom') {
+    return process.env.OMNI_CODE_AGENT_PROMPT_ARG || '-p';
+  }
+  return '-p';
 }
 
 function splitArgs(value: string | undefined): string[] {

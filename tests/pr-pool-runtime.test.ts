@@ -72,6 +72,7 @@ describe('PR pool runtime', () => {
     await prPoolRuntime.transition(item.id, 'scheduled');
     await prPoolRuntime.transition(item.id, 'developing');
     await prPoolRuntime.update(item.id, {
+      run: { ...item.run, codeTaskId: 'code-old' },
       blocking: { reason: 'Tests failed', category: 'test_failed', detectedAt: new Date().toISOString() },
     });
     await prPoolRuntime.transition(item.id, 'failed');
@@ -79,7 +80,23 @@ describe('PR pool runtime', () => {
     const retried = await prPoolRuntime.retry(item.id);
 
     expect(retried.status).toBe('ready');
+    expect(retried.run).toMatchObject({ previousCodeTaskId: 'code-old', retryCount: 1 });
+    expect(retried.run.codeTaskId).toBeUndefined();
     expect(retried.blocking).toMatchObject({ reason: 'Tests failed', category: 'test_failed' });
+  });
+
+  it('rejects retries after maxRetries is reached', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Retry limit'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, {
+      run: { ...item.run, retryCount: 3, maxRetries: 3 },
+    });
+    await prPoolRuntime.transition(item.id, 'failed');
+
+    await expect(prPoolRuntime.retry(item.id)).rejects.toThrow('exceeded max retries');
   });
 
   it('deduplicates proposal ingest by idempotencyKey and returns actual item status', async () => {
@@ -196,8 +213,8 @@ describe('PR pool runtime', () => {
       executionMode: 'patch_proposal',
       patchFile: undefined,
       executor: 'claude_code',
-      command: 'claude',
-      args: [],
+      command: 'cc',
+      args: ['--dangerously-skip-permissions'],
       promptArg: '-p',
       recentEvents: taskId === 'code-ok' ? [] : [{ type: 'task_failed', message: 'tests failed', ts: new Date().toISOString() }],
     }));
@@ -216,7 +233,11 @@ describe('PR pool runtime', () => {
     const result = await prPoolRuntime.reconcileDevelopmentRuns();
 
     expect(result).toMatchObject({ scanned: 2, completed: 1, failed: 1 });
-    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({ status: 'completed', run: { lastRunId: 'run-code-ok' } });
-    await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({ status: 'failed', blocking: { reason: 'tests failed', category: 'runtime_error' } });
+    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({ status: 'completed', run: { lastRunId: 'run-code-ok', lastCompletedAt: expect.any(String) } });
+    await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({
+      status: 'failed',
+      run: { lastRunId: 'run-code-bad', lastFailureReason: 'tests failed' },
+      blocking: { reason: 'tests failed', category: 'runtime_error' },
+    });
   });
 });

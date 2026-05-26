@@ -152,8 +152,35 @@ export const prPoolRuntime = {
     return this.transition(id, 'cancelled', 'Paused by user');
   },
 
-  retry(id: string): Promise<PRItem> {
-    return this.transition(id, 'ready', 'Retry requested');
+  async retry(id: string): Promise<PRItem> {
+    const item = await getPrPoolItem(id);
+    if (!item) {
+      throw new Error(`PR pool item not found: ${id}`);
+    }
+    if (item.status !== 'failed') {
+      throw new Error(`Cannot retry PR pool item in status ${item.status}: ${id}`);
+    }
+    if (item.run.retryCount >= item.run.maxRetries) {
+      throw new Error(`PR pool item exceeded max retries (${item.run.maxRetries}): ${id}`);
+    }
+
+    const updated = await updatePrPoolItem(id, {
+      status: 'ready',
+      run: {
+        ...item.run,
+        previousCodeTaskId: item.run.codeTaskId || item.run.previousCodeTaskId,
+        codeTaskId: undefined,
+        retryCount: item.run.retryCount + 1,
+      },
+    });
+    await appendPrPoolEvent({
+      prItemId: id,
+      type: 'status_changed',
+      from: item.status,
+      to: 'ready',
+      detail: 'Retry requested',
+    });
+    return updated;
   },
 
   async archive(id: string, reason: PRArchiveEntry['archiveReason']): Promise<PRArchiveEntry> {
@@ -178,9 +205,10 @@ export const prPoolRuntime = {
         continue;
       }
       if (codeTask.status === 'completed') {
+        const completedAt = new Date().toISOString();
         await updatePrPoolItem(item.id, {
           status: 'completed',
-          run: { ...item.run, lastRunId: codeTask.teamRunId },
+          run: { ...item.run, lastRunId: codeTask.teamRunId, lastCompletedAt: completedAt },
           blocking: undefined,
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_completed', from: item.status, to: 'completed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId }) });
@@ -189,7 +217,7 @@ export const prPoolRuntime = {
         const reason = codeTask.recentEvents.find(event => event.type === 'task_failed')?.message || `Code task ${codeTask.status}.`;
         await updatePrPoolItem(item.id, {
           status: 'failed',
-          run: { ...item.run, lastRunId: codeTask.teamRunId },
+          run: { ...item.run, lastRunId: codeTask.teamRunId, lastFailureReason: reason },
           blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_failed', from: item.status, to: 'failed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId, status: codeTask.status, reason }) });

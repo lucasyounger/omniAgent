@@ -2,7 +2,7 @@
 
 ## Code Executor CLI
 
-Command defaults to `claude`; alternate executors can use `opencode` or a custom command.
+Command defaults to `cc --dangerously-skip-permissions`; alternate executors can use `opencode`, `codex`, or a custom command.
 
 OmniAgent starts code executor work through `startCodeTaskTool`. Task progress is recorded as JSONL under `~/.omni/runs/code-runs`.
 

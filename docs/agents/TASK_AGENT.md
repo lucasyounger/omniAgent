@@ -223,19 +223,28 @@ work is delegated, executed, reported, and recovered across all agents.
   `~/.omni/pr-pool/active/{prItemId}/brief.md`, and never creates CodeAgent tasks.
   PR Pool cron scan consumes only `ready` items.
 - `pr_pool.develop` now creates and immediately dispatches the child
-  `code.task` RuntimeTask. The child payload can carry `executor:
-  claude_code | opencode | custom`, plus command override metadata. Confirmed PR
-  Pool items are already reviewed, so develop dispatch does not require an
-  additional approval token; execution is bounded by the assigned allowed
-  workspace and audited Tool Gateway records. Develop dispatch defaults the child
-  CodeAgent task to direct execution so confirmed PR slices actually start the
-  selected local executor; callers may still request `executionMode:
-  patch_proposal` for review-only handoff. If child dispatch fails
-  synchronously, the PR Pool item is moved to `failed` with a runtime blocking
-  reason.
-- PR Pool cron scans reconcile active development runs before and after scheduling:
-  completed CodeTasks mark items `completed`, failed/cancelled CodeTasks mark items
-  `failed`, and queued approval waits remain visible on the PR item.
+  `code.task` RuntimeTask through Task Dispatcher and CodeAgent. The child
+  payload carries structured PR context, including `prItemId`, parent
+  `runtimeTaskId`, acceptance criteria, test command, impact, constraints,
+  non-goals, `codeAgentBriefPath`, and retry context. It can select
+  `executor: claude_code | opencode | codex | custom`, plus command override
+  metadata. Confirmed PR Pool items are already reviewed, so develop dispatch
+  does not require an additional approval token; execution is bounded by the
+  assigned allowed workspace and audited Tool Gateway records. Develop dispatch
+  defaults the child CodeAgent task to direct execution so confirmed PR slices
+  actually start the selected local executor; callers may still request
+  `executionMode: patch_proposal` for review-only handoff. If child dispatch
+  fails synchronously, the PR Pool item is moved to `failed` with a runtime
+  blocking reason. Repeated develop calls for an already developing item with an
+  existing CodeTask return the existing `codeTaskId` instead of creating a
+  duplicate child task.
+- PR Pool cron scans reconcile active development runs before and after
+  scheduling: completed CodeTasks mark items `completed` with `lastRunId` and
+  `lastCompletedAt`, failed/cancelled CodeTasks mark items `failed` with
+  `lastFailureReason`, and queued approval waits remain visible on the PR item.
+  Retrying a failed PR Pool item moves the active `codeTaskId` into
+  `previousCodeTaskId`, increments `retryCount`, keeps the failure context, and
+  returns the item to `ready` for a fresh develop dispatch.
 - `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
 - PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
   `pr_pool.ingest_proposal`, validates required title/objective/source/origin/

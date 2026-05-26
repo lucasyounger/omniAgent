@@ -43,10 +43,14 @@ export type PRItemApproval = {
 export type PRItemRun = {
   runtimeTaskId?: string;
   codeTaskId?: string;
+  previousCodeTaskId?: string;
   lastRunId?: string;
   codeAgentBriefPath?: string;
   retryCount: number;
   maxRetries: number;
+  lastFailureReason?: string;
+  lastDispatchedAt?: string;
+  lastCompletedAt?: string;
 };
 
 export type PRItemBlocking = {
@@ -411,6 +415,19 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     '',
     buildPrItemBriefMarkdown(item),
     '',
+    '## Execution Backend',
+    '',
+    '- Executor: resolved at dispatch time (`claude_code`, `opencode`, `codex`, or `custom`)',
+    '- Command: resolved at dispatch time from explicit payload or executor defaults',
+    item.run.codeAgentBriefPath ? `- Brief Path: ${item.run.codeAgentBriefPath}` : undefined,
+    item.run.codeTaskId ? `- Current Code Task: ${item.run.codeTaskId}` : undefined,
+    '',
+    '## Retry Context',
+    '',
+    `- Retry Count: ${item.run.retryCount}/${item.run.maxRetries}`,
+    `- Previous Code Task: ${item.run.previousCodeTaskId || 'n/a'}`,
+    `- Last Failure Reason: ${item.run.lastFailureReason || item.blocking?.reason || 'n/a'}`,
+    '',
     '## Design Summary',
     '',
     '### Logical View',
@@ -427,7 +444,9 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     '',
     '### Scenarios',
     ...(design?.scenarios.length ? design.scenarios.map(scenario => `- ${scenario}`) : ['- n/a']),
-  ].join('\n');
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
 }
 export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
   await ensureStore();

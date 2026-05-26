@@ -3,7 +3,7 @@
 CodeAgent starts Claude Code tasks with:
 
 ```shell
-claude -p "<objective and context brief>"
+cc --dangerously-skip-permissions -p "<objective and context brief>"
 ```
 
 On Windows, CodeAgent invokes `powershell.exe` and reads the prompt from a
@@ -14,10 +14,14 @@ builds an argv array before invocation so prompt flags such as `-p` are passed t
 Claude Code instead of being rebound as wrapper parameters.
 
 CodeAgent can also record executor metadata for alternate local coding CLIs.
-`executor: 'claude_code'` keeps the default `claude` command path, while
-`executor: 'opencode'` resolves to `OMNI_OPENCODE_COMMAND || OMNI_CODE_AGENT_COMMAND || 'opencode'`.
-`OMNI_OPENCODE_ARGS` and `OMNI_OPENCODE_PROMPT_ARG` override the generic CodeAgent
-argument variables for opencode runs. `custom` uses the configured command override.
+`executor: 'claude_code'` keeps the default `cc` command path with
+`--dangerously-skip-permissions`, `executor: 'opencode'` resolves to
+`OMNI_OPENCODE_COMMAND || OMNI_CODE_AGENT_COMMAND || 'opencode'`, and
+`executor: 'codex'` resolves to
+`OMNI_CODEX_COMMAND || OMNI_CODE_AGENT_COMMAND || 'codex'`.
+`OMNI_OPENCODE_ARGS` / `OMNI_OPENCODE_PROMPT_ARG` and
+`OMNI_CODEX_ARGS` / `OMNI_CODEX_PROMPT_ARG` override the generic CodeAgent
+argument variables for those runs. `custom` uses the configured command override.
 
 ## Progress
 

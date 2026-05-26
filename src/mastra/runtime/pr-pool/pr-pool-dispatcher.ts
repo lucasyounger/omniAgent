@@ -1,4 +1,5 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-runtime-store';
+import type { CodeTaskExecutor } from '../../lib/code-task-store';
 import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { prPoolRuntime } from './pr-pool-runtime';
 import { ensureWorktree } from './worktree-manager';
@@ -116,7 +117,27 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
   }
 
   return runPrPoolHandler(task, `Dispatched PR pool item for development: ${prItemId}`, prPoolDevelopPolicy, async () => {
-    const approvedItem = item;
+    const approvedItem = (await prPoolRuntime.get(prItemId)) || item;
+    const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(process.env.OMNI_CODE_AGENT_EXECUTOR) || 'claude_code';
+
+    if (approvedItem.status === 'developing' && approvedItem.run.codeTaskId) {
+      return {
+        prItemId,
+        status: 'developing',
+        codeTaskId: approvedItem.run.codeTaskId,
+        codeDispatchStatus: 'already_dispatched',
+        executor,
+      };
+    }
+
+    if (approvedItem.status === 'waiting_user_confirm') {
+      throw new Error(`Cannot develop PR pool item waiting for user confirmation. Approve or retry first: ${prItemId}`);
+    }
+
+    if (approvedItem.status !== 'ready' && approvedItem.status !== 'scheduled' && approvedItem.status !== 'developing') {
+      throw new Error(`Cannot develop PR pool item in status ${approvedItem.status}: ${prItemId}`);
+    }
+
     const scheduledItem = approvedItem.status === 'ready' ? await prPoolRuntime.transition(prItemId, 'scheduled', 'Dispatched for development') : approvedItem;
     const developingItem = scheduledItem.status === 'scheduled' ? await prPoolRuntime.transition(prItemId, 'developing', 'CodeAgent task created') : scheduledItem;
     if (developingItem.status !== 'developing') {
@@ -124,7 +145,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     }
     const worktreeItem = await ensureWorktree(developingItem);
     const codeAgentBriefPath = await writeCodeAgentPrBrief(worktreeItem);
-    const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(process.env.OMNI_CODE_AGENT_EXECUTOR) || 'claude_code';
+    const codeTaskPayload = buildCodeTaskPayload(worktreeItem, task, codeAgentBriefPath, payload, executor);
 
     const codeTask = await taskRuntime.createTask({
       sourceAgentId: 'pr-pool-runtime',
@@ -133,19 +154,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       objective: buildCodeAgentPrompt(worktreeItem, codeAgentBriefPath),
       metadata: {
         taskType: runtimeTaskTypes.codeTask,
-        payload: {
-          workspacePath: worktreeItem.workspace.worktreePath || worktreeItem.workspace.repoPath,
-          objective: worktreeItem.codeAgentPrompt,
-          contextBrief: formatPrItemContext(worktreeItem, codeAgentBriefPath),
-          codeAgentBriefPath,
-          dryRun: booleanValue(payload.dryRun),
-          executionMode: resolvePrPoolDevelopExecutionMode(payload),
-          command: stringValue(payload.command),
-          args: stringArrayValue(payload.args),
-          promptArg: stringValue(payload.promptArg),
-          executor,
-          prItemId,
-        },
+        payload: codeTaskPayload,
       },
     });
 
@@ -155,6 +164,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
         runtimeTaskId: task.id,
         codeTaskId: codeTask.id,
         codeAgentBriefPath,
+        lastDispatchedAt: new Date().toISOString(),
       },
     });
 
@@ -166,6 +176,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       const reason = codeDispatch.reason || 'Code task dispatch failed.';
       await prPoolRuntime.update(prItemId, {
         status: 'failed',
+        run: { ...worktreeItem.run, runtimeTaskId: task.id, codeTaskId: codeTask.id, codeAgentBriefPath, lastFailureReason: reason },
         blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
       });
     }
@@ -286,6 +297,15 @@ function buildCodeAgentPrompt(item: PRItem, codeAgentBriefPath: string): string 
     '',
     'Acceptance Criteria:',
     ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+    '',
+    'Verification:',
+    item.testCommand ? `Run \`${item.testCommand}\` and report the result.` : 'Run the smallest relevant verification and report the result.',
+    '',
+    'Completion Requirements:',
+    '- Read the CodeAgent PR Brief before editing.',
+    '- Implement only the acceptance criteria for this PR slice.',
+    '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
+    '- Do not mark the task complete unless verification has passed or the remaining blocker is explicitly reported.',
   ].join('\n');
 }
 
@@ -309,6 +329,14 @@ function formatPrItemContext(item: PRItem, codeAgentBriefPath?: string): string 
     sections.push(`Dependencies: ${item.dependencies.join(', ')}`);
   }
 
+  sections.push(
+    '',
+    'Retry Context:',
+    `Retry Count: ${item.run.retryCount}/${item.run.maxRetries}`,
+    `Previous Code Task: ${item.run.previousCodeTaskId || 'n/a'}`,
+    `Last Failure Reason: ${item.run.lastFailureReason || item.blocking?.reason || 'n/a'}`,
+  );
+
   if (item.design4Plus1) {
     sections.push(
       '',
@@ -322,6 +350,46 @@ function formatPrItemContext(item: PRItem, codeAgentBriefPath?: string): string 
   }
 
   return sections.join('\n');
+}
+
+function buildCodeTaskPayload(
+  item: PRItem,
+  parentTask: RuntimeTask,
+  codeAgentBriefPath: string,
+  payload: Record<string, unknown>,
+  executor: CodeTaskExecutor,
+) {
+  return {
+    workspacePath: item.workspace.worktreePath || item.workspace.repoPath,
+    objective: item.codeAgentPrompt,
+    contextBrief: formatPrItemContext(item, codeAgentBriefPath),
+    codeAgentBriefPath,
+    dryRun: booleanValue(payload.dryRun),
+    executionMode: resolvePrPoolDevelopExecutionMode(payload),
+    command: stringValue(payload.command),
+    args: Array.isArray(payload.args) ? stringArrayValue(payload.args) : undefined,
+    promptArg: stringValue(payload.promptArg),
+    executor,
+    prItemId: item.id,
+    runtimeTaskId: parentTask.id,
+    acceptanceCriteria: item.acceptanceCriteria,
+    testCommand: item.testCommand,
+    impact: item.impact,
+    dependencies: item.dependencies,
+    constraints: item.constraints,
+    nonGoals: item.nonGoals,
+    retryContext: buildRetryContext(item),
+  };
+}
+
+function buildRetryContext(item: PRItem) {
+  return {
+    retryCount: item.run.retryCount,
+    maxRetries: item.run.maxRetries,
+    previousCodeTaskId: item.run.previousCodeTaskId,
+    lastFailureReason: item.run.lastFailureReason || item.blocking?.reason,
+    blocking: item.blocking,
+  };
 }
 
 function readPayload(task: RuntimeTask): Record<string, unknown> {
@@ -360,8 +428,8 @@ function isOneOf<const T extends readonly string[]>(value: string, allowed: T): 
   return allowed.includes(value);
 }
 
-function codeTaskExecutorValue(value: unknown): 'claude_code' | 'opencode' | 'custom' | undefined {
-  return typeof value === 'string' && isOneOf(value, ['claude_code', 'opencode', 'custom']) ? value : undefined;
+function codeTaskExecutorValue(value: unknown): CodeTaskExecutor | undefined {
+  return typeof value === 'string' && isOneOf(value, ['claude_code', 'opencode', 'codex', 'custom']) ? value : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {

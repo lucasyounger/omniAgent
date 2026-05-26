@@ -27,9 +27,16 @@ execution through Team Runtime.
   The dispatcher accepts both canonical `metadata.payload.workspacePath` and
   legacy top-level `metadata.workspacePath` records so previously routed code tasks
   do not fail before reaching CodeAgent.
-- Supports `executor: claude_code | opencode | custom` metadata. `opencode`
-  resolves to opencode-specific command/argument env overrides when present, while
-  `custom` uses the explicit command override path.
+- Supports `executor: claude_code | opencode | codex | custom` metadata.
+  `claude_code` defaults to `cc --dangerously-skip-permissions`, `opencode`
+  resolves to `opencode`, `codex` resolves to `codex`, and `custom` uses the
+  explicit command override path.
+- Executor defaults can be configured with `OMNI_CODE_AGENT_EXECUTOR`,
+  `OMNI_CLAUDE_COMMAND`, `OMNI_OPENCODE_COMMAND`, `OMNI_CODEX_COMMAND`,
+  `OMNI_CODE_AGENT_COMMAND`, `OMNI_CODE_AGENT_ARGS`, `OMNI_OPENCODE_ARGS`,
+  `OMNI_CODEX_ARGS`, `OMNI_CODE_AGENT_PROMPT_ARG`,
+  `OMNI_OPENCODE_PROMPT_ARG`, and `OMNI_CODEX_PROMPT_ARG`. Explicit
+  `command`, `args`, and `promptArg` payload values win over executor defaults.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn the selected executor or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.

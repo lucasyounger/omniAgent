@@ -52,7 +52,7 @@ export function objectValue(value: unknown) {
 }
 
 export function codeTaskExecutorValue(value: unknown) {
-  return value === 'claude_code' || value === 'opencode' || value === 'custom' ? value : undefined;
+  return value === 'claude_code' || value === 'opencode' || value === 'codex' || value === 'custom' ? value : undefined;
 }
 
 export function stringArrayValue(value: unknown) {

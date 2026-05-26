@@ -194,7 +194,7 @@ export const developPrPoolItemTool = createTool({
   requireApproval: true,
   inputSchema: z.object({
     prItemId: z.string(),
-    executor: z.enum(['claude_code', 'opencode', 'custom']).optional(),
+    executor: z.enum(['claude_code', 'opencode', 'codex', 'custom']).optional(),
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: dispatchEnvelopeSchema,
@@ -271,7 +271,7 @@ export const pausePrPoolItemTool = createTool({
 
 export const retryPrPoolItemTool = createTool({
   id: 'retry-pr-pool-item',
-  description: 'Retry a failed or waiting PR Pool item by moving it back to ready state.',
+  description: 'Retry a failed PR Pool item by moving it back to ready state with prior CodeTask context preserved.',
   inputSchema: z.object({ prItemId: z.string(), approvalToken: approvalTokenSchema }),
   outputSchema: prItemSchema,
   execute: async input => executeWithToolGateway('retry-pr-pool-item', prPoolWritePolicy, input, () => prPoolRuntime.retry(input.prItemId)),
