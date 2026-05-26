@@ -27,6 +27,7 @@ async function readToolAuditRecords() {
 
 beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-task-dispatcher-test-'));
+  process.env.OMNI_CODE_EXECUTION_MODE = 'patch_proposal';
   await fs.writeFile(path.join(tempRoot, 'package.json'), JSON.stringify({ name: 'omni-agent' }), 'utf8');
 });
 
@@ -37,6 +38,7 @@ afterEach(async () => {
   delete process.env.OMNI_CODE_AGENT_COMMAND;
   delete process.env.OMNI_CODE_AGENT_ARGS;
   delete process.env.OMNI_CODE_AGENT_PROMPT_ARG;
+  delete process.env.OMNI_CODE_EXECUTION_MODE;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -513,6 +515,8 @@ describe('Task Dispatcher', () => {
       tools: ['code-agent'],
       safetyLevel: 'high',
     });
+    expect(getRuntimeTaskCapability('pr_pool.ingest_proposal')?.description).toContain('proposal.confirmation');
+    expect(getRuntimeTaskCapability('pr_pool.ingest_proposal')?.description).toContain('draft or ready');
     expect(getRuntimeTaskCapability('unknown.task')).toBeUndefined();
     expect(isRuntimeTaskType('pr_pool.develop')).toBe(true);
     expect(defaultTargetAgentIdForTaskType('pr_pool.develop')).toBe('pr-pool-runtime');
@@ -745,7 +749,7 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id, executor: 'opencode' },
+        payload: { prItemId: item.id, executor: 'opencode', executionMode: 'patch_proposal' },
       },
     });
 
@@ -863,6 +867,104 @@ describe('Task Dispatcher', () => {
     });
     await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({ status: 'succeeded' });
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
+  });
+
+  it('dispatches legacy code-agent tasks with top-level workspace metadata', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router',
+      targetAgentId: 'code-agent',
+      objective: 'legacy metadata code task',
+      metadata: {
+        taskType: 'code.task',
+        workspacePath: tempRoot,
+        executionMode: 'patch_proposal',
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      targetAgentId: 'code-agent',
+      handler: 'code-agent',
+    });
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+  });
+
+  it('dispatches PR pool develop tasks in direct execution mode by default', async () => {
+    delete process.env.OMNI_CODE_EXECUTION_MODE;
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Direct develop item',
+      objective: 'Start direct CodeAgent execution',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['code task dispatched directly'],
+      codeAgentPrompt: 'Run direct execution',
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
+    const argvFile = path.join(tempRoot, 'pr-pool-direct-argv.json');
+    const scriptFile = path.join(tempRoot, 'record-pr-pool-direct-argv.js');
+    await fs.writeFile(scriptFile, "require('node:fs').writeFileSync(process.argv[2],JSON.stringify(process.argv.slice(3)))", 'utf8');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'develop PR pool item',
+      metadata: {
+        taskType: 'pr_pool.develop',
+        payload: {
+          prItemId: item.id,
+          command: process.execPath,
+          args: [scriptFile, argvFile],
+          promptArg: '--prompt',
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    const updated = await prPoolRuntime.get(item.id);
+    const tasks = await taskRuntime.listTasks();
+    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeTaskId);
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      result: { prItemId: item.id, status: 'developing', codeDispatchStatus: 'dispatched' },
+    });
+    expect(codeTask).toMatchObject({
+      targetAgentId: 'code-agent',
+      metadata: {
+        payload: {
+          executionMode: 'direct',
+          command: process.execPath,
+          args: [scriptFile, argvFile],
+          promptArg: '--prompt',
+        },
+      },
+    });
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if ((await fs.readFile(argvFile, 'utf8').catch(() => ''))) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await expect(fs.readFile(argvFile, 'utf8')).resolves.toContain('--prompt');
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    const codeRun = (await listCodeTasks()).find(candidate => candidate.teamTaskId === codeTask!.id)!;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const current = await getCodeTask(codeRun.taskId);
+      if (current.status === 'completed') break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await expect(getCodeTask(codeRun.taskId)).resolves.toMatchObject({ status: 'completed' });
   });
 
   it('dispatches goal runtime tasks through the goal handler', async () => {

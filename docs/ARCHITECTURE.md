@@ -64,11 +64,13 @@ used only by unregistered workflows:
   entrypoint for future Skill, CLI, and Goal flows: callers submit a normalized
   `PRPoolProposal` to the Runtime ingest API rather than writing PR Pool storage
   directly. The ingest path validates required fields, resolves confirmation
-  semantics (`required` -> `draft`, `confirmed` -> `ready`), preserves origin/
-  source/impact/acceptance/test/non-goal/constraint/reference metadata and the
-  CodeAgent handoff prompt, writes a concise active `brief.md` for AI codegen, and
-  never develops or creates a CodeAgent task. Goal-origin or unknown proposals
-  default to `required` so generated work waits for user confirmation. Re-ingesting
+  semantics (`required` -> `draft`, `confirmed` -> `ready`), stores canonical
+  proposal data on top-level PR item fields, keeps item `metadata` compact for
+  non-duplicated auxiliary fields, writes active item timestamps as human-facing
+  CST `YYYY-MM-DD HH:mm` strings, writes a concise active `brief.md` for AI
+  codegen, and never develops or creates a CodeAgent task. Goal-origin or unknown
+  proposals default to `required` so generated work waits for user confirmation.
+  Re-ingesting
   an explicit `idempotencyKey` returns the existing item and records
   `proposal_ingest_deduplicated`. The shared CLI entrypoint is
   `npm run prpool:ingest -- --file <proposal.json|proposal.md>` and supports

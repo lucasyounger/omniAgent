@@ -18,7 +18,7 @@ describe('Capability Registry', () => {
     expect(capabilityRegistry.getAll().length).toBeGreaterThanOrEqual(10);
     expect(capabilityRegistry.getById('repository_analysis')).toMatchObject({
       id: 'repository_analysis',
-      taskTypes: [runtimeTaskTypes.codeClaudeCodeTask],
+      taskTypes: expect.arrayContaining([runtimeTaskTypes.codeTask, runtimeTaskTypes.codeClaudeCodeTask]),
     });
     expect(capabilityRegistry.getByCategory('repo').map(capability => capability.id)).toContain('pr_management');
     expect(capabilityRegistry.validateIds(['repository_analysis', 'report_generation'])).toBe(true);

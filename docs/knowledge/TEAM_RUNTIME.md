@@ -144,9 +144,11 @@ approval linkage.
   creates either a `draft` PR item (`confirmation: required`) or a `ready` PR item
   (`confirmation: confirmed`) through `ingestPrPoolProposal`. Goal-origin and
   unknown-source proposals default to `required` so generated work cannot skip user
-  confirmation. The ingest route preserves origin/source/impact/acceptance/test/
-  non-goal/constraint/reference metadata plus the CodeAgent handoff prompt, writes
-  a concise active `~/.omni/pr-pool/active/{prItemId}/brief.md`, and returns
+  confirmation. The ingest route stores canonical proposal data on top-level PR item
+  fields and keeps item `metadata` compact for non-duplicated auxiliary fields such
+  as confirmation, origin, and idempotency key. Active PR Pool item timestamps are
+  human-facing CST strings formatted as `YYYY-MM-DD HH:mm`. A concise active
+  `~/.omni/pr-pool/active/{prItemId}/brief.md` is written, and the API returns
   `prItemId/status/origin` through the Team Run result. It never develops or
   creates a CodeAgent task; only `ready` items are consumed by the PR Pool cron
   scan, and ready items still enter development through the existing develop
@@ -159,7 +161,10 @@ approval linkage.
   `claude_code`, `opencode`, or `custom`. Confirmed PR Pool items are already
   reviewed, so develop dispatch does not carry a second approval token; execution
   is bounded by the assigned allowed workspace and Tool Gateway audit records.
-  Cron scans reconcile active CodeTask results before and after scheduling so
+  Develop dispatch defaults the child CodeAgent task to direct execution so
+  confirmed PR slices start the selected local executor; callers may still pass
+  `executionMode: patch_proposal` for review-only handoff. Cron scans reconcile
+  active CodeTask results before and after scheduling so
   completed runs mark PR items `completed` and failures mark items `failed` with
   blocking details. PR Pool develop
   dispatch now creates a durable `code-agent-pr-brief.md` under
@@ -197,6 +202,9 @@ approval linkage.
   reduce duplicate dispatch. Unsupported targets and registered-but-nonexecutable
   handler placeholders transition to runtime `failed` with the dispatcher reason
   rather than staying queued for repeated polling.
+
+- RuntimeTask native facades (`create-runtime-task`, `dispatch-runtime-task`, `create-and-dispatch-runtime-task`, status/list, cancel, retry) are the shared Agent-facing schema/audit layer for generic durable work. Domain facades should reuse this path instead of reimplementing RuntimeTask create+dispatch.
+- PR Pool native facades wrap PR Pool runtime reads/writes and enqueue `pr_pool.*` RuntimeTasks for ingest/confirm/develop/archive/scan. `/pr` commands now call these facades for compatibility, while natural-language PR Pool execution is left to capability/tool selection rather than a dedicated Gateway regex fast path.
 
 - Capability Planner turns selected capabilities into a `CapabilityPlan`: a goal,
   ordered steps, dependencies, required capabilities, and `single`/`serial`/`parallel`/`mixed`

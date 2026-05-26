@@ -10,6 +10,7 @@ import { executeWithToolGateway } from '../tool-gateway';
 import { taskRuntime } from '../task-runtime';
 import type { ToolGatewayPolicy } from '../types';
 import { runtimeTaskTypes } from '../task-types';
+import { booleanValue, stringArrayValue } from '../task-dispatcher/utils';
 import type { DispatchResult } from '../task-dispatcher';
 import type { RuntimeTask } from '../types';
 
@@ -137,7 +138,11 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
           objective: worktreeItem.codeAgentPrompt,
           contextBrief: formatPrItemContext(worktreeItem, codeAgentBriefPath),
           codeAgentBriefPath,
-          executionMode: process.env.OMNI_CODE_EXECUTION_MODE === 'direct' ? 'direct' : 'patch_proposal',
+          dryRun: booleanValue(payload.dryRun),
+          executionMode: resolvePrPoolDevelopExecutionMode(payload),
+          command: stringValue(payload.command),
+          args: stringArrayValue(payload.args),
+          promptArg: stringValue(payload.promptArg),
           executor,
           prItemId,
         },
@@ -253,6 +258,16 @@ async function failPrPoolTask(task: RuntimeTask, reason: string): Promise<Dispat
     sourceAgentId: 'pr-pool-handler',
   });
   return { taskId: task.id, status: 'failed', targetAgentId: task.targetAgentId, reason };
+}
+
+function resolvePrPoolDevelopExecutionMode(payload: Record<string, unknown>): 'direct' | 'patch_proposal' {
+  if (payload.executionMode === 'patch_proposal') {
+    return 'patch_proposal';
+  }
+  if (booleanValue(payload.dryRun)) {
+    return 'direct';
+  }
+  return stringValue(process.env.OMNI_CODE_EXECUTION_MODE) === 'patch_proposal' ? 'patch_proposal' : 'direct';
 }
 
 function buildCodeAgentPrompt(item: PRItem, codeAgentBriefPath: string): string {

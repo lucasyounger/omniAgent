@@ -45,6 +45,7 @@ through Team Runtime.
   status queries, and low-confidence clarification. Schedule times supplied by
   channel users are interpreted as CST (UTC+8), normalized to UTC for cron
   storage/execution, and converted back to CST in schedule-list replies.
+- Natural-language PR Pool execution requests such as “将 PR pool 中的需求执行一下” route deterministically to `pr_pool.cron_scan`, which scans ready PR Pool items and dispatches eligible development work through PR Pool / CodeAgent before OmniRouterAgent fallback. Requests naming a specific `pr-...` item route to `pr_pool.develop`.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records

@@ -33,7 +33,9 @@ id and the durable `teamTaskId` / `teamRunId`.
 - Default allowed root is `L:\Code`.
 - `start-code-task`, RuntimeTask dispatch, and `run-code-task-workflow`
   are audit-only after the workspace boundary passes; they do not require an
-  additional Tool Gateway approval token.
+  additional Tool Gateway approval token. RuntimeTask dispatch accepts both
+  canonical payload fields and legacy top-level code task metadata for
+  `workspacePath`, execution mode, executor, command, arguments, and prompt flag.
 - PR Pool items are already reviewed before entering development, so CodeAgent
   should execute the confirmed slice in its assigned workspace without a second
   approval gate.

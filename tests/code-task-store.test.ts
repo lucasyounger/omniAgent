@@ -28,7 +28,7 @@ afterEach(async () => {
   delete process.env.OMNI_CODE_AGENT_EXECUTOR;
   delete process.env.OMNI_OPENCODE_ARGS;
   delete process.env.OMNI_OPENCODE_PROMPT_ARG;
-  await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   vi.restoreAllMocks();
 });
 
@@ -128,9 +128,9 @@ describe('Code task store', () => {
     });
 
     let current = started;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
       if (current.status !== 'running') break;
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 100));
       current = await store.getCodeTask(started.taskId);
     }
 

@@ -20,6 +20,10 @@ describe('agent and workflow registry', () => {
       kind: 'agent',
       capabilities: expect.arrayContaining(['routing', 'task_planning', 'final_response']),
     });
+    expect(getRegistryEntry('code-agent')).toMatchObject({
+      kind: 'agent',
+      description: expect.stringContaining('user-confirmed PR Pool proposals as ready items'),
+    });
     expect(catalog.runtimeServices.map(entry => entry.id)).toEqual([
       'research-agent',
       'notify-agent',

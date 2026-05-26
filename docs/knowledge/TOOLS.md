@@ -54,6 +54,21 @@ items have already passed requirement review, so develop/cron scan may dispatch
 CodeAgent work directly inside the assigned allowed workspace; repeated develop
 approval tokens are no longer part of the execution gate.
 
+## RuntimeTask and PR Pool Native Facades
+
+RuntimeTask now has Mastra-native facade tools for generic durable work:
+`create-runtime-task`, `dispatch-runtime-task`, `create-and-dispatch-runtime-task`,
+`get-runtime-task-status`, `list-runtime-tasks`, `cancel-runtime-task`, and
+`retry-runtime-task`. These tools keep schema validation and Tool Gateway policy at
+the agent boundary while preserving Task Dispatcher as the execution backend.
+
+PR Pool now exposes native facades for list/get/create/ingest/confirm/develop/scan/
+archive/pause/retry/delete operations. Read tools use `pr_pool.read`; normal writes
+use `pr_pool.write`; destructive delete uses `pr_pool.delete`; develop and batch scan
+remain approval-gated through `pr_pool.develop` and `pr_pool.batch_develop`. The
+Gateway `/pr` command is a compatibility layer over these tools instead of owning a
+separate PR Pool implementation.
+
 ## Req Runtime Tools
 
 Req document create/list/status, confirmation/rejection, item status updates, and

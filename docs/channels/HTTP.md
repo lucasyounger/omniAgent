@@ -41,6 +41,7 @@ prompt instead of executing commands.
   priority updates.
 - `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
+- `/pr list`, `/pr show <id>`, `/pr confirm <id>`, `/pr delete <id>`, `/pr pause <id>`, `/pr retry <id>`, `/pr archive <id>`, and `/pr develop <id>` remain compatibility commands. Internally they call the PR Pool Mastra tool facades, so command handling shares schema, Tool Gateway policy, and RuntimeTask dispatch behavior with Agent tool calls.
 - `/task <workspacePath> :: <objective>` creates a `code.task`
   RuntimeTask and dispatches it through Task Dispatcher. CodeAgent starts once
   the workspace path is inside `OMNI_ALLOWED_WORKSPACES`; Tool Gateway records an
@@ -87,6 +88,8 @@ Supported runtime intents are parsed before OmniRouterAgent fallback:
 - `手动跑一次第3个任务` creates a `schedule.run_now` RuntimeTask. Direct code
   schedules use the CodeAgent allowed-workspace boundary and audit records rather
   than an extra Tool Gateway approval.
+PR Pool execution requests are no longer intercepted by a dedicated Gateway PR Pool regex fast path. They should route through Capability Registry/tool selection or OmniRouterAgent native tool calling, which can choose `develop-pr-pool-item` or `scan-pr-pool-ready-items` and then create the corresponding RuntimeTask.
+
 - `通知我：hello` creates a `notify.send_channel_message` task.
 - `状态` returns Gateway runtime status.
 

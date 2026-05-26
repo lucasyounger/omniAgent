@@ -920,4 +920,43 @@ describe('Gateway message handler', () => {
     expect(develop[0].text).toContain('已开始开发');
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
+
+  it('does not fast-path natural language PR pool execution through gateway regex', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';
+    const { handleChannelMessage } = await loadHandler();
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Natural language PR execution',
+      objective: 'Route PR pool execution through native tool selection',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['gateway does not regex-dispatch cron scan'],
+      codeAgentPrompt: 'Implement natural language routing',
+    });
+    await prPoolRuntime.update(item.id, {
+      status: 'ready',
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('将 PR pool 中的需求执行一下', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const tasks = await taskRuntime.listTasks();
+
+    expect(replies[0].text).not.toContain('PR Pool ready 需求扫描已触发');
+    expect(replies[0].text).not.toContain('Dispatch: dispatched');
+    expect(tasks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        targetAgentId: 'pr-pool-runtime',
+        metadata: expect.objectContaining({ taskType: 'pr_pool.cron_scan' }),
+      }),
+    ]));
+  });
 });

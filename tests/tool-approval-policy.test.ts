@@ -14,6 +14,8 @@ async function loadTools() {
     ...(await import('../src/mastra/tools/cron-tools')),
     ...(await import('../src/mastra/tools/memory-tools')),
     ...(await import('../src/mastra/tools/team-runtime-tools')),
+    ...(await import('../src/mastra/tools/runtime-task-tools')),
+    ...(await import('../src/mastra/tools/pr-pool-tools')),
     ...(await import('../src/mastra/runtime/tool-gateway')),
     ...(await import('../src/mastra/runtime/approval-store')),
   };
@@ -135,28 +137,54 @@ describe('tool approval policy', () => {
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
 
-  it('runs immediate code schedules without creating approval requests after workspace allowlist', async () => {
-    const { createCronJobTool, runCronJobNowTool } = await loadTools();
-    const job = await executeTool<
-      { name: string; schedule: string; task: string; taskType: string; targetAgentId: string; payload: Record<string, unknown> },
-      { id: string }
-    >(createCronJobTool, {
-      name: 'manual direct code run',
-      schedule: 'daily 09:30',
-      task: 'change files',
-      taskType: 'code.task',
-      targetAgentId: 'code-agent',
-      payload: {
-        workspacePath: tempRoot,
-        objective: 'change files',
-        executionMode: 'patch_proposal',
-      },
+
+  it('allows RuntimeTask and PR Pool read/write facades without dangerous approval', async () => {
+    const { createRuntimeTaskTool, listRuntimeTasksTool, createPrPoolItemTool, listPrPoolItemsTool } = await loadTools();
+
+    await expect(
+      executeTool(createRuntimeTaskTool, {
+        objective: 'record durable work',
+        taskType: 'goal.create',
+      }),
+    ).resolves.toMatchObject({
+      sourceAgentId: 'omni-router-agent',
+      metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }),
     });
 
-    await expect(executeTool(runCronJobNowTool, { id: job.id })).resolves.toMatchObject({
-      id: job.id,
-      lastRunStatus: 'started',
-    });
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toHaveLength(1);
+    await expect(
+      executeTool(createPrPoolItemTool, {
+        title: 'Native PR facade',
+        objective: 'Create PR Pool item through tool facade',
+        workspaceRepoPath: tempRoot,
+        impact: { modules: ['tests'], risk: 'low' },
+        acceptanceCriteria: ['item exists'],
+        codeAgentPrompt: 'Implement test fixture',
+      }),
+    ).resolves.toMatchObject({ title: 'Native PR facade' });
+    await expect(executeTool(listPrPoolItemsTool, {})).resolves.toHaveLength(1);
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
-});
+
+  it('requires approval for dangerous RuntimeTask and PR Pool facades', async () => {
+    const { cancelRuntimeTaskTool, developPrPoolItemTool, scanPrPoolReadyItemsTool, deletePrPoolItemTool, createRuntimeTaskTool, createPrPoolItemTool } = await loadTools();
+    const task = await executeTool<{ objective: string; taskType: string }, { id: string }>(createRuntimeTaskTool, {
+      objective: 'cancel me',
+      taskType: 'goal.create',
+    });
+    const item = await executeTool<Record<string, unknown>, { id: string }>(createPrPoolItemTool, {
+      title: 'Dangerous PR facade',
+      objective: 'Check dangerous PR Pool tools',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['tests'], risk: 'low' },
+      acceptanceCriteria: ['approval required'],
+      codeAgentPrompt: 'Implement approval fixture',
+      initialStatus: 'ready',
+    });
+
+    await expect(executeTool(cancelRuntimeTaskTool, { taskId: task.id })).rejects.toThrow('Approval required');
+    await expect(executeTool(developPrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
+    await expect(executeTool(scanPrPoolReadyItemsTool, {})).rejects.toThrow('Approval required');
+    await expect(executeTool(deletePrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
+    expect(await readPendingApprovalRequests()).toHaveLength(4);
+  });});

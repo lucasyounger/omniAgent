@@ -8,16 +8,18 @@ import { booleanValue, codeTaskExecutorValue, readPayload, stringArrayValue, str
 
 export async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResult> {
   const payload = readPayload(task);
-  const workspacePath = stringValue(payload.workspacePath);
+  const metadata = task.metadata || {};
+  const workspacePath = stringValue(payload.workspacePath) || stringValue(metadata.workspacePath);
   const objective = stringValue(payload.objective) || task.objective;
-  const contextBrief = stringValue(payload.contextBrief);
-  const approvalToken = stringValue(payload.approvalToken);
-  const dryRun = booleanValue(payload.dryRun);
-  const executionMode = payload.executionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
-  const executor = codeTaskExecutorValue(payload.executor);
-  const command = stringValue(payload.command);
-  const args = stringArrayValue(payload.args);
-  const promptArg = stringValue(payload.promptArg);
+  const contextBrief = stringValue(payload.contextBrief) || stringValue(metadata.contextBrief);
+  const approvalToken = stringValue(payload.approvalToken) || stringValue(metadata.approvalToken);
+  const dryRun = booleanValue(payload.dryRun) || booleanValue(metadata.dryRun);
+  const requestedExecutionMode = payload.executionMode || metadata.executionMode;
+  const executionMode = requestedExecutionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
+  const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(metadata.executor);
+  const command = stringValue(payload.command) || stringValue(metadata.command);
+  const args = stringArrayValue(payload.args).length ? stringArrayValue(payload.args) : stringArrayValue(metadata.args);
+  const promptArg = stringValue(payload.promptArg) || stringValue(metadata.promptArg);
 
   if (!workspacePath) {
     await taskRuntime.transition({

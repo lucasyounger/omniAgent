@@ -10,6 +10,8 @@ execution through Team Runtime.
 - `src/mastra/agents/code-agent.ts`
 - `src/mastra/lib/code-task-store.ts`
 - `src/mastra/tools/code-tools.ts`
+- `src/mastra/tools/pr-pool-tools.ts` (read-only context tools)
+- `src/mastra/tools/runtime-task-tools.ts` (status/list context tools)
 - `src/mastra/lib/team-runtime-store.ts`
 
 ## Key Behavior
@@ -22,6 +24,9 @@ execution through Team Runtime.
 - Task Dispatcher can dispatch `code-agent` Runtime Tasks into code executor
   execution. Gateway-created `/task` requests use this path and rely on the same
   allowed-workspace boundary plus Tool Gateway audit record before the CLI spawns.
+  The dispatcher accepts both canonical `metadata.payload.workspacePath` and
+  legacy top-level `metadata.workspacePath` records so previously routed code tasks
+  do not fail before reaching CodeAgent.
 - Supports `executor: claude_code | opencode | custom` metadata. `opencode`
   resolves to opencode-specific command/argument env overrides when present, while
   `custom` uses the explicit command override path.
@@ -32,6 +37,14 @@ execution through Team Runtime.
 - Writes Team Runtime events for progress.
 - Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
 - Sends completion or failure inbox messages.
+- When a user-confirmed requirement is recorded into PR Pool via
+  `pr_pool.ingest_proposal`, the proposal must include
+  `confirmation: "confirmed"` so PR Pool creates a `ready` item. Generated,
+  exploratory, or ambiguous requirements should omit confirmation and remain
+  `draft` until reviewed.
+
+- Uses PR Pool read tools and RuntimeTask status/list tools to inspect assigned PR slice context and parent RuntimeTask state.
+- Does not expose PR Pool develop/scan/write tools, so CodeAgent cannot recursively start PR Pool development.
 
 ## Tools
 
@@ -39,6 +52,10 @@ execution through Team Runtime.
 - `get-code-task-status`: query the status of an in-progress or
   completed code task.
 - `list-code-tasks`: list recent code task records.
+- `get-pr-pool-item`: inspect the PR Pool item that spawned the coding task.
+- `list-pr-pool-items`: inspect relevant PR Pool context without mutating it.
+- `get-runtime-task-status`: inspect parent RuntimeTask status.
+- `list-runtime-tasks`: list RuntimeTasks when debugging assignment context.
 
 ## Known Pitfalls
 

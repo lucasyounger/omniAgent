@@ -14,7 +14,7 @@ const agentRegistry: RegistryEntry[] = [
     id: 'code-agent',
     kind: 'agent',
     name: 'CodeAgent',
-    description: 'Executes local coding work through the code task workflow.',
+    description: 'Executes local coding work through the code task workflow and records user-confirmed PR Pool proposals as ready items.',
     capabilities: ['code_task', 'repository_editing'],
     entrypoint: 'src/mastra/agents/code-agent.ts#codeAgent',
     tags: ['coding'],

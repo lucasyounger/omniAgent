@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { formatCstDateTime } from '../../../lib/time';
 import { prPoolRoot, prPoolRunsRoot } from '../../lib/paths';
 
 export type PRItemStatus =
@@ -190,7 +191,7 @@ function createId(prefix: string): string {
 
 export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem> {
   const items = await readItems();
-  const now = new Date().toISOString();
+  const now = formatCstDateTime(new Date());
   const item: PRItem = {
     id: createId('pr'),
     title: input.title,
@@ -261,7 +262,7 @@ export async function updatePrPoolItem(id: string, patch: Partial<PRItem>): Prom
     ...patch,
     id: items[index].id,
     createdAt: items[index].createdAt,
-    updatedAt: new Date().toISOString(),
+    updatedAt: formatCstDateTime(new Date()),
   };
   items[index] = updated;
   await writeItems(items);
@@ -525,7 +526,7 @@ export async function appendPrPoolEvent(event: Omit<PRPoolEvent, 'id' | 'timesta
   const saved: PRPoolEvent = {
     ...event,
     id: createId('pr-event'),
-    timestamp: new Date().toISOString(),
+    timestamp: formatCstDateTime(new Date()),
   };
   await fs.appendFile(eventsFile, `${JSON.stringify(saved)}\n`, 'utf8');
   return saved;

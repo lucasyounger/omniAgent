@@ -18,6 +18,8 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/runtime/task-runtime.ts`
 - `src/mastra/runtime/task-dispatcher.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
+- `src/mastra/tools/runtime-task-tools.ts`
+- `src/mastra/tools/pr-pool-tools.ts`
 - `src/mastra/workflows/composite-task-workflow.ts`
 - `src/mastra/agents/omni-router-agent.ts`
 - `src/mastra/agents/code-agent.ts`
@@ -62,6 +64,25 @@ work is delegated, executed, reported, and recovered across all agents.
 - `recover-interrupted-team-runs`
 - `mark-timed-out-team-runs`
 
+- `create-runtime-task`
+- `dispatch-runtime-task`
+- `create-and-dispatch-runtime-task`
+- `get-runtime-task-status`
+- `list-runtime-tasks`
+- `cancel-runtime-task`
+- `retry-runtime-task`
+- `list-pr-pool-items`
+- `get-pr-pool-item`
+- `create-pr-pool-item`
+- `ingest-pr-pool-proposal`
+- `confirm-pr-pool-item`
+- `develop-pr-pool-item`
+- `scan-pr-pool-ready-items`
+- `archive-pr-pool-item`
+- `pause-pr-pool-item`
+- `retry-pr-pool-item`
+- `delete-pr-pool-item`
+
 ## Contract
 
 - User-facing task lifecycle changes should go through TaskRuntime.
@@ -84,6 +105,11 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Current Behavior
 
+- RuntimeTask and PR Pool now have Mastra-native tool facades. Agent-facing routing should prefer these `createTool(...)` facades for schema validation, Tool Gateway audit/approval, and task creation, while Task Dispatcher remains the durable execution backend.
+- `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
+- The generic RuntimeTask facade exposes create, dispatch, create-and-dispatch, status/list, cancel, and retry operations so future Goal/Req/Schedule/Notify facades do not duplicate `taskRuntime.createTask(...)` + `dispatchRuntimeTask(...)` code.
+- Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
+- CodeAgent receives only PR Pool/RuntimeTask read-status tools in addition to code tools, so it can inspect assigned context without recursively starting PR Pool development. CronAgent receives RuntimeTask status/dispatch helpers plus the approval-gated PR Pool scan tool for scheduler/admin operation.
 - CodeAgent automatically creates a Team Task if `start-code-task` is
   called without `teamTaskId`.
 - CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
@@ -196,7 +222,10 @@ work is delegated, executed, reported, and recovered across all agents.
   claude_code | opencode | custom`, plus command override metadata. Confirmed PR
   Pool items are already reviewed, so develop dispatch does not require an
   additional approval token; execution is bounded by the assigned allowed
-  workspace and audited Tool Gateway records. If child dispatch fails
+  workspace and audited Tool Gateway records. Develop dispatch defaults the child
+  CodeAgent task to direct execution so confirmed PR slices actually start the
+  selected local executor; callers may still request `executionMode:
+  patch_proposal` for review-only handoff. If child dispatch fails
   synchronously, the PR Pool item is moved to `failed` with a runtime blocking
   reason.
 - PR Pool cron scans reconcile active development runs before and after scheduling:
@@ -205,13 +234,20 @@ work is delegated, executed, reported, and recovered across all agents.
 - `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
 - PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
   `pr_pool.ingest_proposal`, validates required title/objective/source/origin/
-  impact/acceptance/prompt fields, creates a `draft` PR item through
-  `ingestPrPoolProposal`, and returns `prItemId/status/origin` in the Team Run
-  result. The ingest route is the shared Skill/CLI/Goal entrypoint, preserves
-  origin/source/impact/acceptance/test metadata and the CodeAgent handoff prompt,
-  and does not confirm, develop, or create a CodeAgent task. Re-ingesting the same
-  explicit `idempotencyKey` returns the existing PR item and records a
-  deduplication event.
+  impact/acceptance/prompt fields, and creates either a `draft` item
+  (`confirmation: required` or omitted) or a `ready` item (`confirmation:
+  confirmed`) through `ingestPrPoolProposal`. The ingest route is the shared
+  Skill/CLI/Goal entrypoint. CodeAgent must include `confirmation: confirmed`
+  when recording a user-confirmed requirement into PR Pool; generated or
+  ambiguous requirements should remain draft until reviewed. Canonical
+  item fields store impact, acceptance, test, non-goal, constraint, reference,
+  tags, and CodeAgent handoff prompt data directly; `metadata` is intentionally
+  compact and only keeps non-duplicated auxiliary fields such as confirmation,
+  origin, and idempotency key. Active PR Pool item timestamps are human-facing
+  CST strings formatted as `YYYY-MM-DD HH:mm`. The route does not confirm,
+  develop, or create a CodeAgent task. Re-ingesting the same explicit
+  `idempotencyKey` returns the existing PR item and records a deduplication
+  event.
 - PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
   under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
   The CodeAgent payload includes `codeAgentBriefPath`, and the context brief

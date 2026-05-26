@@ -71,33 +71,19 @@ export function proposalToCreatePRItemInput(proposal: PRPoolProposal, workspaceR
     references,
     design4Plus1: proposal.design4Plus1,
     tags: proposal.tags,
-    metadata: {
+    metadata: compactProposalMetadata(proposal, confirmation),
+  };
+}
+
+function compactProposalMetadata(proposal: PRPoolProposal, confirmation: PRPoolProposalConfirmation): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries({
       ...proposal.metadata,
       confirmation,
       origin: proposal.origin,
-      source: proposal.source,
-      impact: proposal.impact,
-      acceptanceCriteria: proposal.acceptanceCriteria,
-      testCommand: proposal.testCommand,
-      nonGoals,
-      constraints,
-      references,
-      tags: proposal.tags,
       idempotencyKey: proposal.idempotencyKey,
-      codeAgentPrompt: proposal.codeAgentPrompt,
-      proposalSummary: {
-        title: proposal.title,
-        objective: proposal.objective,
-        source: proposal.source,
-        confirmation,
-        impact: proposal.impact,
-        acceptanceCriteria: proposal.acceptanceCriteria,
-        nonGoals,
-        constraints,
-        references,
-      },
-    },
-  };
+    }).filter(([, value]) => value !== undefined),
+  );
 }
 
 export function validatePrPoolProposal(value: unknown): string[] {

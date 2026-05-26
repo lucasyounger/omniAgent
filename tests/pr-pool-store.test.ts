@@ -37,6 +37,8 @@ describe('PR pool store', () => {
 
     expect(item.id).toMatch(/^pr-[a-z0-9]+-[a-f0-9]{4}$/);
     expect(item.status).toBe('draft');
+    expect(item.createdAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(item.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Objective');
     await expect(store.listPrPoolItems({ status: 'draft' })).resolves.toHaveLength(1);
 
@@ -54,7 +56,7 @@ describe('PR pool store', () => {
 
     const updated = await store.updatePrPoolItem(item.id, { priority: 'high' });
     expect(updated.priority).toBe('high');
-    expect(Date.parse(updated.updatedAt)).toBeGreaterThanOrEqual(Date.parse(item.updatedAt));
+    expect(updated.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 
     const deleted = await store.deletePrPoolItem(item.id);
     expect(deleted.status).toBe('deleted');
@@ -121,21 +123,13 @@ describe('PR pool store', () => {
       metadata: {
         confirmation: 'confirmed',
         origin: { type: 'claudecode', artifactPath: '.omc/proposals/add-proposal-ingest.md' },
-        source: 'exploration',
-        impact: { modules: ['PR Pool'], files: ['src/mastra/runtime/pr-pool/pr-pool-store.ts'], risk: 'medium' },
-        acceptanceCriteria: ['draft item is created'],
-        nonGoals: ['Do not develop immediately'],
-        constraints: ['Keep CodeAgent task creation out of ingest'],
-        references: [{ type: 'artifact', id: 'artifact-1', summary: 'Confirmed design' }],
         idempotencyKey: 'file:.omc/proposals/add-proposal-ingest.md:abc',
-        codeAgentPrompt: 'Implement proposal ingest',
-        proposalSummary: {
-          title: 'Add proposal ingest',
-          source: 'exploration',
-          confirmation: 'confirmed',
-        },
       },
     });
+    expect(input.metadata).not.toHaveProperty('impact');
+    expect(input.metadata).not.toHaveProperty('acceptanceCriteria');
+    expect(input.metadata).not.toHaveProperty('codeAgentPrompt');
+    expect(input.metadata).not.toHaveProperty('proposalSummary');
   });
 
   it('rejects proposals missing required fields', async () => {

@@ -202,7 +202,7 @@ const baseRuntimeTaskTypeRegistry: Record<RuntimeTaskType, RuntimeTaskTypeDefini
     taskType: runtimeTaskTypes.prPoolIngestProposal,
     defaultTargetAgentId: 'pr-pool-runtime',
     handler: 'pr-pool-handler',
-    description: 'Ingest a PR Pool proposal as a draft PR item.',
+    description: 'Ingest a PR Pool proposal as draft or ready based on proposal.confirmation.',
   },
   [runtimeTaskTypes.prPoolCronScan]: {
     taskType: runtimeTaskTypes.prPoolCronScan,

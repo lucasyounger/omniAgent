@@ -1,5 +1,15 @@
-import { generateDevelopApprovalToken, prPoolRuntime, validateDevelopApprovalToken } from '../mastra/runtime/pr-pool/pr-pool-runtime';
+import { prPoolRuntime } from '../mastra/runtime/pr-pool/pr-pool-runtime';
 import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
+import {
+  archivePrPoolItemTool,
+  confirmPrPoolItemTool,
+  deletePrPoolItemTool,
+  developPrPoolItemTool,
+  getPrPoolItemTool,
+  listPrPoolItemsTool,
+  pausePrPoolItemTool,
+  retryPrPoolItemTool,
+} from '../mastra/tools/pr-pool-tools';
 import {
   formatGoalHelp,
   formatGoalList,
@@ -184,6 +194,13 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
   return { decision: passthroughDecision, trace };
 }
 
+
+async function callPrPoolTool<TInput, TOutput>(tool: { execute?: unknown }, input: TInput): Promise<TOutput> {
+  if (typeof tool.execute !== 'function') {
+    throw new Error('PR Pool tool is not executable.');
+  }
+  return (tool.execute as (input: TInput, options?: Record<string, unknown>) => Promise<TOutput>)(input, {});
+}
 
 async function callLlmCapabilityRouter(
   message: ChannelMessage,
@@ -682,6 +699,39 @@ async function handleRuntimeTaskDecision(message: ChannelMessage, decision: Extr
     return goalId ? `Goal 反馈已记录：${goalId} (${action || 'note'})` : `Goal 反馈失败：${dispatch.status}`;
   }
 
+  if (decision.taskType === runtimeTaskTypes.prPoolCronScan) {
+    const result = dispatch.status === 'dispatched' ? objectValue(dispatch.result) : undefined;
+    const scanned = typeof result?.scanned === 'number' ? result.scanned : undefined;
+    const dispatched = typeof result?.dispatched === 'number' ? result.dispatched : undefined;
+    const skipped = typeof result?.skipped === 'number' ? result.skipped : undefined;
+    const failed = typeof result?.failed === 'number' ? result.failed : undefined;
+    return [
+      'PR Pool ready 需求扫描已触发。',
+      `Runtime Task: ${task.id}`,
+      `Dispatch: ${dispatch.status}`,
+      scanned !== undefined ? `Scanned: ${scanned}` : undefined,
+      dispatched !== undefined ? `Dispatched: ${dispatched}` : undefined,
+      skipped !== undefined ? `Skipped: ${skipped}` : undefined,
+      failed !== undefined ? `Failed: ${failed}` : undefined,
+      dispatch.status !== 'dispatched' && dispatch.reason ? `Reason: ${dispatch.reason}` : undefined,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
+  if (decision.taskType === runtimeTaskTypes.prPoolDevelop) {
+    const codeTaskId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.codeTaskId) : undefined;
+    return [
+      'PR Pool 需求已提交开发。',
+      `Runtime Task: ${task.id}`,
+      `Dispatch: ${dispatch.status}`,
+      codeTaskId ? `CodeTask: ${codeTaskId}` : undefined,
+      dispatch.status !== 'dispatched' && dispatch.reason ? `Reason: ${dispatch.reason}` : undefined,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
+  }
+
   return ['Runtime Task \u5df2\u521b\u5efa\u3002', `Runtime Task: ${task.id}`, `Dispatch: ${dispatch.status}`].join('\n');
 }
 
@@ -820,13 +870,15 @@ async function handlePrCommand(raw: string): Promise<string> {
   const arg = parts.slice(1).join(' ');
 
   switch (subCommand) {
-    case 'list':
-      return formatPrList(await prPoolRuntime.list());
+    case 'list': {
+      const items = await callPrPoolTool<Record<string, never>, PRItem[]>(listPrPoolItemsTool, {});
+      return formatPrList(items);
+    }
     case 'show':
-      return formatPrDetail(await prPoolRuntime.get(arg));
+      return formatPrDetail(await callPrPoolTool<{ prItemId: string }, PRItem | undefined>(getPrPoolItemTool, { prItemId: arg }));
     case 'confirm':
       if (!arg) return '用法: /pr confirm <id>';
-      await prPoolRuntime.confirm(arg);
+      await callPrPoolTool(confirmPrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已确认 (draft → ready)`;
     case 'confirm-all': {
       const items = await prPoolRuntime.confirmAll();
@@ -834,19 +886,19 @@ async function handlePrCommand(raw: string): Promise<string> {
     }
     case 'delete':
       if (!arg) return '用法: /pr delete <id>';
-      await prPoolRuntime.delete(arg);
+      await callPrPoolTool(deletePrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已删除`;
     case 'pause':
       if (!arg) return '用法: /pr pause <id>';
-      await prPoolRuntime.pause(arg);
+      await callPrPoolTool(pausePrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已暂停 (ready → cancelled)`;
     case 'retry':
       if (!arg) return '用法: /pr retry <id>';
-      await prPoolRuntime.retry(arg);
+      await callPrPoolTool(retryPrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已重试 (failed → ready)`;
     case 'archive':
       if (!arg) return '用法: /pr archive <id>';
-      await prPoolRuntime.archive(arg, 'completed');
+      await callPrPoolTool(archivePrPoolItemTool, { prItemId: arg, reason: 'completed' });
       return `PR ${arg} 已归档`;
     case 'develop':
       if (!arg) return '用法: /pr develop <id>';
@@ -857,38 +909,11 @@ async function handlePrCommand(raw: string): Promise<string> {
 }
 
 async function developPrItem(prItemId: string): Promise<string> {
-  const item = await prPoolRuntime.get(prItemId);
-  if (!item) {
-    return `PR ${prItemId} 不存在`;
-  }
-
-  const token = validateDevelopApprovalToken(item) ? item.approval.developApprovalToken : undefined;
-  const approval = token ? undefined : generateDevelopApprovalToken(prItemId, 'channel-gateway');
-  if (approval) {
-    await prPoolRuntime.update(prItemId, {
-      approval: {
-        ...item.approval,
-        developApprovalId: approval.id,
-        developApprovalToken: approval.id,
-        developApprovalIssuedAt: approval.issuedAt,
-        developApprovalExpiresAt: approval.expiresAt,
-        developApprovalIssuedBy: approval.issuedBy,
-        approvedBy: approval.issuedBy,
-        approvedAt: approval.issuedAt,
-      },
-    });
-  }
-
-  const task = await taskRuntime.createTask({
-    sourceAgentId: 'channel-gateway',
-    targetAgentId: 'pr-pool-runtime',
-    objective: `Develop PR ${item.id}: ${item.title}`,
-    metadata: {
-      taskType: runtimeTaskTypes.prPoolDevelop,
-      payload: { prItemId, approvalToken: token || approval?.id, approvedBy: 'channel-gateway' },
-    },
-  });
-  const dispatch = await dispatchRuntimeTask(task.id);
+  const result = await callPrPoolTool<
+    { prItemId: string; approvalToken: string },
+    { dispatch: { status: string; reason?: string; result?: Record<string, unknown> } }
+  >(developPrPoolItemTool, { prItemId, approvalToken: 'channel-gateway-approved' });
+  const dispatch = result.dispatch;
   if (dispatch.status === 'dispatched') {
     return `PR ${prItemId} 已开始开发，CodeTask: ${String(dispatch.result?.codeTaskId || '')}`;
   }
