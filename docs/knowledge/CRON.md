@@ -61,7 +61,7 @@ and normalized to UTC before it is written to the cron store. Runtime due checks
 compare against the stored UTC value. Channel-facing schedule lists convert the
 stored UTC schedule back to CST for display.
 One-time jobs are paused after a run is started to avoid repeat execution.
-Manual execution is available through the `run-cron-job-now` tool.
+Manual execution is available through the `run-cron-job-now` tool. New user-facing schedule creation should prefer `create-schedule-task`, which creates a `schedule.create` RuntimeTask before the schedule record is written.
 
 Cron execution creates a Runtime Task, then invokes Task Dispatcher once for
 that task. Cron is the source, the configured `targetAgentId` is the target,

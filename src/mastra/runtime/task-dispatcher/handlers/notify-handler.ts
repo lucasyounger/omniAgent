@@ -1,5 +1,5 @@
+import { createDelivery } from '../../../../gateway/gateway-store';
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../../lib/team-runtime-store';
-import { queueChannelNotificationTool } from '../../../tools/notify-tools';
 import { taskRuntime } from '../../task-runtime';
 import { runtimeTaskTypes } from '../../task-types';
 import type { RuntimeTask } from '../../types';
@@ -46,23 +46,16 @@ export async function dispatchNotifySendChannelMessageTask(task: RuntimeTask): P
   });
 
   try {
-    const delivery = (await queueChannelNotificationTool.execute!(
-      {
-        target,
-        text,
-        idempotencyKey: stringValue(payload.idempotencyKey),
-        maxAttempts: numberValue(payload.maxAttempts),
-        sourceInboxMessageId: stringValue(payload.sourceInboxMessageId),
-        taskId: stringValue(payload.taskId) || task.id,
-        runId: stringValue(payload.runId),
-        resultRef: stringValue(payload.resultRef),
-      },
-      {},
-    )) as {
-      deliveryId: string;
-      idempotencyKey: string;
-      status: 'pending' | 'sent' | 'failed' | 'dead_letter';
-    };
+    const delivery = await createDelivery({
+      target,
+      text,
+      idempotencyKey: stringValue(payload.idempotencyKey),
+      maxAttempts: numberValue(payload.maxAttempts),
+      sourceInboxMessageId: stringValue(payload.sourceInboxMessageId),
+      taskId: stringValue(payload.taskId) || task.id,
+      runId: stringValue(payload.runId),
+      resultRef: stringValue(payload.resultRef),
+    });
 
     const result = await completeTeamRun({
       taskId: task.id,

@@ -35,6 +35,7 @@ import {
 import { orchestrateChannelMessage, orchestratorModelOutputToDecision, parseOrchestratorModelOutput, routeRuntimeCapabilities, targetFromMessage, channelSourceFromMessage, type OrchestratorDecision } from '../mastra/runtime/orchestrator';
 import { dispatchCapabilityPlan, dispatchRuntimeTask } from '../mastra/runtime/task-dispatcher';
 import { taskRuntime } from '../mastra/runtime/task-runtime';
+import { createAndDispatchRuntimeTask } from '../mastra/tools/runtime-task-tools';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import {
   clearConversationSemanticState,
@@ -853,24 +854,22 @@ async function handleTaskCommand(message: ChannelMessage, raw: string) {
     return '\u683c\u5f0f\u9519\u8bef\u3002\u7528\u6cd5\uff1a/task <workspacePath> :: <objective>';
   }
 
-  const task = await taskRuntime.createTask({
+  const { task, dispatch } = await createAndDispatchRuntimeTask({
     sourceAgentId: 'channel-gateway',
     targetAgentId: 'code-agent',
     requestedBy: `${message.channel}:${message.senderId}`,
     objective,
+    taskType: runtimeTaskTypes.codeTask,
+    payload: {
+      workspacePath,
+      objective,
+      contextBrief: `Requested from ${message.channel} conversation ${message.conversationId}. Reply result through Omni Gateway.`,
+      executionMode: 'direct',
+    },
     metadata: {
-      taskType: runtimeTaskTypes.codeTask,
       source: channelSourceFromMessage(message),
-      payload: {
-        workspacePath,
-        objective,
-        contextBrief: `Requested from ${message.channel} conversation ${message.conversationId}. Reply result through Omni Gateway.`,
-        executionMode: 'direct',
-      },
     },
   });
-
-  const dispatch = await dispatchRuntimeTask(task.id);
 
   return [
     '\u4efb\u52a1\u5df2\u521b\u5efa\u3002',

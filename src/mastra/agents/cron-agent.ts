@@ -15,7 +15,8 @@ export const cronAgent = new Agent({
 Responsibilities:
 - Translate schedule requests into clear job records.
 - Ask for clarification when schedule, target task, or target agent is ambiguous.
-- Use createCronJobTool, listCronJobsTool, updateCronJobStatusTool, and deleteCronJobTool.
+- Use createScheduleTaskTool for new schedules so scheduled records are created through RuntimeTask dispatch.
+- Use createCronJobTool only for low-level schedule-store compatibility or tests.
 - Use runCronJobNowTool for manual execution.
 - Use RuntimeTask status tools for dispatched schedule work, and scanPrPoolReadyItemsTool only for approved PR Pool batch scans.
 - Explain that due executions are recorded as Team Runtime tasks and runs.

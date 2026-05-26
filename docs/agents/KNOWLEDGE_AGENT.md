@@ -27,6 +27,8 @@ threads; docs memory remains the auditable long-term knowledge layer.
   proposals; direct writes are reserved for explicit user-provided facts and
   low-risk episodic summaries.
 
+- Public Router-facing knowledge facades (`refresh-knowledge-memory-index`, `append-knowledge-episode`, `propose-knowledge-doc-update`) create `knowledge.*` RuntimeTasks; KnowledgeAgent keeps the low-level memory tools for actual file-backed updates.
+
 ## Tools
 
 - `list-memory-docs`: list available memory documents.

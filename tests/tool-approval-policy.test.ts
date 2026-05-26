@@ -13,6 +13,8 @@ async function loadTools() {
   return {
     ...(await import('../src/mastra/tools/cron-tools')),
     ...(await import('../src/mastra/tools/memory-tools')),
+    ...(await import('../src/mastra/tools/knowledge-task-tools')),
+    ...(await import('../src/mastra/tools/notify-tools')),
     ...(await import('../src/mastra/tools/team-runtime-tools')),
     ...(await import('../src/mastra/tools/runtime-task-tools')),
     ...(await import('../src/mastra/tools/goal-tools')),
@@ -198,6 +200,42 @@ describe('tool approval policy', () => {
       expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.run', toolFacade: true }) }),
       expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.create', toolFacade: true }) }),
       expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.confirm_document', toolFacade: true }) }),
+    ]));
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+  it('routes Schedule, Notify, and Knowledge public facades through RuntimeTask dispatch', async () => {
+    const { createScheduleTaskTool, sendChannelNotificationTool, appendKnowledgeEpisodeTool, listRuntimeTasksTool } = await loadTools();
+
+    await expect(executeTool(createScheduleTaskTool, {
+      name: 'facade reminder',
+      schedule: 'daily 09:30',
+      task: 'remember facade',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(sendChannelNotificationTool, {
+      target: { channel: 'http', accountId: 'local', conversationId: 'conv-1', messageType: 'dm' },
+      text: 'hello through notify facade',
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(appendKnowledgeEpisodeTool, {
+      title: 'Facade episode',
+      summary: 'Knowledge facade should dispatch through RuntimeTask.',
+      tags: ['facade'],
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'schedule.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'notify.send_channel_message', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'knowledge.episode', toolFacade: true }) }),
     ]));
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });

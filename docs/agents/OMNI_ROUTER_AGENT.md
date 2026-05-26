@@ -2,11 +2,7 @@
 
 Status: active Mastra Agent.
 
-OmniRouterAgent is the Mastra-native entry coordinator. It routes intent, creates
-Runtime/Team tasks, can start orchestration workflows, and reads Team Runtime
-inbox/result records to report completed delegated tasks. Specialist handlers own
-business execution; Router should not directly call Goal, Req, Code, schedule,
-notification, or memory write tools.
+OmniRouterAgent is the Mastra-native entry coordinator. It routes intent through native tool facades, Runtime/Team tasks, orchestration workflows, and Team Runtime result lookup. Specialist handlers own business execution; Router should not duplicate Goal, Req, Code, schedule, notification, or memory write logic.
 
 ## Source Files
 
@@ -17,8 +13,7 @@ notification, or memory write tools.
 
 ## Specialist Execution Boundary
 
-OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, RuntimeTask facades, and domain-native Goal/Req/PR Pool facades. Side-effecting domain facades still create RuntimeTasks so Task Dispatcher, Tool Gateway, specialist handlers, result refs, and Team Runtime lifecycle behavior remain the execution boundary.
-
+OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, RuntimeTask facades, and domain-native Schedule/Notify/Knowledge/Goal/Req/PR Pool facades. Side-effecting domain facades still create RuntimeTasks so Task Dispatcher, Tool Gateway, specialist handlers, result refs, and Team Runtime lifecycle behavior remain the execution boundary.
 
 ## Workflows
 
@@ -29,7 +24,7 @@ OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, Runtim
 - Team discovery: `list-team-members`
 - Team Runtime: `list-agent-inbox`, `get-run-result`, `get-team-task`,
   `list-team-events`, `mark-inbox-message-read`
-- Domain facades: `create-goal`, `run-goal`, `apply-goal-feedback`, Req tools, and PR Pool tools for schema/audit entrypoints over RuntimeTask-backed execution
+- Domain facades: `create-schedule-task`, `send-channel-notification`, knowledge task facades, Goal tools, Req tools, and PR Pool tools for schema/audit entrypoints over RuntimeTask-backed execution
 
 ## Operating Rules
 
@@ -38,12 +33,9 @@ OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, Runtim
 - Mark inbox messages read after presenting or acknowledging them.
 - Prefer Team Runtime task ids over ad hoc code task ids for cross-agent
   coordination.
-- For scheduled work, create Runtime Tasks with `taskType: schedule.create`,
-  `targetAgentId: scheduler-runtime`, and a structured schedule payload. Do not
-  create new work targeting `cron-agent` directly.
-- For schedule maintenance, prefer Runtime Tasks such as `schedule.list`,
-  `schedule.delete`, `schedule.pause`, `schedule.resume`, and
-  `schedule.run_now`.
+- For scheduled work, use `create-schedule-task` instead of hand-written `schedule.create` RuntimeTask JSON.
+- For channel notifications, use `send-channel-notification` instead of writing Gateway delivery records directly.
+- For knowledge side effects, use `refresh-knowledge-memory-index`, `append-knowledge-episode`, or `propose-knowledge-doc-update`; low-level memory tools remain KnowledgeAgent internals.
 - Do not directly start CodeAgent, CronAgent, or KnowledgeAgent tools. Create a
   Runtime Task and let Task Dispatcher or specialist handlers execute it.
 
@@ -53,7 +45,9 @@ Router chooses one of these intents:
 
 - `chat`: answer directly.
 - `code`: create Runtime/Team tasks for CodeAgent execution.
-- `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
+- `cron`: prefer `create-schedule-task` for new schedules and schedule maintenance tools for list/delete/pause/resume/run-now.
+- `notify`: use `send-channel-notification` for outbound channel messages.
+- `knowledge`: use knowledge RuntimeTask facades for memory index, episode, and doc update proposal side effects.
 - Goal: prefer Goal native tools (`create-goal`, `run-goal`, `get-goal-status`, `list-goals`, `apply-goal-feedback`) for durable create/list/status/run/feedback workflows. Ambiguous analysis requests should
   ask for confirmation before creating a Goal.
 - Req: prefer Req native tools for list/status/create/import/confirm/reject/item updates. Write/import/confirmation tools enqueue `req.*` RuntimeTasks; read tools remain audited direct reads.

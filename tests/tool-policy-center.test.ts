@@ -28,6 +28,21 @@ describe('tool policy center', () => {
       capability: 'gateway_delivery.write',
       audit: true,
     });
+    expect(getToolPolicy('send-channel-notification')).toMatchObject({
+      risk: 'medium',
+      capability: 'notify.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-schedule-task')).toMatchObject({
+      risk: 'medium',
+      capability: 'schedule.write',
+      audit: true,
+    });
+    expect(getToolPolicy('append-knowledge-episode')).toMatchObject({
+      risk: 'safe',
+      capability: 'knowledge.write',
+      audit: true,
+    });
     expect(getToolPolicy('create-goal')).toMatchObject({
       risk: 'medium',
       capability: 'goal.write',

@@ -892,6 +892,22 @@ describe('Gateway message handler', () => {
     ]));
   });
 
+  it('handles /task commands through the shared RuntimeTask facade helper', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    const replies = await handleChannelMessage(message(`/task ${tempRoot} :: Implement gateway task facade`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const tasks = await taskRuntime.listTasks();
+
+    expect(replies[0].text).toContain('Runtime Task:');
+    expect(tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'code.task', toolFacade: true }) }),
+    ]));
+  });
+
   it('handles explicit PR pool commands', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();

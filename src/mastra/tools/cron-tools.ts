@@ -2,6 +2,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { createCronJob, deleteCronJob, getCronJobNextRunAt, listCronJobs, runCronJobNow, updateCronJobStatus } from '../lib/cron-store';
 import type { CronJob } from '../lib/cron-store';
+import { createAndDispatchRuntimeTask } from './runtime-task-tools';
+import { runtimeTaskTypes } from '../runtime/task-types';
 import { executeWithToolGateway } from '../runtime/tool-gateway';
 
 const scheduleReadPolicy = {
@@ -55,6 +57,37 @@ const cronJobSchema = z.object({
   lastRunStatus: z.enum(['started', 'failed', 'skipped']).optional(),
   lastRunError: z.string().optional(),
 });
+
+const dispatchEnvelopeSchema = z.object({
+  task: z.record(z.string(), z.unknown()),
+  dispatch: z.record(z.string(), z.unknown()),
+});
+
+export const createScheduleTaskTool = createTool({
+  id: 'create-schedule-task',
+  description: 'Create a schedule through RuntimeTask and Task Dispatcher, returning the RuntimeTask and dispatch result.',
+  inputSchema: z.object({
+    name: z.string(),
+    schedule: z.string().describe('Human-readable or cron-like schedule.'),
+    task: z.string().describe('Task to run on schedule.'),
+    taskType: z.string().optional().describe('Runtime task type to create when the schedule fires.'),
+    targetAgent: z.string().optional().describe('Preferred team member, such as codeAgent or knowledgeAgent.'),
+    targetAgentId: z.string().optional().describe('Canonical target agent id, such as code-agent or knowledge-agent.'),
+    workspacePath: z.string().optional().describe('Workspace path for codeAgent execution.'),
+    payload: z.record(z.string(), z.unknown()).optional().describe('Structured payload copied into Runtime task metadata.'),
+    notifyTarget: channelTargetSchema.optional().describe('Channel target to notify when scheduled task results are ready.'),
+    approvalToken: approvalTokenSchema,
+  }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('create-schedule-task', scheduleWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'scheduler-runtime',
+    objective: `Create schedule: ${input.name}`,
+    taskType: runtimeTaskTypes.scheduleCreate,
+    payload: input,
+  })),
+});
+
 
 export const createCronJobTool = createTool({
   id: 'create-cron-job',
@@ -157,6 +190,7 @@ export const explainCronJobNextRunTool = createTool({
 });
 
 export const cronTools = {
+  createScheduleTaskTool,
   createCronJobTool,
   listCronJobsTool,
   updateCronJobStatusTool,

@@ -78,14 +78,9 @@ validate input and record Tool Gateway audit at the Mastra tool boundary, then e
 handler calls the Req runtime service boundary directly to preserve Team Run results
 without recursively invoking public tools.
 
-## Gateway Delivery Tools
+## Gateway Delivery and Notify Tools
 
-`queue-channel-notification` is a Mastra Tool that queues outbound Gateway
-deliveries under the `gateway_delivery.write` Tool Gateway policy. It remains
-audit-only today because delivery retry/dead-letter semantics live in Gateway
-Store and outbound channel sends are handled by the delivery worker boundary.
-`notify.send_channel_message` Runtime Tasks call this tool from Task Dispatcher
-while preserving Team Runtime run/result records and task lifecycle transitions.
+`send-channel-notification` is the public Mastra facade for outbound channel messages. It records Tool Gateway audit with `notify.write`, creates a `notify.send_channel_message` RuntimeTask, and lets the notify dispatcher queue Gateway delivery while preserving Team Run/result lifecycle. `queue-channel-notification` is now the lower-level delivery-store tool for internal queue writes under `gateway_delivery.write`.
 
 ## Goal Tools
 
@@ -96,16 +91,10 @@ or `goal.feedback` RuntimeTasks through Task Dispatcher. Gateway `/goal` create/
 feedback commands call these native tools for compatibility, while Goal runtime
 artifact and proof-of-work behavior stay behind the dispatcher handler.
 
-## Cron Records
+## Cron and Schedule Tools
 
-CronAgent currently manages scheduled job records under
-`~/.omni/runs/cron-runs/jobs.json`. Schedule create/list/delete/pause/resume
-and run-now maintenance can be routed through RuntimeTask `schedule.*` handler
-paths.
+CronAgent manages scheduled job records under `~/.omni/runs/cron-runs/jobs.json`. `create-schedule-task` is the public schedule-creation facade: it validates schedule intent, records Tool Gateway audit, and dispatches a `schedule.create` RuntimeTask. Low-level `create-cron-job` remains for direct schedule-store compatibility. Schedule list/delete/pause/resume/run-now maintenance can still route through RuntimeTask `schedule.*` handlers.
 
-## Docs Memory
+## Docs Memory and Knowledge Facades
 
-KnowledgeAgent reads and updates file-backed memory with guarded tools. Memory
-maintenance workflows and `knowledge.*` RuntimeTask dispatch both route
-append/proposal/index writes through Mastra memory tools and Tool Gateway audit
-records using the `memory.write` capability.
+KnowledgeAgent keeps low-level memory tools for direct file-backed reads/writes. Public knowledge side effects now use RuntimeTask-backed facades: `refresh-knowledge-memory-index`, `append-knowledge-episode`, and `propose-knowledge-doc-update` dispatch `knowledge.*` RuntimeTasks, while the Knowledge dispatcher calls the low-level memory tools internally for the actual docs-memory update.

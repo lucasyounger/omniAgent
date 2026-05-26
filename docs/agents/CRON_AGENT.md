@@ -53,7 +53,8 @@ TaskRuntime.
 
 ## Tools
 
-- `create-cron-job`: create a new scheduled job record.
+- `create-schedule-task`: public schedule-creation facade; creates schedule records through `schedule.create` RuntimeTask dispatch.
+- `create-cron-job`: low-level compatibility tool for direct schedule-store writes.
 - `list-cron-jobs`: list all scheduled job records.
 - `update-cron-job-status`: update job status (active/paused).
 - `delete-cron-job`: delete a scheduled job record.

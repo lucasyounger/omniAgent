@@ -43,7 +43,7 @@ prompt instead of executing commands.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
 - `/pr list`, `/pr show <id>`, `/pr confirm <id>`, `/pr delete <id>`, `/pr pause <id>`, `/pr retry <id>`, `/pr archive <id>`, and `/pr develop <id>` remain compatibility commands. Internally they call the PR Pool Mastra tool facades, so command handling shares schema, Tool Gateway policy, and RuntimeTask dispatch behavior with Agent tool calls.
 - `/task <workspacePath> :: <objective>` creates a `code.task`
-  RuntimeTask and dispatches it through Task Dispatcher. CodeAgent starts once
+  RuntimeTask through the shared RuntimeTask facade helper and dispatches it through Task Dispatcher. CodeAgent starts once
   the workspace path is inside `OMNI_ALLOWED_WORKSPACES`; Tool Gateway records an
   audit event but does not require a separate approval token.
 
