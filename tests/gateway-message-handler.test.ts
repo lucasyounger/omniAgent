@@ -855,6 +855,12 @@ describe('Gateway message handler', () => {
     const goalId = create[0].text.match(/Goal 已创建：([^\n]+)/)?.[1];
     expect(goalId).toBeDefined();
 
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const facadeTasks = await taskRuntime.listTasks();
+    expect(facadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }) }),
+    ]));
+
     const list = await handleChannelMessage(message('/goal list', 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
@@ -869,11 +875,21 @@ describe('Gateway message handler', () => {
     });
     expect(run[0].text).toContain('Goal Run 已完成');
 
+    const runFacadeTasks = await taskRuntime.listTasks();
+    expect(runFacadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.run', toolFacade: true }) }),
+    ]));
+
     const feedback = await handleChannelMessage(message(`/goal feedback ${goalId} 暂停`, 'trusted'), {
       ...baseConfig(),
       allowSenders: ['trusted'],
     });
     expect(feedback[0].text).toContain('Goal 反馈已记录');
+
+    const feedbackFacadeTasks = await taskRuntime.listTasks();
+    expect(feedbackFacadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.feedback', toolFacade: true }) }),
+    ]));
   });
 
   it('handles explicit PR pool commands', async () => {

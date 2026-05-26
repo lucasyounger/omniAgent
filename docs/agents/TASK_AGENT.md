@@ -25,7 +25,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/agents/code-agent.ts`
 - `src/mastra/agents/cron-agent.ts`
 
-- Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler`, execute the corresponding Mastra Req Tools, and write to `.omni/reqs`.
+- Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler`, call the Req runtime service boundary directly, and write to `.omni/reqs`. Public Req Mastra tools enqueue these RuntimeTasks for write/import/confirmation actions so handler execution does not recurse back through public tools.
 - Knowledge task types `knowledge.memory_index`, `knowledge.episode`, and `knowledge.doc_update_proposal` are handled by Task Dispatcher through `knowledge-agent` compatibility dispatch while executing the corresponding Mastra memory tools.
 - `research.ai_daily_digest` Runtime Tasks generate digest content through the Mastra Workflow `research-daily-digest-workflow`, then preserve the existing Team Run result and optional notify child-task behavior.
 - Goal cron scan: `goal.cron_scan` scans active module improvement Goals and enqueues due runs while avoiding same-day duplicates.
@@ -105,10 +105,11 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Current Behavior
 
-- RuntimeTask and PR Pool now have Mastra-native tool facades. Agent-facing routing should prefer these `createTool(...)` facades for schema validation, Tool Gateway audit/approval, and task creation, while Task Dispatcher remains the durable execution backend.
+- RuntimeTask, PR Pool, Goal, and Req now have Mastra-native tool facades. Agent-facing routing should prefer these `createTool(...)` facades for schema validation, Tool Gateway audit/approval, and task creation, while Task Dispatcher remains the durable execution backend.
 - `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
 - The generic RuntimeTask facade exposes create, dispatch, create-and-dispatch, status/list, cancel, and retry operations so future Goal/Req/Schedule/Notify facades do not duplicate `taskRuntime.createTask(...)` + `dispatchRuntimeTask(...)` code.
 - Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
+- Goal and Req native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Goal create/run/feedback enqueue `goal.*` tasks; Req create/import/confirm/reject/update enqueue `req.*` tasks. Goal/Req read tools remain direct audited reads.
 - CodeAgent receives only PR Pool/RuntimeTask read-status tools in addition to code tools, so it can inspect assigned context without recursively starting PR Pool development. CronAgent receives RuntimeTask status/dispatch helpers plus the approval-gated PR Pool scan tool for scheduler/admin operation.
 - CodeAgent automatically creates a Team Task if `start-code-task` is
   called without `teamTaskId`.

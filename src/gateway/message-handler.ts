@@ -1,6 +1,11 @@
 import { prPoolRuntime } from '../mastra/runtime/pr-pool/pr-pool-runtime';
 import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
 import {
+  applyGoalFeedbackTool,
+  createGoalTool,
+  runGoalTool,
+} from '../mastra/tools/goal-tools';
+import {
   archivePrPoolItemTool,
   confirmPrPoolItemTool,
   deletePrPoolItemTool,
@@ -195,9 +200,9 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
 }
 
 
-async function callPrPoolTool<TInput, TOutput>(tool: { execute?: unknown }, input: TInput): Promise<TOutput> {
+async function callNativeTool<TInput, TOutput>(tool: { execute?: unknown }, input: TInput): Promise<TOutput> {
   if (typeof tool.execute !== 'function') {
-    throw new Error('PR Pool tool is not executable.');
+    throw new Error('Native tool is not executable.');
   }
   return (tool.execute as (input: TInput, options?: Record<string, unknown>) => Promise<TOutput>)(input, {});
 }
@@ -771,9 +776,54 @@ async function handleGoalCommand(message: ChannelMessage, _config: GatewayConfig
 }
 
 async function handleGoalChannelRequest(message: ChannelMessage, request: GoalChannelRequest): Promise<string> {
-  const taskType = request.action === 'confirm_create' ? runtimeTaskTypes.goalCreate : `goal.${request.action}`;
+  const basePayload = {
+    ...request.payload,
+    actorId: request.actorId,
+    channelId: request.channelId,
+    idempotencyKey: request.payload.idempotencyKey || (request.sourceMessageId ? `goal:${request.sourceMessageId}` : undefined),
+  };
+  const sourceAgentId = 'channel-gateway';
+  const dispatchEnvelope =
+    request.action === 'create' || request.action === 'confirm_create'
+      ? await callNativeTool<Record<string, unknown>, { dispatch: { status: string; reason?: string; result?: Record<string, unknown> } }>(createGoalTool, basePayload)
+      : request.action === 'run'
+        ? await callNativeTool<Record<string, unknown>, { dispatch: { status: string; reason?: string; result?: Record<string, unknown> } }>(runGoalTool, basePayload)
+        : request.action === 'feedback'
+          ? await callNativeTool<Record<string, unknown>, { dispatch: { status: string; reason?: string; result?: Record<string, unknown> } }>(applyGoalFeedbackTool, basePayload)
+          : undefined;
+
+  if (dispatchEnvelope) {
+    const dispatch = dispatchEnvelope.dispatch;
+    if (request.action === 'create' || request.action === 'confirm_create') {
+      const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+      const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+      if (goalId) {
+        await setConversationActiveGoal({
+          channel: message.channel,
+          conversationId: message.conversationId,
+          senderId: message.senderId,
+          goalId,
+          activeModule: stringArrayValue(request.payload.scope)[0],
+          recentEntities: stringArrayValue(request.payload.scope),
+        });
+      }
+      return goalId ? `Goal 已创建：${goalId}${runId ? `\n已启动首轮运行：${runId}` : ''}` : `Goal 创建失败：${dispatch.status !== 'dispatched' ? dispatch.reason : dispatch.status}`;
+    }
+    if (request.action === 'run') {
+      const output = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.output) : undefined;
+      const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
+      const summary = stringValue(output?.summary);
+      return runId ? `Goal Run 已完成：${runId}${summary ? `\n${summary}` : ''}` : `Goal Run 失败：${dispatch.status}`;
+    }
+    if (request.action === 'feedback') {
+      const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
+      return goalId ? `Goal 反馈已记录：${goalId}` : `Goal 反馈失败：${dispatch.status}`;
+    }
+  }
+
+  const taskType = `goal.${request.action}`;
   const task = await taskRuntime.createTask({
-    sourceAgentId: 'channel-gateway',
+    sourceAgentId,
     targetAgentId: 'goal-runtime',
     objective: `Goal ${request.action}`,
     requestedBy: `${message.channel}:${message.senderId}`,
@@ -781,31 +831,11 @@ async function handleGoalChannelRequest(message: ChannelMessage, request: GoalCh
       taskType,
       notifyTarget: request.notifyTarget,
       source: channelSourceFromMessage(message),
-      payload: {
-        ...request.payload,
-        actorId: request.actorId,
-        channelId: request.channelId,
-        idempotencyKey: request.payload.idempotencyKey || (request.sourceMessageId ? `goal:${request.sourceMessageId}` : undefined),
-      },
+      payload: basePayload,
     },
   });
   const dispatch = await dispatchRuntimeTask(task.id);
 
-  if (request.action === 'create' || request.action === 'confirm_create') {
-    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
-    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
-    if (goalId) {
-      await setConversationActiveGoal({
-        channel: message.channel,
-        conversationId: message.conversationId,
-        senderId: message.senderId,
-        goalId,
-        activeModule: stringArrayValue(request.payload.scope)[0],
-        recentEntities: stringArrayValue(request.payload.scope),
-      });
-    }
-    return goalId ? `Goal 已创建：${goalId}${runId ? `\n已启动首轮运行：${runId}` : ''}` : `Goal 创建失败：${dispatch.status !== 'dispatched' ? dispatch.reason : dispatch.status}`;
-  }
   if (request.action === 'list') {
     const goals = arrayValue(dispatch.status === 'dispatched' ? dispatch.result?.goals : undefined);
     return formatGoalList(goals as Parameters<typeof formatGoalList>[0]);
@@ -813,18 +843,9 @@ async function handleGoalChannelRequest(message: ChannelMessage, request: GoalCh
   if (request.action === 'status') {
     return dispatch.status === 'dispatched' ? formatGoalStatus(dispatch.result as Parameters<typeof formatGoalStatus>[0]) : `Goal 查询失败：${dispatch.status}`;
   }
-  if (request.action === 'run') {
-    const output = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.output) : undefined;
-    const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
-    const summary = stringValue(output?.summary);
-    return runId ? `Goal Run 已完成：${runId}${summary ? `\n${summary}` : ''}` : `Goal Run 失败：${dispatch.status}`;
-  }
-  if (request.action === 'feedback') {
-    const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
-    return goalId ? `Goal 反馈已记录：${goalId}` : `Goal 反馈失败：${dispatch.status}`;
-  }
   return formatGoalHelp();
 }
+
 
 async function handleTaskCommand(message: ChannelMessage, raw: string) {
   const [workspacePath, objective] = raw.split('::').map(item => item.trim());
@@ -871,14 +892,14 @@ async function handlePrCommand(raw: string): Promise<string> {
 
   switch (subCommand) {
     case 'list': {
-      const items = await callPrPoolTool<Record<string, never>, PRItem[]>(listPrPoolItemsTool, {});
+      const items = await callNativeTool<Record<string, never>, PRItem[]>(listPrPoolItemsTool, {});
       return formatPrList(items);
     }
     case 'show':
-      return formatPrDetail(await callPrPoolTool<{ prItemId: string }, PRItem | undefined>(getPrPoolItemTool, { prItemId: arg }));
+      return formatPrDetail(await callNativeTool<{ prItemId: string }, PRItem | undefined>(getPrPoolItemTool, { prItemId: arg }));
     case 'confirm':
       if (!arg) return '用法: /pr confirm <id>';
-      await callPrPoolTool(confirmPrPoolItemTool, { prItemId: arg });
+      await callNativeTool(confirmPrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已确认 (draft → ready)`;
     case 'confirm-all': {
       const items = await prPoolRuntime.confirmAll();
@@ -886,19 +907,19 @@ async function handlePrCommand(raw: string): Promise<string> {
     }
     case 'delete':
       if (!arg) return '用法: /pr delete <id>';
-      await callPrPoolTool(deletePrPoolItemTool, { prItemId: arg });
+      await callNativeTool(deletePrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已删除`;
     case 'pause':
       if (!arg) return '用法: /pr pause <id>';
-      await callPrPoolTool(pausePrPoolItemTool, { prItemId: arg });
+      await callNativeTool(pausePrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已暂停 (ready → cancelled)`;
     case 'retry':
       if (!arg) return '用法: /pr retry <id>';
-      await callPrPoolTool(retryPrPoolItemTool, { prItemId: arg });
+      await callNativeTool(retryPrPoolItemTool, { prItemId: arg });
       return `PR ${arg} 已重试 (failed → ready)`;
     case 'archive':
       if (!arg) return '用法: /pr archive <id>';
-      await callPrPoolTool(archivePrPoolItemTool, { prItemId: arg, reason: 'completed' });
+      await callNativeTool(archivePrPoolItemTool, { prItemId: arg, reason: 'completed' });
       return `PR ${arg} 已归档`;
     case 'develop':
       if (!arg) return '用法: /pr develop <id>';
@@ -909,7 +930,7 @@ async function handlePrCommand(raw: string): Promise<string> {
 }
 
 async function developPrItem(prItemId: string): Promise<string> {
-  const result = await callPrPoolTool<
+  const result = await callNativeTool<
     { prItemId: string; approvalToken: string },
     { dispatch: { status: string; reason?: string; result?: Record<string, unknown> } }
   >(developPrPoolItemTool, { prItemId, approvalToken: 'channel-gateway-approved' });

@@ -17,7 +17,9 @@ through Team Runtime.
   workspace passes `OMNI_ALLOWED_WORKSPACES`; execution is audited but does not
   require a second Tool Gateway approval.
 - `/goal create/list/status/run/feedback` for durable Goal Runtime management
-  from paired or allowlisted channels
+  from paired or allowlisted channels. Create/run/feedback commands call Goal native
+  facades, so channel commands share Tool Gateway audit and RuntimeTask-backed
+  dispatch with Agent tool calls.
 - Adapters still emit `ChannelMessage`, but Gateway converts each message into a
   `UnifiedRequest` with stable `source`, `userId`, `sessionId`, `content`, and
   metadata before invoking the shared request pipeline.
@@ -45,7 +47,7 @@ through Team Runtime.
   status queries, and low-confidence clarification. Schedule times supplied by
   channel users are interpreted as CST (UTC+8), normalized to UTC for cron
   storage/execution, and converted back to CST in schedule-list replies.
-- Natural-language PR Pool execution requests such as “将 PR pool 中的需求执行一下” route deterministically to `pr_pool.cron_scan`, which scans ready PR Pool items and dispatches eligible development work through PR Pool / CodeAgent before OmniRouterAgent fallback. Requests naming a specific `pr-...` item route to `pr_pool.develop`.
+- PR Pool requests route through capability/tool selection and native PR Pool facades. Explicit PR commands keep compatibility, while natural-language execution no longer depends on a dedicated Gateway regex fast path.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records

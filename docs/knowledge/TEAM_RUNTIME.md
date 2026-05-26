@@ -18,9 +18,7 @@ The public dispatcher entry remains `src/mastra/runtime/task-dispatcher.ts`, whi
 concrete deterministic handlers live under
 `src/mastra/runtime/task-dispatcher/handlers/` by runtime surface. It includes Goal
 handlers for `goal.*` and Req handlers for `req.*`
-confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle
-while invoking the matching Mastra Req Tools for document create/list/status,
-confirmation, item updates, and imports. Knowledge dispatch preserves the same
+confirmation/import workflows. Req dispatch preserves the Team Runtime lifecycle while invoking Req runtime services directly for document create/list/status, confirmation, item updates, and imports. Public Req Mastra tools are the agent-facing facade and enqueue write/import/confirmation RuntimeTasks, so dispatcher execution does not loop back through public tools. Knowledge dispatch preserves the same
 compatibility handler and RuntimeTask lifecycle while invoking Mastra memory tools
 for memory index refreshes, episodic logs, and doc update proposals. Research
 AI daily digest dispatch generates content through the Mastra Workflow
@@ -204,6 +202,8 @@ approval linkage.
   rather than staying queued for repeated polling.
 
 - RuntimeTask native facades (`create-runtime-task`, `dispatch-runtime-task`, `create-and-dispatch-runtime-task`, status/list, cancel, retry) are the shared Agent-facing schema/audit layer for generic durable work. Domain facades should reuse this path instead of reimplementing RuntimeTask create+dispatch.
+- Goal native facades use that shared path for create/run/feedback side effects, creating `goal.create`, `goal.run`, and `goal.feedback` RuntimeTasks while keeping list/status as audited direct reads.
+- Req native facades use that shared path for create/import/confirm/reject/update side effects, creating `req.*` RuntimeTasks while keeping list/status as audited direct reads.
 - PR Pool native facades wrap PR Pool runtime reads/writes and enqueue `pr_pool.*` RuntimeTasks for ingest/confirm/develop/archive/scan. `/pr` commands now call these facades for compatibility, while natural-language PR Pool execution is left to capability/tool selection rather than a dedicated Gateway regex fast path.
 
 - Capability Planner turns selected capabilities into a `CapabilityPlan`: a goal,

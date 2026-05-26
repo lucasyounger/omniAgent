@@ -17,11 +17,8 @@ notification, or memory write tools.
 
 ## Specialist Execution Boundary
 
-OmniRouterAgent intentionally exposes only team discovery, Team Runtime tools, and
-task orchestration workflow access. Goal, Req, Code, schedule, notification, and
-memory side effects should be requested as Runtime Tasks so Task Dispatcher,
-Tool Gateway, and specialist handlers preserve approval, audit, resultRef, and
-Team Runtime lifecycle behavior.
+OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, RuntimeTask facades, and domain-native Goal/Req/PR Pool facades. Side-effecting domain facades still create RuntimeTasks so Task Dispatcher, Tool Gateway, specialist handlers, result refs, and Team Runtime lifecycle behavior remain the execution boundary.
+
 
 ## Workflows
 
@@ -32,8 +29,7 @@ Team Runtime lifecycle behavior.
 - Team discovery: `list-team-members`
 - Team Runtime: `list-agent-inbox`, `get-run-result`, `get-team-task`,
   `list-team-events`, `mark-inbox-message-read`
-- Delegation: create Runtime/Team tasks with `targetAgentId`, `taskType`, and
-  structured payload metadata
+- Domain facades: `create-goal`, `run-goal`, `apply-goal-feedback`, Req tools, and PR Pool tools for schema/audit entrypoints over RuntimeTask-backed execution
 
 ## Operating Rules
 
@@ -58,12 +54,9 @@ Router chooses one of these intents:
 - `chat`: answer directly.
 - `code`: create Runtime/Team tasks for CodeAgent execution.
 - `cron`: create `schedule.*` RuntimeTasks for scheduler-runtime.
-- Goal: create `goal.*` Runtime Tasks targeting `goal-runtime` for durable
-  create/list/status/run/feedback workflows. Ambiguous analysis requests should
+- Goal: prefer Goal native tools (`create-goal`, `run-goal`, `get-goal-status`, `list-goals`, `apply-goal-feedback`) for durable create/list/status/run/feedback workflows. Ambiguous analysis requests should
   ask for confirmation before creating a Goal.
-- Req: create `req.*` Runtime Tasks for list/status/confirm/reject/import.
-  Imported Req documents stay pending unless the user explicitly asks to confirm
-  and archive.
+- Req: prefer Req native tools for list/status/create/import/confirm/reject/item updates. Write/import/confirmation tools enqueue `req.*` RuntimeTasks; read tools remain audited direct reads.
 - `mixed`: split into explicit sub-tasks.
 
 Router should keep final replies short, include task ids for long-running work,

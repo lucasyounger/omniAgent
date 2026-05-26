@@ -12,14 +12,25 @@ import {
   rejectReqItem,
   updateReqItemStatus,
 } from '../runtime/req';
+import { runtimeTaskTypes } from '../runtime/task-types';
+import { executeWithToolGateway } from '../runtime/tool-gateway';
+import { createAndDispatchRuntimeTask } from './runtime-task-tools';
 
+const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
 const reqDocumentStatusSchema = z.enum(['draft', 'pending_user_confirmation', 'confirmed', 'rejected', 'planned', 'in_progress', 'implemented', 'verified', 'archived']);
 const reqItemStatusSchema = z.enum(['pending_user_confirmation', 'confirmed', 'rejected', 'planned', 'in_progress', 'implemented', 'verified']);
 const reqSourceTypeSchema = z.enum(['claudecode_conversation', 'opencode_conversation', 'manual_import']);
+const reqReadPolicy = { risk: 'safe', capability: 'req.read', audit: true } as const;
+const reqWritePolicy = { risk: 'medium', capability: 'req.write', audit: true } as const;
+
+const dispatchEnvelopeSchema = z.object({
+  task: z.record(z.string(), z.unknown()),
+  dispatch: z.record(z.string(), z.unknown()),
+});
 
 export const createReqDraftTool = createTool({
   id: 'create-req-draft',
-  description: 'Create a draft Req document from requirement and design markdown.',
+  description: 'Create a Req draft through RuntimeTask and Task Dispatcher.',
   inputSchema: z.object({
     id: z.string().optional(),
     title: z.string(),
@@ -27,17 +38,16 @@ export const createReqDraftTool = createTool({
     reqMarkdown: z.string(),
     designMarkdown: z.string().optional(),
     artifactPaths: z.array(z.string()).optional(),
+    approvalToken: approvalTokenSchema,
   }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input =>
-    createReqDraft({
-      id: input.id,
-      title: input.title,
-      summary: input.summary,
-      reqMarkdown: input.reqMarkdown,
-      designMarkdown: input.designMarkdown,
-      source: { type: 'manual_import', artifactPaths: input.artifactPaths },
-    }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('create-req-draft', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Create Req draft: ${input.title}`,
+    taskType: runtimeTaskTypes.reqCreate,
+    payload: input,
+  })),
 });
 
 export const listReqsTool = createTool({
@@ -45,7 +55,7 @@ export const listReqsTool = createTool({
   description: 'List Req library documents with optional status filters.',
   inputSchema: z.object({ status: reqDocumentStatusSchema.optional(), sourceType: reqSourceTypeSchema.optional() }),
   outputSchema: z.array(z.record(z.string(), z.unknown())),
-  execute: async input => listReqs(input),
+  execute: async input => executeWithToolGateway('list-reqs', reqReadPolicy, input, () => listReqs(input)),
 });
 
 export const getReqStatusTool = createTool({
@@ -53,64 +63,119 @@ export const getReqStatusTool = createTool({
   description: 'Read a Req document and item statuses.',
   inputSchema: z.object({ reqId: z.string() }),
   outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => getReqStatus(input.reqId),
+  execute: async input => executeWithToolGateway('get-req-status', reqReadPolicy, input, () => getReqStatus(input.reqId)),
 });
 
 export const confirmReqDocumentTool = createTool({
   id: 'confirm-req-document',
-  description: 'Confirm a whole Req document.',
-  inputSchema: z.object({ reqId: z.string(), feedback: z.string().optional() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => confirmReqDocument(input.reqId, input.feedback),
+  description: 'Confirm a whole Req document through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ reqId: z.string(), feedback: z.string().optional(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('confirm-req-document', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Confirm Req document ${input.reqId}`,
+    taskType: runtimeTaskTypes.reqConfirmDocument,
+    payload: input,
+  })),
 });
 
 export const rejectReqDocumentTool = createTool({
   id: 'reject-req-document',
-  description: 'Reject a whole Req document with a reason.',
-  inputSchema: z.object({ reqId: z.string(), reason: z.string() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => rejectReqDocument(input.reqId, input.reason),
+  description: 'Reject a whole Req document through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ reqId: z.string(), reason: z.string(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('reject-req-document', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Reject Req document ${input.reqId}`,
+    taskType: runtimeTaskTypes.reqRejectDocument,
+    payload: input,
+  })),
 });
 
 export const confirmReqItemTool = createTool({
   id: 'confirm-req-item',
-  description: 'Confirm a single Req item.',
-  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), feedback: z.string().optional() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => confirmReqItem(input.reqId, input.itemId, input.feedback),
+  description: 'Confirm a single Req item through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), feedback: z.string().optional(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('confirm-req-item', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Confirm Req item ${input.reqId}/${input.itemId}`,
+    taskType: runtimeTaskTypes.reqConfirmItem,
+    payload: input,
+  })),
 });
 
 export const rejectReqItemTool = createTool({
   id: 'reject-req-item',
-  description: 'Reject a single Req item with a reason.',
-  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), reason: z.string() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => rejectReqItem(input.reqId, input.itemId, input.reason),
+  description: 'Reject a single Req item through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), reason: z.string(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('reject-req-item', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Reject Req item ${input.reqId}/${input.itemId}`,
+    taskType: runtimeTaskTypes.reqRejectItem,
+    payload: input,
+  })),
 });
 
 export const updateReqItemStatusTool = createTool({
   id: 'update-req-item-status',
-  description: 'Update implementation lifecycle status for a single Req item.',
-  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), status: reqItemStatusSchema }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => updateReqItemStatus(input.reqId, input.itemId, input.status),
+  description: 'Update implementation lifecycle status for a single Req item through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ reqId: z.string(), itemId: z.string(), status: reqItemStatusSchema, approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('update-req-item-status', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Update Req item ${input.reqId}/${input.itemId}`,
+    taskType: runtimeTaskTypes.reqUpdateItemStatus,
+    payload: input,
+  })),
 });
 
 export const importReqMarkdownTool = createTool({
   id: 'import-req-markdown',
-  description: 'Import a Markdown requirement document into the Req library.',
-  inputSchema: z.object({ markdown: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), conversationId: z.string().optional(), confirmAndArchive: z.boolean().optional() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => importReqFromMarkdown(input),
+  description: 'Import Markdown into Req library through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ markdown: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), conversationId: z.string().optional(), confirmAndArchive: z.boolean().optional(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('import-req-markdown', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Import Req Markdown${input.title ? `: ${input.title}` : ''}`,
+    taskType: runtimeTaskTypes.reqImport,
+    payload: input,
+  })),
 });
 
 export const importReqFileTool = createTool({
   id: 'import-req-file',
-  description: 'Import a requirement document file into the Req library.',
-  inputSchema: z.object({ filePath: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), confirmAndArchive: z.boolean().optional() }),
-  outputSchema: z.record(z.string(), z.unknown()),
-  execute: async input => importReqFromFile(input),
+  description: 'Import a requirement document file through RuntimeTask and Task Dispatcher.',
+  inputSchema: z.object({ filePath: z.string(), title: z.string().optional(), sourceType: reqSourceTypeSchema.optional(), confirmAndArchive: z.boolean().optional(), approvalToken: approvalTokenSchema }),
+  outputSchema: dispatchEnvelopeSchema,
+  execute: async input => executeWithToolGateway('import-req-file', reqWritePolicy, input, () => createAndDispatchRuntimeTask({
+    sourceAgentId: 'mastra-tool',
+    targetAgentId: 'req-runtime',
+    objective: `Import Req file: ${input.filePath}`,
+    taskType: runtimeTaskTypes.reqImport,
+    payload: input,
+  })),
 });
+
+export const reqService = {
+  confirmReqDocument,
+  confirmReqItem,
+  createReqDraft,
+  getReqStatus,
+  importReqFromFile,
+  importReqFromMarkdown,
+  listReqs,
+  rejectReqDocument,
+  rejectReqItem,
+  updateReqItemStatus,
+};
 
 export const reqTools = {
   createReqDraftTool,

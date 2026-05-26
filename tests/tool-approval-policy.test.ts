@@ -15,6 +15,8 @@ async function loadTools() {
     ...(await import('../src/mastra/tools/memory-tools')),
     ...(await import('../src/mastra/tools/team-runtime-tools')),
     ...(await import('../src/mastra/tools/runtime-task-tools')),
+    ...(await import('../src/mastra/tools/goal-tools')),
+    ...(await import('../src/mastra/tools/req-tools')),
     ...(await import('../src/mastra/tools/pr-pool-tools')),
     ...(await import('../src/mastra/runtime/tool-gateway')),
     ...(await import('../src/mastra/runtime/approval-store')),
@@ -166,6 +168,40 @@ describe('tool approval policy', () => {
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
 
+
+  it('routes Goal and Req write facades through RuntimeTask dispatch without dangerous approval', async () => {
+    const { createGoalTool, runGoalTool, createReqDraftTool, confirmReqDocumentTool, listRuntimeTasksTool } = await loadTools();
+
+    const createdGoal = await executeTool<Record<string, unknown>, { dispatch: { status: string; result?: Record<string, unknown> } }>(createGoalTool, {
+      title: 'Native Goal facade',
+      objective: 'Create a goal through RuntimeTask facade',
+    });
+    const goalId = createdGoal.dispatch.result?.goalId as string;
+
+    expect(createdGoal.dispatch.status).toBe('dispatched');
+    await expect(executeTool(runGoalTool, { goalId })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    const createdReq = await executeTool<Record<string, unknown>, { dispatch: { status: string; result?: Record<string, unknown> } }>(createReqDraftTool, {
+      title: 'Native Req facade',
+      reqMarkdown: '- [ ] Capture requirement',
+    });
+    const reqId = createdReq.dispatch.result?.reqId as string;
+
+    expect(createdReq.dispatch.status).toBe('dispatched');
+    await expect(executeTool(confirmReqDocumentTool, { reqId })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.run', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.confirm_document', toolFacade: true }) }),
+    ]));
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
   it('requires approval for dangerous RuntimeTask and PR Pool facades', async () => {
     const { cancelRuntimeTaskTool, developPrPoolItemTool, scanPrPoolReadyItemsTool, deletePrPoolItemTool, createRuntimeTaskTool, createPrPoolItemTool } = await loadTools();
     const task = await executeTool<{ objective: string; taskType: string }, { id: string }>(createRuntimeTaskTool, {
@@ -187,4 +223,5 @@ describe('tool approval policy', () => {
     await expect(executeTool(scanPrPoolReadyItemsTool, {})).rejects.toThrow('Approval required');
     await expect(executeTool(deletePrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
     expect(await readPendingApprovalRequests()).toHaveLength(4);
-  });});
+  });
+});

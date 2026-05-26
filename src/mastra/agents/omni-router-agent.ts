@@ -1,6 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { createAgentMemory } from '../runtime';
+import { goalTools } from '../tools/goal-tools';
 import { prPoolTools } from '../tools/pr-pool-tools';
+import { reqTools } from '../tools/req-tools';
 import { runtimeTaskTools } from '../tools/runtime-task-tools';
 import { teamRuntimeTools } from '../tools/team-runtime-tools';
 import { teamTools } from '../tools/team-tools';
@@ -18,7 +20,7 @@ You coordinate an extensible local Agent Team:
 - Use RuntimeTask-backed tools for durable long-running work; the tool facade is the schema/audit entrypoint and RuntimeTask/dispatcher remains the execution boundary.
 - Track delegated work through Team Runtime tasks, runs, events, inbox messages, and results.
 - Use listTeamMembersTool when you need to inspect team boundaries.
-- Prefer specific tools such as create-and-dispatch-runtime-task, develop-pr-pool-item, scan-pr-pool-ready-items, and PR Pool read tools over hand-written taskType JSON.
+- Prefer specific tools such as create-goal, run-goal, apply-goal-feedback, create-req-draft, import-req-file, develop-pr-pool-item, scan-pr-pool-ready-items, and domain read tools over hand-written taskType JSON.
 
 Routing rules:
 - For normal questions, answer directly and use memory docs only when they are relevant.
@@ -26,8 +28,8 @@ Routing rules:
 - For long-running work, call the matching native tool facade or create-and-dispatch-runtime-task, return the task id, then use status polling for progress.
 - Check listAgentInboxTool for completed delegated work and use getRunResultTool to read durable results.
 - For scheduled tasks, create a Runtime task with taskType=schedule.create, targetAgentId=scheduler-runtime, and payload containing name, schedule, task, taskType, targetAgentId, payload, and notifyTarget when available. Do not target cron-agent directly.
-- For durable goals, create Runtime tasks such as goal.create, goal.run, goal.status, goal.list, or goal.feedback with targetAgentId=goal-runtime. Ambiguous analysis requests should ask for confirmation before creating a Goal.
-- For requirements, create Runtime tasks such as req.create_document, req.list, req.status, req.confirm_document, req.reject_document, req.confirm_item, req.reject_item, req.update_item_status, req.import_markdown, or req.import_file. Req documents enter pending_user_confirmation first; users may confirm or reject a whole document or a single item. Conversation imports stay pending unless the user explicitly asks to confirm and archive.
+- For durable goals, use create-goal, run-goal, get-goal-status, list-goals, or apply-goal-feedback. Ambiguous analysis requests should ask for confirmation before creating a Goal.
+- For requirements, use Req native tools such as create-req-draft, list-reqs, get-req-status, confirm-req-document, reject-req-document, confirm-req-item, reject-req-item, update-req-item-status, import-req-markdown, or import-req-file. Req write/import/confirmation tools are RuntimeTask-backed facades.
 - High-risk capabilities are executed by specialist handlers through Tool Gateway.
 
 Memory rules:
@@ -42,6 +44,8 @@ Memory rules:
     ...teamTools,
     ...teamRuntimeTools,
     ...runtimeTaskTools,
+    ...goalTools,
+    ...reqTools,
     ...prPoolTools,
   },
   workflows: {

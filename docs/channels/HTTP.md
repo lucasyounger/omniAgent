@@ -34,12 +34,12 @@ prompt instead of executing commands.
 - `/pair <token>`
 - `/help`
 - `/status`
-- `/goal create <title>` creates a durable Goal through GoalService. The
+- `/goal create <title>` creates a durable Goal through the Goal Mastra native facade. The
   command also supports `/goal list`, `/goal status <goalId>`,
   `/goal run <goalId>`, and `/goal feedback <goalId> <text>` for listing,
   status, executable GoalRun workflow execution, and feedback-driven pause/resume/cancel or
-  priority updates.
-- `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation.
+  priority updates. Create/run/feedback commands share Tool Gateway audit and RuntimeTask dispatch behavior with Agent tool calls.
+- `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation. Req write/import/confirmation tool calls are RuntimeTask-backed facades while list/status remain audited reads.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
 - `/pr list`, `/pr show <id>`, `/pr confirm <id>`, `/pr delete <id>`, `/pr pause <id>`, `/pr retry <id>`, `/pr archive <id>`, and `/pr develop <id>` remain compatibility commands. Internally they call the PR Pool Mastra tool facades, so command handling shares schema, Tool Gateway policy, and RuntimeTask dispatch behavior with Agent tool calls.
 - `/task <workspacePath> :: <objective>` creates a `code.task`

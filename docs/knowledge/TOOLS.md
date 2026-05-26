@@ -71,14 +71,12 @@ separate PR Pool implementation.
 
 ## Req Runtime Tools
 
-Req document create/list/status, confirmation/rejection, item status updates, and
-imports are exposed as Mastra Tools with Tool Gateway policy declarations. Read
-operations use `req.read`; create/import/confirmation/rejection/status updates use
-`req.write` audit-only policies so Req library side effects are centrally visible
-without adding a security approval gate.
-
-Task Dispatcher uses those tools for `req.*` Runtime Tasks while preserving Team
-Runtime run/result records and lifecycle transitions.
+Req list/status remain audited direct read tools using `req.read`. Req write/import/
+confirmation/rejection/item-status tools are now RuntimeTask-backed facades: they
+validate input and record Tool Gateway audit at the Mastra tool boundary, then enqueue
+`req.*` RuntimeTasks through `create-and-dispatch-runtime-task`. The Req dispatcher
+handler calls the Req runtime service boundary directly to preserve Team Run results
+without recursively invoking public tools.
 
 ## Gateway Delivery Tools
 
@@ -91,11 +89,12 @@ while preserving Team Runtime run/result records and task lifecycle transitions.
 
 ## Goal Tools
 
-Goal create/run/feedback tools declare Tool Gateway policies for durable Goal
-side effects. Goal reads use `goal.read`, Goal creation uses `goal.write`, GoalRun
-queueing uses `goal.run`, and feedback-driven lifecycle updates use
-`goal.feedback`. These policies provide the R8 audit boundary without changing the
-existing Goal Runtime artifact, proof-of-work, or feedback behavior.
+Goal list/status remain audited direct read tools using `goal.read`. Goal create,
+run, and feedback tools are RuntimeTask-backed facades: they record Tool Gateway
+policy decisions at the Mastra tool boundary and enqueue `goal.create`, `goal.run`,
+or `goal.feedback` RuntimeTasks through Task Dispatcher. Gateway `/goal` create/run/
+feedback commands call these native tools for compatibility, while Goal runtime
+artifact and proof-of-work behavior stay behind the dispatcher handler.
 
 ## Cron Records
 
