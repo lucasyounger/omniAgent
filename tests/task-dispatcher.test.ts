@@ -733,6 +733,10 @@ describe('Task Dispatcher', () => {
       workspaceRepoPath: tempRoot,
       impact: { modules: ['runtime'], risk: 'low' },
       acceptanceCriteria: ['code task created'],
+      verificationPlan: ['Run dispatcher PR Pool handoff test'],
+      docSyncRequirements: ['Update TaskAgent docs'],
+      testSyncRequirements: ['Update dispatcher tests'],
+      workspacePolicy: { editablePaths: ['src/**'], forbiddenPaths: ['secrets/**'] },
       codeAgentPrompt: 'Create the implementation',
       design4Plus1: {
         logical: 'Logical context',
@@ -791,6 +795,13 @@ describe('Task Dispatcher', () => {
           prItemId: item.id,
           runtimeTaskId: task.id,
           acceptanceCriteria: ['code task created'],
+          verificationPlan: ['Run dispatcher PR Pool handoff test'],
+          docSyncRequirements: ['Update TaskAgent docs'],
+          testSyncRequirements: ['Update dispatcher tests'],
+          workspacePolicy: expect.objectContaining({
+            editablePaths: ['src/**'],
+            forbiddenPaths: ['secrets/**'],
+          }),
           retryContext: {
             retryCount: 0,
             maxRetries: 3,

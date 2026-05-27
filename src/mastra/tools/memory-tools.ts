@@ -2,9 +2,13 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import {
   appendEpisodicLog,
+  deleteMemoryRecord,
   listDocsFiles,
+  listMemoryRecords,
   readDocsFile,
+  supersedeMemoryRecord,
   updateMemoryIndex,
+  upsertMemoryRecord,
   upsertUserProfileFact,
   writeDocUpdateProposal,
 } from '../lib/docs-memory';
@@ -23,6 +27,35 @@ const memoryWritePolicy = {
 } as const;
 
 const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
+const memoryRecordTypeSchema = z.enum(['user', 'project', 'goal', 'decision', 'reference', 'execution_learning']);
+const memoryRecordStatusSchema = z.enum(['active', 'superseded', 'archived', 'deleted']);
+const memoryRecordConfidenceSchema = z.enum(['low', 'medium', 'high']);
+const memoryRecordSourceRefSchema = z.object({
+  kind: z.string(),
+  ref: z.string(),
+  summary: z.string().optional(),
+});
+const memoryRecordSchema = z.object({
+  id: z.string(),
+  type: memoryRecordTypeSchema,
+  scope: z.object({
+    resourceId: z.string(),
+    projectId: z.string().optional(),
+    goalId: z.string().optional(),
+    repoId: z.string().optional(),
+  }),
+  title: z.string(),
+  body: z.string(),
+  why: z.string().optional(),
+  howToApply: z.string().optional(),
+  sourceRefs: z.array(memoryRecordSourceRefSchema),
+  confidence: memoryRecordConfidenceSchema,
+  status: memoryRecordStatusSchema,
+  supersedes: z.string().optional(),
+  expiresAt: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
 
 export const listMemoryDocsTool = createTool({
   id: 'list-memory-docs',
@@ -145,6 +178,101 @@ export const upsertUserProfileFactTool = createTool({
   execute: async input => executeWithToolGateway('upsert-user-profile-fact', memoryWritePolicy, input, () => upsertUserProfileFact(input)),
 });
 
+export const listMemoryRecordsTool = createTool({
+  id: 'list-memory-records',
+  description: 'List structured Memory Ledger records by type, scope, status, or keyword query.',
+  inputSchema: z.object({
+    type: memoryRecordTypeSchema.optional(),
+    status: memoryRecordStatusSchema.optional(),
+    resourceId: z.string().optional(),
+    goalId: z.string().optional(),
+    projectId: z.string().optional(),
+    repoId: z.string().optional(),
+    query: z.string().optional(),
+  }),
+  outputSchema: z.array(memoryRecordSchema),
+  execute: async input => executeWithToolGateway('list-memory-records', memoryReadPolicy, input, () => listMemoryRecords(input)),
+});
+
+export const upsertMemoryRecordTool = createTool({
+  id: 'upsert-memory-record',
+  description: 'Create or update a governed structured Memory Ledger record.',
+  inputSchema: z.object({
+    id: z.string().optional(),
+    type: memoryRecordTypeSchema,
+    scope: z.object({
+      resourceId: z.string(),
+      projectId: z.string().optional(),
+      goalId: z.string().optional(),
+      repoId: z.string().optional(),
+    }),
+    title: z.string(),
+    body: z.string(),
+    why: z.string().optional(),
+    howToApply: z.string().optional(),
+    sourceRefs: z.array(memoryRecordSourceRefSchema).default([]),
+    confidence: memoryRecordConfidenceSchema.default('medium'),
+    status: memoryRecordStatusSchema.optional(),
+    expiresAt: z.string().optional(),
+    approvalToken: approvalTokenSchema,
+  }),
+  outputSchema: memoryRecordSchema,
+  execute: async input => executeWithToolGateway('upsert-memory-record', memoryWritePolicy, input, () => upsertMemoryRecord({
+    ...input,
+    sourceRefs: input.sourceRefs || [],
+    confidence: input.confidence || 'medium',
+  })),
+});
+
+export const supersedeMemoryRecordTool = createTool({
+  id: 'supersede-memory-record',
+  description: 'Mark one Memory Ledger record superseded and write a replacement record.',
+  inputSchema: z.object({
+    id: z.string(),
+    replacement: z.object({
+      id: z.string().optional(),
+      type: memoryRecordTypeSchema,
+      scope: z.object({
+        resourceId: z.string(),
+        projectId: z.string().optional(),
+        goalId: z.string().optional(),
+        repoId: z.string().optional(),
+      }),
+      title: z.string(),
+      body: z.string(),
+      why: z.string().optional(),
+      howToApply: z.string().optional(),
+      sourceRefs: z.array(memoryRecordSourceRefSchema).default([]),
+      confidence: memoryRecordConfidenceSchema.default('medium'),
+      expiresAt: z.string().optional(),
+    }),
+    approvalToken: approvalTokenSchema,
+  }),
+  outputSchema: z.object({
+    superseded: memoryRecordSchema,
+    replacement: memoryRecordSchema,
+  }),
+  execute: async input => executeWithToolGateway('supersede-memory-record', memoryWritePolicy, input, () => supersedeMemoryRecord({
+    id: input.id,
+    replacement: {
+      ...input.replacement,
+      sourceRefs: input.replacement.sourceRefs || [],
+      confidence: input.replacement.confidence || 'medium',
+    },
+  })),
+});
+
+export const deleteMemoryRecordTool = createTool({
+  id: 'delete-memory-record',
+  description: 'Mark a Memory Ledger record deleted while preserving audit history.',
+  inputSchema: z.object({
+    id: z.string(),
+    approvalToken: approvalTokenSchema,
+  }),
+  outputSchema: memoryRecordSchema,
+  execute: async input => executeWithToolGateway('delete-memory-record', memoryWritePolicy, input, () => deleteMemoryRecord(input.id)),
+});
+
 export const memoryTools = {
   listMemoryDocsTool,
   readMemoryDocTool,
@@ -152,4 +280,8 @@ export const memoryTools = {
   proposeDocUpdateTool,
   updateMemoryIndexTool,
   upsertUserProfileFactTool,
+  listMemoryRecordsTool,
+  upsertMemoryRecordTool,
+  supersedeMemoryRecordTool,
+  deleteMemoryRecordTool,
 };

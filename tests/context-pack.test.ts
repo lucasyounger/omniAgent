@@ -25,7 +25,12 @@ beforeEach(async () => {
     'utf8',
   );
   await fs.writeFile(path.join(tempRoot, 'docs', 'CONTEXT_PACKS.md'), '# Context Packs\n', 'utf8');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'CHANGE_GATES.md'), '# Change Gates\n', 'utf8');
   await fs.writeFile(path.join(tempRoot, 'docs', 'agents', 'KNOWLEDGE_AGENT.md'), '# KnowledgeAgent\n', 'utf8');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'agents', 'CODE_AGENT.md'), '# CodeAgent\n', 'utf8');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'agents', 'TASK_AGENT.md'), '# TaskAgent\n', 'utf8');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'knowledge', 'CLAUDE_CODE.md'), '# Claude Code\n', 'utf8');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'knowledge', 'TEAM_RUNTIME.md'), '# Team Runtime\n', 'utf8');
   await fs.writeFile(
     path.join(tempRoot, 'docs', 'knowledge', 'PROJECTS.md'),
     [
@@ -81,19 +86,85 @@ describe('context pack runtime', () => {
       reservedForResponse: 3000,
       availableForContext: 9000,
     });
+    expect(contextPack.blocks.memoryContext.included).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'memory', summary: 'Prefer Chinese progress updates.' }),
+    ]));
+    expect(contextPack.snapshot).toMatchObject({
+      packType: 'requirement_e2e',
+      tokenBudget: 9000,
+      includedRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: 'document', path: 'CONTEXT_PACKS.md' }),
+      ]),
+    });
   });
 
-  it('writes and loads context packs with schema validation', async () => {
-    const { buildContextPack, loadContextPack, writeContextPack } = await loadContextPackRuntime();
+  it('builds code_execution packs with verification, impact, and snapshot contracts', async () => {
+    const { buildContextPack } = await loadContextPackRuntime();
+
+    const contextPack = await buildContextPack({
+      taskType: 'code_execution',
+      objective: 'Implement a PR Pool slice',
+      prPoolItemId: 'pr-123',
+      runtimeTaskId: 'runtime-123',
+      acceptanceCriteria: ['slice is implemented'],
+      nonGoals: ['do not push'],
+      verificationCommands: ['npm test -- tests/context-pack.test.ts'],
+      codeImpactContext: {
+        affectedSymbols: ['buildContextPack'],
+        directCallers: ['context-pack.test.ts'],
+        riskLevel: 'medium',
+      },
+    });
+
+    expect(contextPack.documents.map(document => document.path)).toEqual([
+      'agents/CODE_AGENT.md',
+      'agents/TASK_AGENT.md',
+      'knowledge/CLAUDE_CODE.md',
+      'knowledge/TEAM_RUNTIME.md',
+      'CHANGE_GATES.md',
+    ]);
+    expect(contextPack.blocks.taskContract).toMatchObject({
+      objective: 'Implement a PR Pool slice',
+      acceptanceCriteria: ['slice is implemented'],
+      nonGoals: ['do not push'],
+    });
+    expect(contextPack.blocks.codeImpactContext).toMatchObject({
+      affectedSymbols: ['buildContextPack'],
+      directCallers: ['context-pack.test.ts'],
+      riskLevel: 'medium',
+      gitnexusRequired: true,
+      docsSyncRequired: true,
+      testsSyncRequired: true,
+    });
+    expect(contextPack.blocks.verificationContract).toMatchObject({
+      commands: ['npm test -- tests/context-pack.test.ts'],
+      requiredChecks: expect.arrayContaining(['GitNexus impact before edits']),
+    });
+    expect(contextPack.snapshot).toMatchObject({
+      packType: 'code_execution',
+      prPoolItemId: 'pr-123',
+      runtimeTaskId: 'runtime-123',
+      includedRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: 'document', path: 'agents/CODE_AGENT.md' }),
+        expect.objectContaining({ kind: 'memory', path: 'memory/USER.md' }),
+      ]),
+    });
+  });
+
+  it('writes and loads context packs and snapshots with schema validation', async () => {
+    const { buildContextPack, loadContextPack, loadContextSnapshot, writeContextPack, writeContextSnapshot } = await loadContextPackRuntime();
     const contextPack = await buildContextPack({
       taskType: 'requirement_e2e',
       objective: 'Persist context pack',
     });
     const filePath = path.join(tempRoot, '.omni', 'runs', 'context-pack.json');
+    const snapshotPath = path.join(tempRoot, '.omni', 'runs', 'context-snapshot.json');
 
     await writeContextPack(filePath, contextPack);
+    await writeContextSnapshot(snapshotPath, contextPack.snapshot);
 
     await expect(loadContextPack(filePath)).resolves.toEqual(contextPack);
+    await expect(loadContextSnapshot(snapshotPath)).resolves.toEqual(contextPack.snapshot);
   });
 });
 

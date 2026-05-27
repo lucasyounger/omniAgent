@@ -30,11 +30,17 @@ into ordered capability steps before `compositeTaskWorkflow` executes them.
 orchestrator traces store an input hash, candidate capability IDs/scores, decision
 kind/confidence, and fallback reason without storing raw message text; planner
 traces store plan ID, mode, step count, capabilities, and dependency edges for
-golden regression tests. `src/mastra/index.ts` registers `compositeTaskWorkflow`
-alongside the existing Task, Code, memory, research daily digest, and cron
-maintenance workflows so ExecutionPlan dispatch, research digest generation, and
-optional Mastra-scheduled cron scans are available through Mastra workflow
-registration.
+golden regression tests. `src/mastra/index.ts` registers `aiDevE2EWorkflow` and
+`compositeTaskWorkflow` alongside the existing Task, Code, memory, research daily
+digest, and cron maintenance workflows so shadow AI-development orchestration,
+ExecutionPlan dispatch, research digest generation, and optional
+Mastra-scheduled cron scans are available through Mastra workflow registration.
+
+`ai-dev-e2e-workflow` is currently dry-run/shadow only. It covers intake,
+context build, clarification, planning/slicing, approval, PR Pool ingest,
+execution, verification, review, reconcile, memory writeback, and follow-up
+scheduling as auditable step output, but it does not create PR Pool items,
+RuntimeTasks, commits, pushes, external messages, or memory writes.
 
 `cron-maintenance-workflow` is registered as the R5 scheduler migration bridge.
 It only declares a Mastra schedule when `OMNI_CRON_SCHEDULER_DRIVER=mastra`, so

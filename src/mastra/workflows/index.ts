@@ -1,3 +1,5 @@
+export { aiDevE2EWorkflow, runAiDevE2EWorkflow } from './ai-dev-e2e-workflow';
+export type { AiDevE2EInput, AiDevE2EOutput } from './ai-dev-e2e-workflow';
 export { cronMaintenanceWorkflow, runCronMaintenanceWorkflow } from './cron-maintenance-workflow';
 export type { CronMaintenanceInput, CronMaintenanceOutput } from './cron-maintenance-workflow';
 export { getRegistryCatalog, getRegistryEntry, listRegistryEntries, searchRegistryEntries } from '../registry';

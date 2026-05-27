@@ -51,6 +51,17 @@ const referenceSchema = z.object({
   summary: z.string().optional(),
 });
 
+const workspacePolicySchema = z.object({
+  useWorktree: z.boolean().optional(),
+  editablePaths: z.array(z.string()).optional(),
+  forbiddenPaths: z.array(z.string()).optional(),
+  allowDependencyInstall: z.boolean().optional(),
+  allowNetwork: z.boolean().optional(),
+  allowCommit: z.boolean().optional(),
+  allowPush: z.boolean().optional(),
+  cleanup: z.enum(['keep', 'delete_on_archive']).optional(),
+});
+
 const createPrPoolItemSchema = z.object({
   title: z.string(),
   objective: z.string(),
@@ -68,6 +79,10 @@ const createPrPoolItemSchema = z.object({
   }),
   acceptanceCriteria: z.array(z.string()),
   testCommand: z.string().optional(),
+  verificationPlan: z.array(z.string()).optional(),
+  docSyncRequirements: z.array(z.string()).optional(),
+  testSyncRequirements: z.array(z.string()).optional(),
+  workspacePolicy: workspacePolicySchema.optional(),
   codeAgentPrompt: z.string(),
   initialStatus: z.enum(['draft', 'ready']).optional(),
   nonGoals: z.array(z.string()).optional(),
@@ -98,6 +113,10 @@ const proposalSchema = z.object({
   }),
   acceptanceCriteria: z.array(z.string()),
   testCommand: z.string().optional(),
+  verificationPlan: z.array(z.string()).optional(),
+  docSyncRequirements: z.array(z.string()).optional(),
+  testSyncRequirements: z.array(z.string()).optional(),
+  workspacePolicy: workspacePolicySchema.optional(),
   codeAgentPrompt: z.string(),
   nonGoals: z.array(z.string()).optional(),
   constraints: z.array(z.string()).optional(),

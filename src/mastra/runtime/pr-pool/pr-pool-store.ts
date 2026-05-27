@@ -53,6 +53,17 @@ export type PRItemRun = {
   lastCompletedAt?: string;
 };
 
+export type PRItemWorkspacePolicy = {
+  useWorktree: boolean;
+  editablePaths: string[];
+  forbiddenPaths: string[];
+  allowDependencyInstall: boolean;
+  allowNetwork: boolean;
+  allowCommit: boolean;
+  allowPush: boolean;
+  cleanup: 'keep' | 'delete_on_archive';
+};
+
 export type PRItemBlocking = {
   reason: string;
   category: 'missing_config' | 'test_failed' | 'conflict' | 'permission' | 'unclear_requirement' | 'runtime_error';
@@ -79,6 +90,10 @@ export type PRItem = {
   impact: PRItemImpact;
   acceptanceCriteria: string[];
   testCommand?: string;
+  verificationPlan: string[];
+  docSyncRequirements: string[];
+  testSyncRequirements: string[];
+  workspacePolicy: PRItemWorkspacePolicy;
   codeAgentPrompt: string;
   nonGoals: string[];
   constraints: string[];
@@ -134,6 +149,10 @@ export type CreatePRItemInput = {
   impact: PRItemImpact;
   acceptanceCriteria: string[];
   testCommand?: string;
+  verificationPlan?: string[];
+  docSyncRequirements?: string[];
+  testSyncRequirements?: string[];
+  workspacePolicy?: Partial<PRItemWorkspacePolicy>;
   codeAgentPrompt: string;
   initialStatus?: Extract<PRItemStatus, 'draft' | 'ready'>;
   nonGoals?: string[];
@@ -211,6 +230,10 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
     impact: input.impact,
     acceptanceCriteria: input.acceptanceCriteria,
     testCommand: input.testCommand,
+    verificationPlan: input.verificationPlan?.length ? input.verificationPlan : defaultVerificationPlan(input.testCommand),
+    docSyncRequirements: input.docSyncRequirements?.length ? input.docSyncRequirements : ['Update docs when behavior or contracts change.'],
+    testSyncRequirements: input.testSyncRequirements?.length ? input.testSyncRequirements : ['Add or update tests for behavior-changing code edits.'],
+    workspacePolicy: normalizeWorkspacePolicy(input.workspacePolicy),
     codeAgentPrompt: input.codeAgentPrompt,
     nonGoals: input.nonGoals || [],
     constraints: input.constraints || [],
@@ -346,6 +369,10 @@ export async function writePrItemBrief(item: PRItem): Promise<string> {
 
 export function buildPrItemBriefMarkdown(item: PRItem): string {
   const workspacePath = item.workspace.worktreePath || item.workspace.repoPath;
+  const verificationPlan = prItemVerificationPlan(item);
+  const docSyncRequirements = prItemDocSyncRequirements(item);
+  const testSyncRequirements = prItemTestSyncRequirements(item);
+  const workspacePolicy = prItemWorkspacePolicy(item);
   return [
     '# PR Pool Requirement Brief',
     '',
@@ -388,6 +415,29 @@ export function buildPrItemBriefMarkdown(item: PRItem): string {
     '## Acceptance Criteria',
     '',
     ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+    '',
+    '## Verification Plan',
+    '',
+    ...verificationPlan.map(step => `- ${step}`),
+    '',
+    '## Docs Sync Requirements',
+    '',
+    ...docSyncRequirements.map(requirement => `- ${requirement}`),
+    '',
+    '## Test Sync Requirements',
+    '',
+    ...testSyncRequirements.map(requirement => `- ${requirement}`),
+    '',
+    '## Workspace Policy',
+    '',
+    `- Use Worktree: ${workspacePolicy.useWorktree ? 'yes' : 'no'}`,
+    `- Editable Paths: ${workspacePolicy.editablePaths.join(', ') || 'repo root'}`,
+    `- Forbidden Paths: ${workspacePolicy.forbiddenPaths.join(', ') || 'n/a'}`,
+    `- Allow Dependency Install: ${workspacePolicy.allowDependencyInstall ? 'yes' : 'no'}`,
+    `- Allow Network: ${workspacePolicy.allowNetwork ? 'yes' : 'no'}`,
+    `- Allow Commit: ${workspacePolicy.allowCommit ? 'yes' : 'no'}`,
+    `- Allow Push: ${workspacePolicy.allowPush ? 'yes' : 'no'}`,
+    `- Cleanup: ${workspacePolicy.cleanup}`,
     '',
     '## Verification',
     '',
@@ -479,6 +529,9 @@ function buildObjectiveMarkdown(item: PRItem): string {
 }
 
 function buildContextBriefMarkdown(item: PRItem): string {
+  const verificationPlan = prItemVerificationPlan(item);
+  const docSyncRequirements = prItemDocSyncRequirements(item);
+  const testSyncRequirements = prItemTestSyncRequirements(item);
   return [
     `# Context Brief`,
     '',
@@ -490,6 +543,9 @@ function buildContextBriefMarkdown(item: PRItem): string {
     item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
     item.nonGoals.length ? `- Non-goals: ${item.nonGoals.join('; ')}` : undefined,
     item.constraints.length ? `- Constraints: ${item.constraints.join('; ')}` : undefined,
+    verificationPlan.length ? `- Verification Plan: ${verificationPlan.join('; ')}` : undefined,
+    docSyncRequirements.length ? `- Docs Sync: ${docSyncRequirements.join('; ')}` : undefined,
+    testSyncRequirements.length ? `- Tests Sync: ${testSyncRequirements.join('; ')}` : undefined,
     item.references.length ? `- References: ${item.references.map(reference => reference.summary || reference.path || reference.id || reference.type).join('; ')}` : undefined,
   ]
     .filter((line): line is string => Boolean(line))
@@ -504,6 +560,41 @@ function formatReference(reference: PRItemReference): string {
     reference.summary ? `summary=${reference.summary}` : undefined,
   ].filter(Boolean);
   return `- ${parts.join('; ')}`;
+}
+
+function defaultVerificationPlan(testCommand?: string): string[] {
+  return testCommand
+    ? [`Run \`${testCommand}\` and capture the result.`]
+    : ['Run the smallest relevant scoped verification and capture the result.'];
+}
+
+function prItemVerificationPlan(item: PRItem): string[] {
+  return item.verificationPlan?.length ? item.verificationPlan : defaultVerificationPlan(item.testCommand);
+}
+
+function prItemDocSyncRequirements(item: PRItem): string[] {
+  return item.docSyncRequirements?.length ? item.docSyncRequirements : ['Update docs when behavior or contracts change.'];
+}
+
+function prItemTestSyncRequirements(item: PRItem): string[] {
+  return item.testSyncRequirements?.length ? item.testSyncRequirements : ['Add or update tests for behavior-changing code edits.'];
+}
+
+function prItemWorkspacePolicy(item: PRItem): PRItemWorkspacePolicy {
+  return normalizeWorkspacePolicy(item.workspacePolicy);
+}
+
+function normalizeWorkspacePolicy(policy?: Partial<PRItemWorkspacePolicy>): PRItemWorkspacePolicy {
+  return {
+    useWorktree: policy?.useWorktree ?? true,
+    editablePaths: policy?.editablePaths || [],
+    forbiddenPaths: policy?.forbiddenPaths || ['.git/**', '.env', '.env.*'],
+    allowDependencyInstall: policy?.allowDependencyInstall ?? false,
+    allowNetwork: policy?.allowNetwork ?? false,
+    allowCommit: policy?.allowCommit ?? false,
+    allowPush: policy?.allowPush ?? false,
+    cleanup: policy?.cleanup || 'keep',
+  };
 }
 
 function buildDesignMarkdown(design: NonNullable<PRItem['design4Plus1']>): string {

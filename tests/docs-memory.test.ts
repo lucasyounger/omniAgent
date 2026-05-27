@@ -136,4 +136,78 @@ describe('docs memory', () => {
     expect(lessonProposal.proposalType).toBe('lesson');
     expect(referenceProposal.proposalType).toBe('reference');
   });
+
+  it('manages structured Memory Ledger records with scope, search, supersede, and delete', async () => {
+    const { deleteMemoryRecord, listMemoryRecords, supersedeMemoryRecord, upsertMemoryRecord } = await loadDocsMemory();
+
+    const created = await upsertMemoryRecord({
+      id: 'mem-decision-context-pack-v2',
+      type: 'decision',
+      scope: { resourceId: 'project:omni', projectId: 'omni' },
+      title: 'Context Pack snapshots are durable',
+      body: 'Long-running workflows should persist ContextSnapshot records instead of rebuilding context silently.',
+      why: 'Recovery must be auditable.',
+      howToApply: 'Prefer the saved snapshot and attach delta context when code or docs changed.',
+      sourceRefs: [{ kind: 'doc', ref: 'docs/CONTEXT_PACKS.md', summary: 'Context snapshot rules' }],
+      confidence: 'high',
+    });
+
+    expect(created).toMatchObject({
+      id: 'mem-decision-context-pack-v2',
+      status: 'active',
+      confidence: 'high',
+    });
+    await expect(listMemoryRecords({ type: 'decision', resourceId: 'project:omni' })).resolves.toEqual([created]);
+    await expect(listMemoryRecords({ query: 'delta context' })).resolves.toEqual([created]);
+
+    const superseded = await supersedeMemoryRecord({
+      id: created.id,
+      replacement: {
+        id: 'mem-decision-context-pack-v2b',
+        type: 'decision',
+        scope: { resourceId: 'project:omni', projectId: 'omni' },
+        title: 'Context Pack snapshots and deltas are durable',
+        body: 'Recover from the saved snapshot and attach explicit delta context when source material changed.',
+        sourceRefs: [{ kind: 'doc', ref: 'docs/CONTEXT_PACKS.md' }],
+        confidence: 'high',
+      },
+    });
+
+    expect(superseded.superseded.status).toBe('superseded');
+    expect(superseded.replacement).toMatchObject({
+      id: 'mem-decision-context-pack-v2b',
+      supersedes: created.id,
+      status: 'active',
+    });
+
+    const deleted = await deleteMemoryRecord(superseded.replacement.id);
+    expect(deleted.status).toBe('deleted');
+    await expect(listMemoryRecords({ status: 'active' })).resolves.toEqual([]);
+    const ledgerFile = path.join(tempRoot, '.omni', 'memory', 'memory-ledger.json');
+    await expect(fs.readFile(ledgerFile, 'utf8')).resolves.toContain('mem-decision-context-pack-v2b');
+  });
+
+  it('filters Memory Ledger records by goal run thread scope', async () => {
+    const { goalMemoryResourceId, goalRunMemoryThreadId, listMemoryRecords, upsertMemoryRecord } = await loadDocsMemory();
+
+    const created = await upsertMemoryRecord({
+      id: 'mem-goal-run-summary',
+      type: 'goal',
+      scope: {
+        resourceId: goalMemoryResourceId('goal-1'),
+        goalId: 'goal-1',
+        runId: 'run-1',
+        threadId: goalRunMemoryThreadId('run-1'),
+      },
+      title: 'Goal run summary',
+      body: 'The run clarified the next PR slice.',
+      sourceRefs: [{ kind: 'run', ref: 'run-1' }],
+      confidence: 'high',
+    });
+
+    await expect(listMemoryRecords({ resourceId: 'goal:goal-1' })).resolves.toEqual([created]);
+    await expect(listMemoryRecords({ threadId: 'goal-run:run-1' })).resolves.toEqual([created]);
+    await expect(listMemoryRecords({ runId: 'run-1' })).resolves.toEqual([created]);
+    await expect(listMemoryRecords({ query: 'goal-run:run-1' })).resolves.toEqual([created]);
+  });
 });

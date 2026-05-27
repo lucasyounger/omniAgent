@@ -1,9 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createAgentMemory } from '../runtime';
-import { codeTools } from '../tools/code-tools';
-import { getPrPoolItemTool, listPrPoolItemsTool } from '../tools/pr-pool-tools';
-import { getRuntimeTaskStatusTool, listRuntimeTasksTool } from '../tools/runtime-task-tools';
-import { teamRuntimeTools } from '../tools/team-runtime-tools';
+import { codeAgentInternalTools } from '../tools/tool-registry';
 
 export const codeAgent = new Agent({
   id: 'code-agent',
@@ -24,13 +21,6 @@ Responsibilities:
 - When a user-confirmed requirement is recorded into PR Pool through pr_pool.ingest_proposal, include proposal.confirmation = "confirmed" so the item enters ready instead of draft.
 - Do not set proposal.confirmation = "confirmed" for generated, exploratory, or ambiguous requirements that still need user review.`,
   model: 'deepseek/deepseek-v4-flash',
-  tools: {
-    ...codeTools,
-    getPrPoolItemTool,
-    listPrPoolItemsTool,
-    getRuntimeTaskStatusTool,
-    listRuntimeTasksTool,
-    ...teamRuntimeTools,
-  },
+  tools: codeAgentInternalTools,
   memory: createAgentMemory(),
 });

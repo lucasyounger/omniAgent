@@ -13,7 +13,14 @@ OmniRouterAgent is the Mastra-native entry coordinator. It routes intent through
 
 ## Specialist Execution Boundary
 
-OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, RuntimeTask facades, and domain-native Schedule/Notify/Knowledge/Goal/Req/PR Pool facades. Side-effecting domain facades still create RuntimeTasks so Task Dispatcher, Tool Gateway, specialist handlers, result refs, and Team Runtime lifecycle behavior remain the execution boundary.
+OmniRouterAgent intentionally exposes only the public tool set from
+`src/mastra/tools/tool-registry.ts`: team discovery, Team Runtime read/result
+tools, RuntimeTask read/status tools, and domain-native
+Schedule/Notify/Knowledge/Goal/Req/PR Pool facades. It does not expose
+low-level RuntimeTask mutation, TeamTask mutation, inbox send, or CodeAgent
+execution tools. Side-effecting domain facades still create RuntimeTasks so Task
+Dispatcher, Tool Gateway, specialist handlers, result refs, and Team Runtime
+lifecycle behavior remain the execution boundary.
 
 ## Workflows
 
@@ -25,6 +32,11 @@ OmniRouterAgent intentionally exposes team discovery, Team Runtime tools, Runtim
 - Team Runtime: `list-agent-inbox`, `get-run-result`, `get-team-task`,
   `list-team-events`, `mark-inbox-message-read`
 - Domain facades: `create-schedule-task`, `send-channel-notification`, knowledge task facades, Goal tools, Req tools, and PR Pool tools for schema/audit entrypoints over RuntimeTask-backed execution
+- RuntimeTask read/status: `get-runtime-task-status`, `list-runtime-tasks`
+
+Internal-only examples intentionally absent from Router: `start-code-task`,
+`create-team-task`, `send-agent-inbox-message`, `create-runtime-task`,
+`dispatch-runtime-task`, and `create-and-dispatch-runtime-task`.
 
 ## Operating Rules
 

@@ -37,9 +37,19 @@ describe('PR pool store', () => {
 
     expect(item.id).toMatch(/^pr-[a-z0-9]+-[a-f0-9]{4}$/);
     expect(item.status).toBe('draft');
+    expect(item.verificationPlan).toEqual(['Run the smallest relevant scoped verification and capture the result.']);
+    expect(item.docSyncRequirements).toEqual(['Update docs when behavior or contracts change.']);
+    expect(item.testSyncRequirements).toEqual(['Add or update tests for behavior-changing code edits.']);
+    expect(item.workspacePolicy).toMatchObject({
+      useWorktree: true,
+      allowCommit: false,
+      allowPush: false,
+      cleanup: 'keep',
+    });
     expect(item.createdAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     expect(item.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Objective');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Workspace Policy');
     await expect(store.listPrPoolItems({ status: 'draft' })).resolves.toHaveLength(1);
 
     const readyItem = await store.createPrPoolItem({
@@ -102,6 +112,10 @@ describe('PR pool store', () => {
         origin: { type: 'claudecode', artifactPath: '.omc/proposals/add-proposal-ingest.md' },
         impact: { modules: ['PR Pool'], files: ['src/mastra/runtime/pr-pool/pr-pool-store.ts'], risk: 'medium' },
         acceptanceCriteria: ['draft item is created'],
+        verificationPlan: ['Run targeted proposal ingest tests'],
+        docSyncRequirements: ['Update PR Pool docs'],
+        testSyncRequirements: ['Update PR Pool ingest tests'],
+        workspacePolicy: { editablePaths: ['src/mastra/runtime/pr-pool/**'], allowNetwork: false },
         codeAgentPrompt: 'Implement proposal ingest',
         confirmation: 'confirmed',
         nonGoals: ['Do not develop immediately'],
@@ -117,6 +131,10 @@ describe('PR pool store', () => {
       objective: 'Create draft PR items from proposals',
       workspaceRepoPath: tempRoot,
       initialStatus: 'ready',
+      verificationPlan: ['Run targeted proposal ingest tests'],
+      docSyncRequirements: ['Update PR Pool docs'],
+      testSyncRequirements: ['Update PR Pool ingest tests'],
+      workspacePolicy: { editablePaths: ['src/mastra/runtime/pr-pool/**'], allowNetwork: false },
       nonGoals: ['Do not develop immediately'],
       constraints: ['Keep CodeAgent task creation out of ingest'],
       references: [{ type: 'artifact', id: 'artifact-1', summary: 'Confirmed design' }],

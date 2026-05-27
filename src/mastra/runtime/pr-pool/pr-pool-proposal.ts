@@ -23,6 +23,10 @@ export type PRPoolProposal = {
   impact: PRItem['impact'];
   acceptanceCriteria: string[];
   testCommand?: string;
+  verificationPlan?: string[];
+  docSyncRequirements?: string[];
+  testSyncRequirements?: string[];
+  workspacePolicy?: Partial<PRItem['workspacePolicy']>;
   codeAgentPrompt: string;
   confirmation?: PRPoolProposalConfirmation;
   nonGoals?: string[];
@@ -64,6 +68,10 @@ export function proposalToCreatePRItemInput(proposal: PRPoolProposal, workspaceR
     impact: proposal.impact,
     acceptanceCriteria: proposal.acceptanceCriteria,
     testCommand: proposal.testCommand,
+    verificationPlan: proposal.verificationPlan,
+    docSyncRequirements: proposal.docSyncRequirements,
+    testSyncRequirements: proposal.testSyncRequirements,
+    workspacePolicy: proposal.workspacePolicy,
     codeAgentPrompt: proposal.codeAgentPrompt,
     initialStatus: confirmation === 'confirmed' ? 'ready' : 'draft',
     nonGoals,

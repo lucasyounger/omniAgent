@@ -155,8 +155,9 @@ approval linkage.
   `idempotencyKey` returns an existing item and records a deduplication event. PR
   Pool develop now creates and immediately dispatches a child `code.task` CodeAgent RuntimeTask.
   The legacy `code.claude_code_task` type remains accepted for persisted compatibility.
-  The child task keeps `codeAgentBriefPath` and optional executor metadata for
-  `claude_code`, `opencode`, or `custom`. Confirmed PR Pool items are already
+  The child task keeps `codeAgentBriefPath`, structured PR contract fields, and
+  optional executor metadata for `claude_code`, `opencode`, `codex`, or `custom`.
+  Confirmed PR Pool items are already
   reviewed, so develop dispatch does not carry a second approval token; execution
   is bounded by the assigned allowed workspace and Tool Gateway audit records.
   Develop dispatch defaults the child CodeAgent task to direct execution so
@@ -168,7 +169,13 @@ approval linkage.
   dispatch now creates a durable `code-agent-pr-brief.md` under
   `~/.omni/runs/pr-pool/{prItemId}/`, passes `codeAgentBriefPath` to the
   generated CodeAgent RuntimeTask, and archives the same brief with the PR Pool
-  evidence bundle so the implementation contract is traceable. The task type
+  evidence bundle so the implementation contract is traceable. PR Pool items
+  now carry verification plans, docs sync requirements, test sync requirements,
+  and workspace policy so every CodeAgent handoff has explicit execution and
+  review boundaries. Public/internal tool exposure is defined in
+  `src/mastra/tools/tool-registry.ts`: OmniRouter receives public facades plus
+  read/status tools, while CodeAgent receives executor and assigned-context
+  internal tools. The task type
   registry also exposes capability metadata for each existing task type
   (category, examples, handler tools, dependencies, outputs, and safety level)
   without changing dispatch behavior; `code.task` is the default CodeAgent task type

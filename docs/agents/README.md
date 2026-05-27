@@ -10,8 +10,8 @@ without scanning the full codebase first.
 - `CODE_AGENT.md`: Claude Code CLI execution and code task lifecycle.
 - `CRON_AGENT.md`: scheduled job records and due-job execution.
 - `KNOWLEDGE_AGENT.md`: file-backed memory maintenance.
-- `TASK_AGENT.md`: Team Runtime task coordination role. This is currently a
-  protocol/tooling role, not a separate Mastra Agent class.
+- `TASK_AGENT.md`: Runtime Task Protocol and Team Runtime coordination role.
+  This is not a separate Mastra Agent class.
 
 ## Reading Order For Changes
 

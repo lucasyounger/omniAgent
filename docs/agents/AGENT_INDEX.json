@@ -32,7 +32,7 @@
     },
     {
       "id": "task-agent",
-      "status": "protocol-role",
+      "status": "runtime-task-protocol",
       "card": "agents/TASK_AGENT.md",
       "primarySources": ["src/mastra/lib/team-runtime-store.ts", "src/mastra/tools/team-runtime-tools.ts"],
       "contextPack": "TaskAgent / Team Runtime",

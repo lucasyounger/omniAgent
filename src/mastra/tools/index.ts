@@ -8,3 +8,4 @@ export * from './req-tools';
 export * from './runtime-task-tools';
 export * from './team-runtime-tools';
 export * from './team-tools';
+export * from './tool-registry';

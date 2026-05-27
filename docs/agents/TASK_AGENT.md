@@ -1,6 +1,6 @@
 # TaskAgent
 
-Status: protocol/tooling role, not yet a standalone Mastra `Agent`.
+Status: Runtime Task Protocol role, not a standalone Mastra `Agent`.
 
 TaskAgent is the conceptual owner of OmniAgent's Team Runtime. It defines how
 work is delegated, executed, reported, and recovered across all agents.
@@ -23,6 +23,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/tools/notify-tools.ts`
 - `src/mastra/tools/knowledge-task-tools.ts`
 - `src/mastra/tools/pr-pool-tools.ts`
+- `src/mastra/workflows/ai-dev-e2e-workflow.ts`
 - `src/mastra/workflows/composite-task-workflow.ts`
 - `src/mastra/agents/omni-router-agent.ts`
 - `src/mastra/agents/code-agent.ts`
@@ -109,6 +110,10 @@ work is delegated, executed, reported, and recovered across all agents.
 ## Current Behavior
 
 - RuntimeTask, PR Pool, Goal, Req, Schedule, Notify, and Knowledge now have Mastra-native tool facades. Agent-facing routing should prefer these `createTool(...)` facades for schema validation, Tool Gateway audit/approval, and task creation, while Task Dispatcher remains the durable execution backend.
+- Public/internal tool boundaries are defined in
+  `src/mastra/tools/tool-registry.ts`. OmniRouter receives only public facades
+  and read/status tools; specialist handlers and agents use internal tool sets
+  for executor work or low-level protocol operations.
 - `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
 - The generic RuntimeTask facade exposes create, dispatch, create-and-dispatch, status/list, cancel, and retry operations so future Goal/Req/Schedule/Notify facades do not duplicate `taskRuntime.createTask(...)` + `dispatchRuntimeTask(...)` code.
 - Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
@@ -144,6 +149,12 @@ work is delegated, executed, reported, and recovered across all agents.
   not executable are transitioned to runtime `failed` with a visible reason
   instead of remaining indefinitely `pending`/queued.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails.
+- AI Dev E2E workflow currently runs in dry-run/shadow mode. It builds a
+  Context Pack and returns the full intake → context → clarify → plan → approval
+  → PR Pool ingest → execute → verify → review → reconcile → memory writeback
+  → follow-up lane as step output, while explicitly skipping PR Pool mutation,
+  RuntimeTask creation, executor runs, commits, pushes, external sends, and
+  memory writes.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,
@@ -268,6 +279,11 @@ work is delegated, executed, reported, and recovered across all agents.
   points to that file so CodeAgent can read the PR slice objective, impact,
   4+1 design summary, acceptance criteria, verification command, and stop
   conditions before implementation.
+- PR Pool item contracts include verification plan, docs sync requirements,
+  test sync requirements, and workspace policy. These fields are persisted on
+  each item, rendered into PR briefs, and passed through CodeAgent handoff
+  payloads so execution has an explicit acceptance, verification, and workspace
+  boundary.
 - PR Pool archive entries include `code-agent-pr-brief.md` alongside item,
   objective, context, 4+1 design, code-run summary, and final summary artifacts
   so the exact implementation contract remains traceable after the active item

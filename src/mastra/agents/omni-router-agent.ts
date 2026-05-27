@@ -1,14 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createAgentMemory } from '../runtime';
-import { cronTools } from '../tools/cron-tools';
-import { knowledgeTaskTools } from '../tools/knowledge-task-tools';
-import { notifyTools } from '../tools/notify-tools';
-import { goalTools } from '../tools/goal-tools';
-import { prPoolTools } from '../tools/pr-pool-tools';
-import { reqTools } from '../tools/req-tools';
-import { runtimeTaskTools } from '../tools/runtime-task-tools';
-import { teamRuntimeTools } from '../tools/team-runtime-tools';
-import { teamTools } from '../tools/team-tools';
+import { omniRouterPublicTools } from '../tools/tool-registry';
 import { taskOrchestrationWorkflow } from '../workflows';
 
 export const omniRouterAgent = new Agent({
@@ -45,17 +37,7 @@ Memory rules:
 - Do not store secrets.
 - Prefer concise, auditable updates over large opaque summaries.`,
   model: 'deepseek/deepseek-v4-flash',
-  tools: {
-    ...teamTools,
-    ...teamRuntimeTools,
-    ...runtimeTaskTools,
-    ...cronTools,
-    ...notifyTools,
-    ...knowledgeTaskTools,
-    ...goalTools,
-    ...reqTools,
-    ...prPoolTools,
-  },
+  tools: omniRouterPublicTools,
   workflows: {
     taskOrchestrationWorkflow,
   },

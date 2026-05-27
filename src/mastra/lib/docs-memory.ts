@@ -4,6 +4,37 @@ import { docsRoot, memoryRoot, normalizeInside } from './paths';
 
 export type DocUpdateRisk = 'low' | 'medium' | 'high';
 export type MemoryProposalType = 'user' | 'project' | 'lesson' | 'reference';
+export type MemoryRecordType = 'user' | 'project' | 'goal' | 'decision' | 'reference' | 'execution_learning';
+export type MemoryRecordConfidence = 'low' | 'medium' | 'high';
+export type MemoryRecordStatus = 'active' | 'superseded' | 'archived' | 'deleted';
+
+export type MemoryRecord = {
+  id: string;
+  type: MemoryRecordType;
+  scope: {
+    resourceId: string;
+    projectId?: string;
+    goalId?: string;
+    runId?: string;
+    threadId?: string;
+    repoId?: string;
+  };
+  title: string;
+  body: string;
+  why?: string;
+  howToApply?: string;
+  sourceRefs: Array<{
+    kind: string;
+    ref: string;
+    summary?: string;
+  }>;
+  confidence: MemoryRecordConfidence;
+  status: MemoryRecordStatus;
+  supersedes?: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type DocUpdateProposal = {
   id: string;
@@ -19,6 +50,26 @@ export type DocUpdateProposal = {
     content: string;
   }>;
 };
+
+export type ListMemoryRecordsFilter = {
+  type?: MemoryRecordType;
+  status?: MemoryRecordStatus;
+  resourceId?: string;
+  goalId?: string;
+  runId?: string;
+  threadId?: string;
+  projectId?: string;
+  repoId?: string;
+  query?: string;
+};
+
+export function goalMemoryResourceId(goalId: string): string {
+  return `goal:${goalId}`;
+}
+
+export function goalRunMemoryThreadId(runId: string): string {
+  return `goal-run:${runId}`;
+}
 
 export async function readDocsFile(relativePath: string): Promise<string> {
   await ensureMemoryStore();
@@ -57,7 +108,7 @@ export async function listDocsFiles(): Promise<string[]> {
         continue;
       }
 
-      if (relativePath === 'memory/MEMORY_INDEX.json' || relativePath === 'memory/doc-update-proposals.jsonl') {
+      if (relativePath === 'memory/MEMORY_INDEX.json' || relativePath === 'memory/doc-update-proposals.jsonl' || relativePath === 'memory/memory-ledger.json') {
         continue;
       }
 
@@ -166,6 +217,105 @@ export async function updateMemoryIndex() {
   return index;
 }
 
+export async function listMemoryRecords(filter: ListMemoryRecordsFilter = {}): Promise<MemoryRecord[]> {
+  const records = await readMemoryLedger();
+  const normalizedQuery = filter.query?.trim().toLowerCase();
+  return records.filter(record => {
+    if (filter.type && record.type !== filter.type) return false;
+    if (filter.status && record.status !== filter.status) return false;
+    if (filter.resourceId && record.scope.resourceId !== filter.resourceId) return false;
+    if (filter.goalId && record.scope.goalId !== filter.goalId) return false;
+    if (filter.runId && record.scope.runId !== filter.runId) return false;
+    if (filter.threadId && record.scope.threadId !== filter.threadId) return false;
+    if (filter.projectId && record.scope.projectId !== filter.projectId) return false;
+    if (filter.repoId && record.scope.repoId !== filter.repoId) return false;
+    if (normalizedQuery && !memoryRecordHaystack(record).includes(normalizedQuery)) return false;
+    return true;
+  });
+}
+
+export async function upsertMemoryRecord(input: Omit<MemoryRecord, 'id' | 'status' | 'createdAt' | 'updatedAt'> & {
+  id?: string;
+  status?: MemoryRecordStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}): Promise<MemoryRecord> {
+  const records = await readMemoryLedger();
+  const now = new Date().toISOString();
+  const id = input.id || createMemoryRecordId(input.type);
+  const existingIndex = records.findIndex(record => record.id === id);
+  const existing = existingIndex === -1 ? undefined : records[existingIndex];
+  const record: MemoryRecord = {
+    ...input,
+    id,
+    sourceRefs: input.sourceRefs || [],
+    confidence: input.confidence || 'medium',
+    status: input.status || existing?.status || 'active',
+    createdAt: input.createdAt || existing?.createdAt || now,
+    updatedAt: input.updatedAt || now,
+  };
+
+  if (existingIndex === -1) {
+    records.push(record);
+  } else {
+    records[existingIndex] = record;
+  }
+  await writeMemoryLedger(records);
+  return record;
+}
+
+export async function supersedeMemoryRecord(input: {
+  id: string;
+  replacement: Omit<MemoryRecord, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'supersedes'> & { id?: string };
+}): Promise<{ superseded: MemoryRecord; replacement: MemoryRecord }> {
+  const records = await readMemoryLedger();
+  const existingIndex = records.findIndex(record => record.id === input.id);
+  if (existingIndex === -1) {
+    throw new Error(`Memory record not found: ${input.id}`);
+  }
+  const now = new Date().toISOString();
+  const superseded: MemoryRecord = { ...records[existingIndex], status: 'superseded', updatedAt: now };
+  records[existingIndex] = superseded;
+  await writeMemoryLedger(records);
+  const replacement = await upsertMemoryRecord({
+    ...input.replacement,
+    id: input.replacement.id,
+    status: 'active',
+    supersedes: input.id,
+  });
+  return { superseded, replacement };
+}
+
+export async function deleteMemoryRecord(id: string): Promise<MemoryRecord> {
+  const records = await readMemoryLedger();
+  const existingIndex = records.findIndex(record => record.id === id);
+  if (existingIndex === -1) {
+    throw new Error(`Memory record not found: ${id}`);
+  }
+  const deleted: MemoryRecord = {
+    ...records[existingIndex],
+    status: 'deleted',
+    updatedAt: new Date().toISOString(),
+  };
+  records[existingIndex] = deleted;
+  await writeMemoryLedger(records);
+  return deleted;
+}
+
+async function readMemoryLedger(): Promise<MemoryRecord[]> {
+  await ensureMemoryLedger();
+  try {
+    return JSON.parse(await fs.readFile(memoryLedgerFile(), 'utf8')) as MemoryRecord[];
+  } catch {
+    return [];
+  }
+}
+
+async function writeMemoryLedger(records: MemoryRecord[]): Promise<void> {
+  await ensureMemoryLedger();
+  await fs.writeFile(memoryLedgerFile(), JSON.stringify(records, null, 2), 'utf8');
+}
+
 function resolveLogicalDocPath(relativePath: string): string {
   if (relativePath.startsWith('memory/')) {
     return normalizeInside(memoryRoot, relativePath.slice('memory/'.length));
@@ -197,6 +347,44 @@ async function ensureMemoryStore() {
 
   await fs.writeFile(userFile, '# User Memory\n\n', 'utf8');
   await fs.writeFile(path.join(memoryRoot, 'EPISODIC_LOG.md'), '# Episodic Log\n\n', 'utf8');
+}
+
+async function ensureMemoryLedger() {
+  await ensureMemoryStore();
+  try {
+    await fs.access(memoryLedgerFile());
+  } catch {
+    await fs.writeFile(memoryLedgerFile(), '[]\n', 'utf8');
+  }
+}
+
+function memoryLedgerFile(): string {
+  return path.join(memoryRoot, 'memory-ledger.json');
+}
+
+function createMemoryRecordId(type: MemoryRecordType): string {
+  return `mem-${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function memoryRecordHaystack(record: MemoryRecord): string {
+  return [
+    record.id,
+    record.type,
+    record.scope.resourceId,
+    record.scope.projectId,
+    record.scope.goalId,
+    record.scope.runId,
+    record.scope.threadId,
+    record.scope.repoId,
+    record.title,
+    record.body,
+    record.why,
+    record.howToApply,
+    ...record.sourceRefs.map(ref => `${ref.kind} ${ref.ref} ${ref.summary || ''}`),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 }
 
 function inferProposalType(targetFiles: string[]): MemoryProposalType {

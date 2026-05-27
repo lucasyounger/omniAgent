@@ -51,7 +51,12 @@ execution through Team Runtime.
   `draft` until reviewed.
 
 - Uses PR Pool read tools and RuntimeTask status/list tools to inspect assigned PR slice context and parent RuntimeTask state.
-- Does not expose PR Pool develop/scan/write tools, so CodeAgent cannot recursively start PR Pool development.
+- Uses the internal CodeAgent tool set from `src/mastra/tools/tool-registry.ts`:
+  code executor tools, assigned PR Pool reads, RuntimeTask reads, and Team
+  Runtime result reads.
+- Does not expose PR Pool develop/scan/write tools or low-level RuntimeTask and
+  TeamTask mutation tools, so CodeAgent cannot recursively start PR Pool
+  development or create unrelated durable work.
 
 ## Tools
 
