@@ -42,6 +42,11 @@ execution through Team Runtime.
   `~/.omni/runs/executor-runtimes/registry.json` with kind, command, version,
   capabilities, max concurrency, status, and heartbeat metadata. This registry is
   the durable discovery surface for later daemon and ExecutorRun work.
+- ExecutorRun records live under `~/.omni/runs/executor-runs`. The run index
+  tracks runtime id/kind, status, objective, linked RuntimeTask/CodeTask ids,
+  workspace path, timestamps, exit code, and metadata. Each run also has a JSONL
+  transcript for messages, tool calls, errors, diffs, verification, approval
+  waits, and status changes.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn the selected executor or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.

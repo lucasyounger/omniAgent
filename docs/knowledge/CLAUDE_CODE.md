@@ -31,6 +31,11 @@ capabilities, max concurrency, status, and heartbeat metadata. The registry is
 readable without starting CodeAgent execution and is intended as the durable
 runtime discovery layer for the local daemon.
 
+ExecutorRun storage lives in `src/mastra/runtime/executor-run-store.ts`. It
+writes a durable run index under `~/.omni/runs/executor-runs/runs.json` and one
+transcript JSONL file per run. Transcript events cover messages, tool calls,
+errors, diffs, verification results, approval waits, and status changes.
+
 ## Progress
 
 Stdout and stderr are captured as JSONL events in `~/.omni/runs/code-runs/{taskId}.jsonl`.

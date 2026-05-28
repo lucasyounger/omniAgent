@@ -145,6 +145,11 @@ approval linkage.
   kind, command, version, capabilities, max concurrency, status, and heartbeat
   timestamp so future daemon claim/lease logic can reason about available
   executor capacity without probing CLIs on every task dispatch.
+- ExecutorRun storage records each local executor attempt under
+  `~/.omni/runs/executor-runs`. The run index preserves runtime id/kind, status,
+  objective, linked RuntimeTask/CodeTask ids, workspace path, timestamps, exit
+  code, and metadata; each run has a transcript JSONL file for messages, tool
+  calls, errors, diffs, verification, approval waits, and status changes.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and

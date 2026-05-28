@@ -57,7 +57,7 @@ code, docs, and tests kept in sync.
 
 - [x] Add ExecutorRuntime registry for AI CLI detection, version,
   capabilities, status, concurrency, and heartbeat.
-- [ ] Add ExecutorRun store and transcript for messages, tool calls, errors,
+- [x] Add ExecutorRun store and transcript for messages, tool calls, errors,
   diffs, verification, and approval waits.
 - [ ] Strengthen workspace manager around worktree policy, allowed paths,
   cleanup, and rollback hints.

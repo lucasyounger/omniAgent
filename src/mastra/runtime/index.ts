@@ -329,4 +329,19 @@ export type {
   ExecutorRuntimeRegistry,
   ExecutorRuntimeStatus,
 } from './executor-runtime-registry';
+export {
+  appendExecutorRunTranscript,
+  createExecutorRun,
+  getExecutorRun,
+  listExecutorRuns,
+  readExecutorRunTranscript,
+  updateExecutorRunStatus,
+} from './executor-run-store';
+export type {
+  CreateExecutorRunInput,
+  ExecutorRun,
+  ExecutorRunStatus,
+  ExecutorTranscriptEvent,
+  ExecutorTranscriptEventType,
+} from './executor-run-store';
 export type { RuntimeRiskLevel, RuntimeTask, RuntimeTaskStatus, ToolExecutionContext, ToolGatewayPolicy } from './types';
