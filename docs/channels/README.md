@@ -53,6 +53,12 @@ through Team Runtime.
   channel users are interpreted as CST (UTC+8), normalized to UTC for cron
   storage/execution, and converted back to CST in schedule-list replies.
 - PR Pool requests route through capability/tool selection and native PR Pool facades. Explicit PR commands keep compatibility, while natural-language execution no longer depends on a dedicated Gateway regex fast path.
+- Adapter Registry exposes the current and planned channel surfaces through one
+  safe status/start/send facade. Built-ins are `http`, `onebot`, `qqbot`,
+  `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior while
+  Feishu, CLI, and Desktop are explicit placeholders until their transports are
+  implemented. Registry status responses never include credentials, access tokens,
+  or raw session ids.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records

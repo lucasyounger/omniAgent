@@ -1,3 +1,4 @@
+import { sendViaGatewayAdapter } from './adapter-registry';
 import { runtimeTaskTypes } from '../mastra/runtime/task-types';
 import {
   getRunResult,
@@ -30,13 +31,7 @@ type SourceMetadata = {
 };
 
 export async function sendOutbound(message: OutboundMessage, config: GatewayConfig) {
-  if (message.target.channel === 'onebot' && config.oneBotHttpUrl) {
-    await sendOneBot(message, config);
-    return;
-  }
-
-  if (message.target.channel === 'qqbot') {
-    await sendQQBot(message);
+  if (await sendViaGatewayAdapter(message, config)) {
     return;
   }
 
@@ -168,7 +163,7 @@ function directMessageText(payload: unknown) {
   return typeof text === 'string' && text.trim() ? text : undefined;
 }
 
-async function sendOneBot(message: OutboundMessage, config: GatewayConfig) {
+export async function sendOneBotOutbound(message: OutboundMessage, config: GatewayConfig) {
   const endpoint = message.target.messageType === 'group' ? 'send_group_msg' : 'send_private_msg';
   const payload =
     message.target.messageType === 'group'
@@ -185,7 +180,7 @@ async function sendOneBot(message: OutboundMessage, config: GatewayConfig) {
   }
 }
 
-async function sendQQBot(message: OutboundMessage) {
+export async function sendQQBotOutbound(message: OutboundMessage) {
   const token = getQQBotAccessToken();
   if (!token) {
     throw new Error('QQ Bot access token not available');

@@ -118,6 +118,39 @@ describe('Gateway HTTP server', () => {
     }
   });
 
+  it('returns adapter registry statuses without exposing credentials', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer({
+      ...baseConfig(),
+      oneBotHttpUrl: 'http://127.0.0.1:5700',
+      qqbotAppId: 'app-id',
+      qqbotClientSecret: 'secret-value',
+    });
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/adapters/status`);
+      const body = (await response.json()) as { ok: boolean; adapters: Array<{ id: string }> };
+      const serialized = JSON.stringify(body);
+
+      expect(response.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.adapters.map(adapter => adapter.id)).toEqual(['http', 'onebot', 'qqbot', 'feishu', 'cli', 'desktop']);
+      expect(serialized).not.toContain('secret-value');
+      expect(serialized).not.toContain('accessToken');
+      expect(serialized).not.toContain('sessionId');
+    } finally {
+      server.close();
+    }
+  });
+
   it('returns QQBot adapter status without exposing credentials', async () => {
     const { startGatewayHttpServer } = await loadGateway();
     const server = startGatewayHttpServer(baseConfig());
@@ -148,6 +181,7 @@ describe('Gateway HTTP server', () => {
       server.close();
     }
   });
+
 
   it('keeps router admin endpoints disabled by default', async () => {
     const { startGatewayHttpServer } = await loadGateway();

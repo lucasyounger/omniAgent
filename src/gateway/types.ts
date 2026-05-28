@@ -106,6 +106,36 @@ export type ChannelOutboundEnvelopeV2 = {
   metadata?: Record<string, unknown>;
 };
 
+export type GatewayAdapterId = 'http' | 'onebot' | 'qqbot' | 'feishu' | 'cli' | 'desktop';
+
+export type GatewayAdapterCapabilities = {
+  inbound: boolean;
+  outbound: boolean;
+  start: boolean;
+};
+
+export type GatewayAdapterState = 'disabled' | 'ready' | 'running' | 'not_implemented' | 'error';
+
+export type GatewayAdapterStatus = {
+  id: GatewayAdapterId;
+  displayName: string;
+  configured: boolean;
+  enabled: boolean;
+  state: GatewayAdapterState | string;
+  capabilities: GatewayAdapterCapabilities;
+  metadata?: Record<string, unknown>;
+};
+
+export type GatewayAdapter = {
+  id: GatewayAdapterId;
+  displayName: string;
+  capabilities: GatewayAdapterCapabilities;
+  isConfigured: (config: import('./config').GatewayConfig) => boolean;
+  status?: (config: import('./config').GatewayConfig) => GatewayAdapterStatus;
+  start?: (config: import('./config').GatewayConfig) => Promise<void> | void;
+  send?: (message: OutboundMessage, config: import('./config').GatewayConfig) => Promise<void>;
+};
+
 export type ChannelSession = {
   id: string;
   target: ChannelTarget;

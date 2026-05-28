@@ -29,6 +29,20 @@ prompt instead of executing commands.
 }
 ```
 
+## Adapter Registry Status
+
+The gateway exposes a safe registry read endpoint:
+
+```text
+GET http://localhost:4120/adapters/status
+```
+
+It returns all built-in adapter ids (`http`, `onebot`, `qqbot`, `feishu`, `cli`,
+and `desktop`) with configuration state and capabilities. The endpoint is
+status-only: it does not expose QQBot secrets, access tokens, raw session ids, or
+future adapter credentials. `/message`, `/onebot`, and `/qqbot/status` remain on
+the existing compatibility paths.
+
 ## Commands
 
 - `/pair <token>`

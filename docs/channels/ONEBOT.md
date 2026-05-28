@@ -23,7 +23,9 @@ Supported fields:
 
 ## Outbound
 
-Set `OMNI_ONEBOT_HTTP_URL` to the OneBot HTTP API base URL. The gateway sends:
+Set `OMNI_ONEBOT_HTTP_URL` to the OneBot HTTP API base URL. The adapter registry
+reports `onebot` as configured and outbound-capable only when this URL is set.
+The gateway sends:
 
 - `send_private_msg` for direct messages
 - `send_group_msg` for group messages

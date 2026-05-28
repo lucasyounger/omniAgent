@@ -32,9 +32,11 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 - Deferred replies and scheduled channel messages flow through Team Runtime
   inbox messages addressed to `channel-gateway`, then the delivery worker sends
   them to QQ Bot.
-- Gateway exposes `GET /qqbot/status` for local diagnostics. The status output
-  intentionally reports only safe fields such as configured state, websocket
-  state, token presence, session activity, reconnect attempts, and timestamps.
+- Gateway exposes `GET /qqbot/status` for local diagnostics. The same safe status
+  data is also represented in `GET /adapters/status` under adapter id `qqbot`,
+  alongside HTTP, OneBot, Feishu, CLI, and Desktop registry entries. The registry
+  starts QQBot when credentials are configured but leaves the HTTP server lifecycle
+  on the existing gateway startup path.
 
 ## Sending
 

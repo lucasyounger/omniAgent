@@ -75,7 +75,7 @@ code, docs, and tests kept in sync.
 
 - [x] Add Channel protocol v2 with inbound/outbound envelopes, identity, and
   conversation models.
-- [ ] Add adapter registry for QQBot/HTTP/OneBot/Feishu/CLI/Desktop.
+- [x] Add adapter registry for QQBot/HTTP/OneBot/Feishu/CLI/Desktop.
 - [ ] Add shared capability client and view models.
 - [ ] Keep Feishu IM as a channel adapter while docs/calendar/approval remain
   integration tools.

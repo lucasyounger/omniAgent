@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { capabilityRegistry, routeLightweightCapability, type CapabilityDefinition } from '../mastra/runtime/capabilities';
+import { listGatewayAdapterStatuses } from './adapter-registry';
 import type { GatewayConfig } from './config';
 import { readRuntimeDashboardData } from '../mastra/runtime/dashboard';
 import { sendOutbound } from './delivery';
@@ -30,6 +31,11 @@ export function startGatewayHttpServer(config: GatewayConfig) {
 
       if (req.method === 'GET' && req.url === '/runtime/dashboard') {
         sendJson(res, 200, { ok: true, dashboard: await readRuntimeDashboardData() });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/adapters/status') {
+        sendJson(res, 200, { ok: true, adapters: listGatewayAdapterStatuses(config) });
         return;
       }
 
