@@ -313,6 +313,8 @@ export {
 export { runtimeEvents } from './events';
 export { appendDomainEvent, listDomainEvents, readDomainEvents } from './domain-event-store';
 export type { AppendDomainEventInput, DomainEvent, DomainEventSeverity, ListDomainEventsFilter } from './domain-event-store';
+export { readDomainEventStream, streamDomainEvents } from './domain-event-stream';
+export type { DomainEventStreamBatch, DomainEventStreamCursor, ReadDomainEventStreamInput } from './domain-event-stream';
 export {
   buildApprovalInboxProjection,
   buildGoalTimelineProjection,

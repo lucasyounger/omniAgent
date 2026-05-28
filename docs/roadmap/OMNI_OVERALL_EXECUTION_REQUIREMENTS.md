@@ -68,7 +68,7 @@ code, docs, and tests kept in sync.
 - [x] Add append-only DomainEvent schema/store.
 - [x] Add projections for Goal timeline, PR Pool board, RuntimeTask timeline,
   and approval inbox.
-- [ ] Add shared streaming API for CLI/Web/Desktop consumers.
+- [x] Add shared streaming API for CLI/Web/Desktop consumers.
 - [ ] Connect notifications to schedule/runtime/memory/review events.
 
 ## Phase 7: Multi-Channel Shared Core

@@ -163,6 +163,10 @@ approval linkage.
   waiting/resolved buckets. These projections are pure read models exposed through
   `runtimeEvents.projections` and the runtime index; they do not mutate the
   underlying event log.
+- DomainEvent streaming exposes cursor-based batches and an async generator over
+  the same shared log, with the same filters as `listDomainEvents`. CLI, Web, and
+  Desktop clients can persist `{lastEventId,lastCreatedAt}` cursors and resume
+  consumption without client-specific event APIs.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
