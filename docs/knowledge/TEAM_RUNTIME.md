@@ -227,7 +227,10 @@ approval linkage.
   task type maps to at least one capability while agents/tools remain execution
   bindings. Capability entries can include optional Mastra executable bindings for
   migrated tool/workflow handlers; routers still select capability ids, not raw
-  executable names. Runtime-service identities such as `research-agent`,
+  executable names. A shared capability client builds stable read-only view models
+  from the registry for channel and UI consumers, including sorted categories,
+  task types, required tools, safety level, and executable bindings without exposing
+  router-admin mutation controls. Runtime-service identities such as `research-agent`,
   `notify-agent`, `goal-runtime`, `req-runtime`, and `pr-pool-runtime` are
   registry-visible execution surfaces, not necessarily standalone Mastra Agents;
   they route through Task Dispatcher handlers when deterministic Tool/Workflow or

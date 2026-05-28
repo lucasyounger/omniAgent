@@ -2,6 +2,15 @@ export {
   CapabilityRegistry,
   capabilityRegistry,
 } from './capability-registry';
+export {
+  buildCapabilityViewModels,
+  getCapabilityClientSnapshot,
+} from './capability-client';
+export type {
+  CapabilityClientSnapshot,
+  CapabilityExecutableViewModel,
+  CapabilityViewModel,
+} from './capability-client';
 export type {
   CapabilityDefinition,
   CapabilityExecutableBinding,

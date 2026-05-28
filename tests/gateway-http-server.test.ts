@@ -182,6 +182,41 @@ describe('Gateway HTTP server', () => {
     }
   });
 
+  it('returns shared capability client view models without router admin mode', async () => {
+    const { startGatewayHttpServer } = await loadGateway();
+    const server = startGatewayHttpServer(baseConfig());
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/capabilities/view`);
+      const body = (await response.json()) as {
+        ok: boolean;
+        capabilities: Array<{ id: string; executable: boolean; executables: unknown[] }>;
+        categories: Array<{ id: string; count: number }>;
+        taskTypes: string[];
+      };
+
+      expect(response.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.capabilities.map(capability => capability.id)).toContain('message_delivery');
+      expect(body.capabilities.find(capability => capability.id === 'message_delivery')).toMatchObject({
+        executable: true,
+        executables: expect.arrayContaining([expect.objectContaining({ id: 'queue-channel-notification' })]),
+      });
+      expect(body.categories.map(category => category.id)).toContain('notification');
+      expect(body.taskTypes).toContain('channel.message');
+    } finally {
+      server.close();
+    }
+  });
+
 
   it('keeps router admin endpoints disabled by default', async () => {
     const { startGatewayHttpServer } = await loadGateway();

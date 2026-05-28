@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { capabilityRegistry, routeLightweightCapability, type CapabilityDefinition } from '../mastra/runtime/capabilities';
+import { capabilityRegistry, getCapabilityClientSnapshot, routeLightweightCapability, type CapabilityDefinition } from '../mastra/runtime/capabilities';
 import { listGatewayAdapterStatuses } from './adapter-registry';
 import type { GatewayConfig } from './config';
 import { readRuntimeDashboardData } from '../mastra/runtime/dashboard';
@@ -41,6 +41,11 @@ export function startGatewayHttpServer(config: GatewayConfig) {
 
       if (req.method === 'GET' && req.url === '/qqbot/status') {
         sendJson(res, 200, { ok: true, qqbot: getQQBotAdapterStatus() });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/capabilities/view') {
+        sendJson(res, 200, { ok: true, ...getCapabilityClientSnapshot() });
         return;
       }
 

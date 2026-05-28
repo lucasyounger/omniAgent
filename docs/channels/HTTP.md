@@ -129,7 +129,10 @@ disabled unless `OMNI_ROUTER_ADMIN=1`: `GET /capabilities` lists registered capa
 `POST /capabilities` upserts a capability, `DELETE /capabilities/:id` removes one,
 `GET /router/traces` returns recent sanitized route traces kept in memory, and
 `POST /router/eval` returns Top-K lightweight routing candidates plus whether an optional
-`expectedCapability` matched. These endpoints are intended for local evaluation/tuning and
+`expectedCapability` matched. `GET /capabilities/view` is the shared read-only capability
+client endpoint for channels and local UIs; it stays available outside router admin mode
+and returns stable view models with categories, task types, safety level, required tools,
+and executable bindings but no mutation controls. Debug endpoints are intended for local evaluation/tuning and
 must not be exposed without external access controls. The LLM
 orchestrator may return a single executable runtime task or a multi-capability
 plan that Gateway dispatches through RuntimeTask steps. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0` to disable that semantic decision
