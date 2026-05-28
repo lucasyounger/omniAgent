@@ -4,6 +4,7 @@ import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
 import { defaultTargetAgentIdForTaskType, runtimeTaskTypes } from '../runtime/task-types';
+import { queueRuntimeNotification } from '../runtime/notification-dispatch';
 import type { DispatchResult } from '../runtime/task-dispatcher';
 import type { ChannelTarget } from '../../gateway/types';
 import { nowUtc, parseCstDateTime, parseCstDailyTime, cstDailyToUtc, formatCstTime } from '../../lib/time';
@@ -152,6 +153,7 @@ export async function runCronJobNow(id: string) {
   } catch (error) {
     job.lastRunStatus = 'failed';
     job.lastRunError = error instanceof Error ? error.message : String(error);
+    await notifyCronFailure(job, job.lastRunError);
     await writeJobs(jobs);
     throw error;
   }
@@ -228,6 +230,7 @@ export async function runDueCronJobs(now = new Date()) {
     } catch (error) {
       job.lastRunStatus = 'failed';
       job.lastRunError = error instanceof Error ? error.message : String(error);
+      await notifyCronFailure(job, job.lastRunError);
     }
   }
 
@@ -359,7 +362,7 @@ async function executeCronJob(job: CronJob): Promise<{
 }> {
   const taskType = job.taskType || inferTaskType(job.targetAgentId || job.targetAgent);
   const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || defaultTargetAgentIdForTaskType(taskType) || 'code-agent';
-  const payload = job.payload || buildLegacyPayload(job);
+  const payload: Record<string, unknown> = job.payload || buildLegacyPayload(job);
   const notifyTarget = job.notifyTarget || readPayloadNotifyTarget(payload);
   const runtimeTask = await taskRuntime.createTask({
     sourceAgentId: 'scheduler-runtime',
@@ -373,12 +376,26 @@ async function executeCronJob(job: CronJob): Promise<{
       taskType,
       payload,
       notifyTarget,
+      notifyOnRuntimeStatus: payload.notifyOnRuntimeStatus,
+      notifyOnTerminal: payload.notifyOnTerminal,
       source: readPayloadSource(payload),
     },
   });
 
   const { dispatchRuntimeTask } = await import('../runtime/task-dispatcher');
   const dispatch = await dispatchRuntimeTask(runtimeTask.id);
+
+  if (payload.notifyOnScheduleFired === true) {
+    await queueRuntimeNotification({
+      event: 'schedule.fired',
+      target: notifyTarget,
+      text: [`定时任务已触发`, `Schedule: ${job.name}`, `Task: ${runtimeTask.id}`].join('\n'),
+      sourceAgentId: 'scheduler-runtime',
+      parentTaskId: runtimeTask.id,
+      relatedTaskId: runtimeTask.id,
+      entityId: job.id,
+    });
+  }
 
   return {
     taskId: runtimeTask.id,
@@ -438,6 +455,18 @@ function buildLegacyPayload(input: { task: string; workspacePath?: string; paylo
 function readPayloadSource(payload: Record<string, unknown>) {
   const source = payload.source;
   return source && typeof source === 'object' && !Array.isArray(source) ? source : undefined;
+}
+
+async function notifyCronFailure(job: CronJob, reason: string) {
+  const target = job.notifyTarget || readPayloadNotifyTarget(job.payload);
+  await queueRuntimeNotification({
+    event: 'schedule.failed',
+    target,
+    text: [`定时任务执行失败`, `Schedule: ${job.name}`, `Reason: ${reason}`].join('\n'),
+    sourceAgentId: 'scheduler-runtime',
+    entityId: job.id,
+    idempotencyKey: target ? ['schedule.failed', job.id, job.lastRunAt || job.updatedAt, target.channel, target.accountId, target.conversationId].join(':') : undefined,
+  });
 }
 
 function readPayloadNotifyTarget(payload?: Record<string, unknown>) {

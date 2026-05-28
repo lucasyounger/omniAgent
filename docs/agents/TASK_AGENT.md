@@ -96,7 +96,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - Final output should be written as a Result file.
 - Inbox messages are notifications, not the source of truth.
 - Large outputs should be referenced through `resultRef`, not copied into inbox.
-- Completion should notify the source agent and normally `omni-router-agent`.
+- Runtime notifications are low-noise RuntimeTasks. `src/mastra/runtime/notification-dispatch.ts` creates `notify.send_channel_message` child tasks and dispatches them through the existing notify handler instead of writing directly to the Gateway delivery queue. Generated notify tasks carry `metadata.suppressRuntimeNotifications=true`, and TaskRuntime only auto-notifies `waiting_user_confirm` and `failed` transitions by default; `succeeded` requires explicit `notifyOnRuntimeStatus` or `notifyOnTerminal` opt-in.
 - Runs left `running` across restart should be recovered as `interrupted`.
 - Overdue runs should be marked `timed_out`.
 - Runtime status transitions must follow the TaskRuntime state machine. Do not

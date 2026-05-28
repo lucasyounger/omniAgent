@@ -234,6 +234,34 @@ describe('PR pool runtime', () => {
     expect(execFile).toHaveBeenCalledWith('git', ['branch', '-d', `omni/${item.id}`], { cwd: path.resolve(tempRoot) }, expect.any(Function));
   });
 
+
+  it('notifies review-facing status transitions when notify target is configured', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const item = await prPoolRuntime.create({
+      ...input('Notify review'),
+      metadata: {
+        notifyTarget: {
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          messageType: 'dm',
+        },
+      },
+    });
+
+    await prPoolRuntime.confirm(item.id);
+    const deliveries = await listDeliveries();
+
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('PR Pool 条目待评审'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
+  });
+
   it('reconciles completed and failed CodeTask runs back to PR items', async () => {
     const { getCodeTask } = await import('../src/mastra/lib/code-task-store');
     vi.mocked(getCodeTask).mockImplementation(async taskId => ({

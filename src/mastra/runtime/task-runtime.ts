@@ -10,6 +10,8 @@ import {
   type TeamTask,
   type TeamTaskStatus,
 } from '../lib/team-runtime-store';
+import { queueRuntimeNotification } from './notification-dispatch';
+import { runtimeTaskTypes } from './task-types';
 import type { RuntimeTask, RuntimeTaskStatus } from './types';
 import {
   getRuntimeTaskRecord,
@@ -18,6 +20,7 @@ import {
   runtimeTaskFromRecord,
   upsertRuntimeTaskRecord,
 } from './runtime-task-store';
+import { readNotifyTargetFromMetadataOrPayload } from './task-dispatcher/utils';
 
 const statusMap: Record<TeamTaskStatus, RuntimeTaskStatus> = {
   queued: 'pending',
@@ -140,7 +143,15 @@ export const taskRuntime = {
         previousRuntimeStatus: currentStatus,
       },
     });
-    return runtimeTaskFromRecord(record);
+    const runtimeTask = runtimeTaskFromRecord(record);
+    await maybeNotifyRuntimeTransition({
+      task: runtimeTask,
+      previousStatus: currentStatus,
+      nextStatus: input.nextStatus,
+      reason: input.reason,
+      sourceAgentId: input.sourceAgentId,
+    });
+    return runtimeTask;
   },
   async approveTask(input: { taskId: string; reason?: string; sourceAgentId?: string }) {
     return this.transition({
@@ -238,6 +249,56 @@ export function assertTransitionAllowed(currentStatus: RuntimeTaskStatus, nextSt
 function readRuntimeStatus(task: TeamTask): RuntimeTaskStatus | undefined {
   const value = task.metadata?.runtimeStatus;
   return typeof value === 'string' && runtimeStatuses.has(value as RuntimeTaskStatus) ? (value as RuntimeTaskStatus) : undefined;
+}
+
+async function maybeNotifyRuntimeTransition(input: {
+  task: RuntimeTask;
+  previousStatus: RuntimeTaskStatus;
+  nextStatus: RuntimeTaskStatus;
+  reason?: string;
+  sourceAgentId?: string;
+}) {
+  if (input.task.metadata?.suppressRuntimeNotifications === true) return;
+  if (input.task.metadata?.taskType === runtimeTaskTypes.notifySendChannelMessage) return;
+
+  const payload = readPayloadObject(input.task.metadata?.payload);
+  const target = readNotifyTargetFromMetadataOrPayload({ metadata: input.task.metadata, payload });
+  if (!target) return;
+
+  if (!shouldNotifyRuntimeStatus(input.nextStatus, input.task.metadata, payload)) return;
+
+  await queueRuntimeNotification({
+    event: `runtime.${input.nextStatus}` as 'runtime.waiting_user_confirm' | 'runtime.failed' | 'runtime.succeeded',
+    target,
+    text: buildRuntimeNotificationText(input.task, input.nextStatus, input.reason),
+    sourceAgentId: input.sourceAgentId || 'task-runtime',
+    parentTaskId: input.task.id,
+    relatedTaskId: input.task.id,
+    entityId: input.task.id,
+    metadata: {
+      previousRuntimeStatus: input.previousStatus,
+      runtimeStatus: input.nextStatus,
+    },
+  });
+}
+
+function shouldNotifyRuntimeStatus(status: RuntimeTaskStatus, metadata: Record<string, unknown> | undefined, payload: Record<string, unknown>) {
+  if (status === 'failed' || status === 'waiting_user_confirm') return true;
+  if (status !== 'succeeded') return false;
+  return metadata?.notifyOnTerminal === true || payload.notifyOnTerminal === true || includesRuntimeStatus(metadata?.notifyOnRuntimeStatus, status) || includesRuntimeStatus(payload.notifyOnRuntimeStatus, status);
+}
+
+function includesRuntimeStatus(value: unknown, status: RuntimeTaskStatus) {
+  return Array.isArray(value) && value.includes(status);
+}
+
+function buildRuntimeNotificationText(task: RuntimeTask, status: RuntimeTaskStatus, reason?: string) {
+  const title = status === 'waiting_user_confirm' ? '任务等待确认' : status === 'failed' ? '任务失败' : '任务完成';
+  return [title, `Task: ${task.id}`, `Objective: ${task.objective}`, reason ? `Reason: ${reason}` : undefined].filter((line): line is string => Boolean(line)).join('\n');
+}
+
+function readPayloadObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 async function syncLegacyTeamTask(task: TeamTask) {

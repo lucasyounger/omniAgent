@@ -1,9 +1,10 @@
 import { appendTeamEvent } from '../../../lib/team-runtime-store';
 import { appendEpisodicLogTool, proposeDocUpdateTool, updateMemoryIndexTool } from '../../../tools/memory-tools';
+import { queueRuntimeNotification } from '../../notification-dispatch';
 import { taskRuntime } from '../../task-runtime';
 import type { RuntimeTask } from '../../types';
 import type { DispatchResult } from '../types';
-import { readPayload, stringValue } from '../utils';
+import { readNotifyTargetFromMetadataOrPayload, readPayload, stringValue } from '../utils';
 
 type RuntimeTool = {
   execute?: (input: any, context: any) => Promise<unknown>;
@@ -24,6 +25,7 @@ export async function dispatchKnowledgeTask(task: RuntimeTask): Promise<Dispatch
 
   try {
     const taskType = typeof task.metadata?.taskType === 'string' ? task.metadata.taskType : 'knowledge.task';
+    let transitionMetadata: Record<string, unknown> | undefined;
     if (taskType === 'knowledge.memory_index') {
       await runRuntimeTool(updateMemoryIndexTool, {});
     } else if (taskType === 'knowledge.episode') {
@@ -35,11 +37,26 @@ export async function dispatchKnowledgeTask(task: RuntimeTask): Promise<Dispatch
       });
       await runRuntimeTool(updateMemoryIndexTool, {});
     } else if (taskType === 'knowledge.doc_update_proposal') {
-      const proposal = payload.proposal;
-      if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
+      const proposalInput = payload.proposal;
+      if (!proposalInput || typeof proposalInput !== 'object' || Array.isArray(proposalInput)) {
         throw new Error('knowledge.doc_update_proposal requires payload.proposal.');
       }
-      await runRuntimeTool(proposeDocUpdateTool, proposal);
+      const proposal = await runRuntimeTool(proposeDocUpdateTool, proposalInput) as {
+        id: string;
+        reason: string;
+        risk: string;
+        targetFiles: string[];
+      };
+      const notification = await queueRuntimeNotification({
+        event: 'memory.proposal_created',
+        target: readNotifyTargetFromMetadataOrPayload({ metadata: task.metadata, payload }),
+        text: [`记忆更新建议待审阅`, `Proposal: ${proposal.id}`, `Risk: ${proposal.risk}`, `Files: ${proposal.targetFiles.join(', ')}`, `Reason: ${proposal.reason}`].join('\n'),
+        sourceAgentId: 'knowledge-agent',
+        parentTaskId: task.id,
+        relatedTaskId: task.id,
+        entityId: proposal.id,
+      });
+      transitionMetadata = { proposalId: proposal.id, ...notification };
     } else {
       await appendTeamEvent({
         taskId: task.id,
@@ -55,6 +72,7 @@ export async function dispatchKnowledgeTask(task: RuntimeTask): Promise<Dispatch
       nextStatus: 'succeeded',
       reason: 'KnowledgeAgent handler completed.',
       sourceAgentId: 'task-dispatcher',
+      metadata: transitionMetadata,
     });
     return {
       taskId: task.id,

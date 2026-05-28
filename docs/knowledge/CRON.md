@@ -69,6 +69,13 @@ and the actual execution belongs to dispatcher handlers or specialist agent
 logic outside the cron store. The cron store must not import or call CodeAgent
 or `startCodeTask` directly.
 
+Cron copies `notifyTarget` and explicit notification policy fields such as
+`notifyOnRuntimeStatus` and `notifyOnTerminal` onto the child RuntimeTask.
+Schedule-fired notifications are opt-in with `payload.notifyOnScheduleFired` to
+avoid duplicate completion messages, while schedule dispatch failures with a
+`notifyTarget` queue a `notify.send_channel_message` RuntimeTask through the
+shared runtime notification helper.
+
 Current dispatcher handlers include:
 
 - `schedule-handler`: creates and maintains schedule records through

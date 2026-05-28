@@ -167,6 +167,11 @@ approval linkage.
   the same shared log, with the same filters as `listDomainEvents`. CLI, Web, and
   Desktop clients can persist `{lastEventId,lastCreatedAt}` cursors and resume
   consumption without client-specific event APIs.
+- Shared runtime notifications use normal `notify.send_channel_message` RuntimeTasks
+  for schedule, RuntimeTask, memory proposal, and PR Pool review events. The helper
+  suppresses recursive notify-task lifecycle alerts, defaults RuntimeTask alerts to
+  `waiting_user_confirm` and `failed`, and keeps success/schedule-fired alerts
+  opt-in to avoid noisy duplicate delivery.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and

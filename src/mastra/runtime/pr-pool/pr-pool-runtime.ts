@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { cleanupPreparedWorkspace } from './worktree-manager';
 import { getCodeTask } from '../../lib/code-task-store';
+import { queueRuntimeNotification } from '../notification-dispatch';
 import { proposalToCreatePRItemInput, type PRPoolProposal } from './pr-pool-proposal';
+import type { ChannelTarget } from '../../../gateway/types';
 import {
   appendPrPoolEvent,
   archivePrPoolItem,
@@ -206,25 +208,28 @@ export const prPoolRuntime = {
       }
       if (codeTask.status === 'completed') {
         const completedAt = new Date().toISOString();
-        await updatePrPoolItem(item.id, {
+        const updated = await updatePrPoolItem(item.id, {
           status: 'completed',
           run: { ...item.run, lastRunId: codeTask.teamRunId, lastCompletedAt: completedAt },
           blocking: undefined,
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_completed', from: item.status, to: 'completed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId }) });
+        await notifyPrPoolStatusChange(item, updated, 'completed', `Code task ${codeTask.taskId} completed.`, codeTask.taskId);
         result.completed += 1;
       } else if (codeTask.status === 'failed' || codeTask.status === 'cancelled') {
         const reason = codeTask.recentEvents.find(event => event.type === 'task_failed')?.message || `Code task ${codeTask.status}.`;
-        await updatePrPoolItem(item.id, {
+        const updated = await updatePrPoolItem(item.id, {
           status: 'failed',
           run: { ...item.run, lastRunId: codeTask.teamRunId, lastFailureReason: reason },
           blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_failed', from: item.status, to: 'failed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId, status: codeTask.status, reason }) });
+        await notifyPrPoolStatusChange(item, updated, 'failed', reason, codeTask.taskId);
         result.failed += 1;
       } else if (item.status !== 'waiting_user_confirm' && codeTask.status === 'queued') {
-        await updatePrPoolItem(item.id, { status: 'waiting_user_confirm' });
+        const updated = await updatePrPoolItem(item.id, { status: 'waiting_user_confirm' });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_waiting_user_confirm', from: item.status, to: 'waiting_user_confirm', detail: JSON.stringify({ codeTaskId: codeTask.taskId }) });
+        await notifyPrPoolStatusChange(item, updated, 'waiting_user_confirm', `Code task ${codeTask.taskId} is waiting for confirmation.`, codeTask.taskId);
         result.waitingUserConfirm += 1;
       }
     }
@@ -258,6 +263,51 @@ export const prPoolRuntime = {
       to,
       detail,
     });
+    await notifyPrPoolStatusChange(item, updated, to, detail);
     return updated;
   },
 };
+
+function readPrPoolNotifyTarget(item: PRItem): ChannelTarget | undefined {
+  const value = item.metadata.notifyTarget;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const target = value as Partial<ChannelTarget>;
+  if (!target.channel || !target.accountId || !target.conversationId || !target.messageType) return undefined;
+  return {
+    channel: String(target.channel),
+    accountId: String(target.accountId),
+    conversationId: String(target.conversationId),
+    senderId: target.senderId ? String(target.senderId) : undefined,
+    messageType: target.messageType,
+  };
+}
+
+async function notifyPrPoolStatusChange(previous: PRItem, updated: PRItem, status: PRItemStatus, detail?: string, eventEntityId?: string) {
+  const target = readPrPoolNotifyTarget(updated) || readPrPoolNotifyTarget(previous);
+  if (!target || !isReviewNotificationStatus(status)) return;
+
+  await queueRuntimeNotification({
+    event: prPoolNotificationEvent(status),
+    target,
+    text: buildPrPoolStatusNotification(updated, status, detail),
+    sourceAgentId: 'pr-pool-runtime',
+    entityId: eventEntityId || `${updated.id}:${previous.status}:${status}`,
+    idempotencyKey: ['pr_pool.status_changed', updated.id, previous.status, status, eventEntityId || 'transition', target.channel, target.accountId, target.conversationId].join(':'),
+  });
+}
+
+function isReviewNotificationStatus(status: PRItemStatus) {
+  return status === 'ready' || status === 'waiting_user_confirm' || status === 'completed' || status === 'failed';
+}
+
+function prPoolNotificationEvent(status: PRItemStatus) {
+  if (status === 'ready') return 'review.ready';
+  if (status === 'waiting_user_confirm') return 'review.waiting_user_confirm';
+  if (status === 'completed') return 'review.completed';
+  return 'review.failed';
+}
+
+function buildPrPoolStatusNotification(item: PRItem, status: PRItemStatus, detail?: string) {
+  const title = status === 'ready' ? 'PR Pool 条目待评审' : status === 'waiting_user_confirm' ? 'PR Pool 条目等待确认' : status === 'completed' ? 'PR Pool 条目已完成' : 'PR Pool 条目失败';
+  return [title, `PR: ${item.id}`, `Title: ${item.title}`, detail ? `Detail: ${detail}` : undefined].filter((line): line is string => Boolean(line)).join('\n');
+}

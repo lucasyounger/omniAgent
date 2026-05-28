@@ -438,6 +438,53 @@ describe('Task Dispatcher', () => {
     });
   });
 
+
+  it('notifies memory doc update proposals when a target is provided', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'knowledge-agent',
+      objective: 'propose docs memory update',
+      metadata: {
+        taskType: 'knowledge.doc_update_proposal',
+        notifyTarget: {
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          messageType: 'dm',
+        },
+        payload: {
+          proposal: {
+            proposalType: 'project',
+            reason: 'Need docs sync',
+            targetFiles: ['memory/PROJECT.md'],
+            risk: 'low',
+            changes: [{ file: 'memory/PROJECT.md', operation: 'append', summary: 'Add note', content: 'Note' }],
+          },
+        },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(task.id)).resolves.toMatchObject({ status: 'dispatched', handler: 'knowledge-agent' });
+    const deliveries = await listDeliveries();
+
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('记忆更新建议待审阅'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
+    await expect(taskRuntime.getTask(task.id)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: {
+        proposalId: expect.stringMatching(/^memory-proposal-/),
+        notifyDispatchStatus: 'dispatched',
+      },
+    });
+  });
+
   it('dispatches code tasks in allowed workspaces without extra approval', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const task = await taskRuntime.createTask({

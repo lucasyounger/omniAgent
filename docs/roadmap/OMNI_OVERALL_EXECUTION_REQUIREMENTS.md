@@ -69,7 +69,7 @@ code, docs, and tests kept in sync.
 - [x] Add projections for Goal timeline, PR Pool board, RuntimeTask timeline,
   and approval inbox.
 - [x] Add shared streaming API for CLI/Web/Desktop consumers.
-- [ ] Connect notifications to schedule/runtime/memory/review events.
+- [x] Connect notifications to schedule/runtime/memory/review events.
 
 ## Phase 7: Multi-Channel Shared Core
 

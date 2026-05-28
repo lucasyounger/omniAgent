@@ -102,7 +102,27 @@ export function readChannelTarget(value: unknown): ChannelTarget | undefined {
 }
 
 export function createNotifyIdempotencyKey(taskId: string, target: ChannelTarget) {
-  return ['research-digest', taskId, target.channel, target.accountId, target.conversationId].join(':');
+  return createEventNotifyIdempotencyKey({ event: 'research-digest', taskId, target });
+}
+
+export function createEventNotifyIdempotencyKey(input: {
+  event: string;
+  target: ChannelTarget;
+  taskId?: string;
+  runId?: string;
+  entityId?: string;
+}) {
+  return [input.event, input.entityId || input.taskId || 'no-entity', input.runId || 'no-run', input.target.channel, input.target.accountId, input.target.conversationId].join(':');
+}
+
+export function readNotifyTargetFromMetadataOrPayload(input: { metadata?: Record<string, unknown>; payload?: Record<string, unknown> }): ChannelTarget | undefined {
+  return (
+    readChannelTarget(input.payload?.notifyTarget) ||
+    readChannelTarget(input.payload?.target) ||
+    readChannelTarget(input.metadata?.notifyTarget) ||
+    readChannelTarget(objectValue(input.metadata?.payload)?.notifyTarget) ||
+    readChannelTarget(objectValue(input.metadata?.payload)?.target)
+  );
 }
 
 export function isChannelTargetLike(value: unknown): value is ChannelTarget {

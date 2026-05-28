@@ -34,7 +34,7 @@ threads; docs memory remains the auditable long-term knowledge layer.
   proposals; direct writes are reserved for explicit user-provided facts and
   low-risk episodic summaries.
 
-- Public Router-facing knowledge facades (`refresh-knowledge-memory-index`, `append-knowledge-episode`, `propose-knowledge-doc-update`) create `knowledge.*` RuntimeTasks; KnowledgeAgent keeps the low-level memory tools for actual file-backed updates.
+- `knowledge.doc_update_proposal` RuntimeTasks can carry a channel `notifyTarget` in task metadata or payload. After a proposal is recorded, Knowledge dispatch queues a `notify.send_channel_message` child task so reviewers are notified without making memory tools write directly to channel delivery storage.
 - `memory-writeback-workflow` is the deterministic write path for Memory Ledger
   candidates. It filters one-off, sensitive, and code-derived facts, dedupes
   active records by scope/type/title, reports conflicts, and supersedes records

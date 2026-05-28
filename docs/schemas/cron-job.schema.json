@@ -24,6 +24,7 @@
     },
     "notifyTarget": {
       "type": "object",
+      "description": "Optional channel notification target copied onto scheduled RuntimeTasks and used for schedule failure notifications.",
       "required": ["channel", "accountId", "conversationId", "messageType"],
       "properties": {
         "channel": { "type": "string" },

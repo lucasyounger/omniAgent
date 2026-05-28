@@ -273,6 +273,37 @@ describe('Cron store', () => {
     });
   });
 
+
+  it('queues optional schedule-fired notifications', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    await createCronJob({
+      name: 'fire notify',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'user-1',
+        messageType: 'dm',
+      },
+      payload: { notifyOnScheduleFired: true },
+    });
+
+    await runDueCronJobs(new Date('2026-05-12T13:08:00.000Z'));
+    const deliveries = await listDeliveries();
+
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('定时任务已触发'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
+  });
+
   it('creates daily goal scan job only once when enabled', async () => {
     process.env.OMNI_GOAL_DAILY_SCAN_ENABLED = 'true';
     process.env.OMNI_GOAL_DAILY_SCAN_CRON = '0 0 * * *';

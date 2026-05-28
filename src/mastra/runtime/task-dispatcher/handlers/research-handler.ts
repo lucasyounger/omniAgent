@@ -1,5 +1,6 @@
 import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../../lib/team-runtime-store';
 import { runResearchDailyDigestWorkflow } from '../../../workflows/research-daily-digest-workflow';
+import { queueRuntimeNotification } from '../../notification-dispatch';
 import { taskRuntime } from '../../task-runtime';
 import { runtimeTaskTypes } from '../../task-types';
 import type { RuntimeTask } from '../../types';
@@ -8,7 +9,7 @@ import { arrayValue, createNotifyIdempotencyKey, readChannelTarget, readPayload,
 
 export type RuntimeTaskDispatch = (taskId: string) => Promise<DispatchResult>;
 
-export async function dispatchResearchAiDailyDigestTask(task: RuntimeTask, dispatchRuntimeTask: RuntimeTaskDispatch): Promise<DispatchResult> {
+export async function dispatchResearchAiDailyDigestTask(task: RuntimeTask, _dispatchRuntimeTask: RuntimeTaskDispatch): Promise<DispatchResult> {
   const payload = readPayload(task);
   const notifyTarget = readChannelTarget(payload.notifyTarget) || readChannelTarget(task.metadata?.notifyTarget);
 
@@ -44,34 +45,21 @@ export async function dispatchResearchAiDailyDigestTask(task: RuntimeTask, dispa
       },
     });
 
-    let notifyTaskId: string | undefined;
-    let deliveryId: string | undefined;
-    let notifyDispatchStatus: DispatchResult['status'] | undefined;
-    if (notifyTarget) {
-      const notifyTask = await taskRuntime.createTask({
-        sourceAgentId: 'research-handler',
-        targetAgentId: 'notify-agent',
-        objective: `Send AI daily digest for ${digest.topic}`,
-        requestedBy: `runtime-task:${task.id}`,
-        parentTaskId: task.id,
-        metadata: {
-          taskType: runtimeTaskTypes.notifySendChannelMessage,
-          notifyTarget,
-          payload: {
-            text: digest.text,
-            target: notifyTarget,
-            taskId: task.id,
-            runId: run.runId,
-            resultRef: result.resultRef,
-            idempotencyKey: createNotifyIdempotencyKey(task.id, notifyTarget),
-          },
-        },
-      });
-      notifyTaskId = notifyTask.id;
-      const notifyDispatch = await dispatchRuntimeTask(notifyTask.id);
-      notifyDispatchStatus = notifyDispatch.status;
-      deliveryId = notifyDispatch.status === 'dispatched' ? stringValue(notifyDispatch.result?.deliveryId) : undefined;
-    }
+    const notification = notifyTarget
+      ? await queueRuntimeNotification({
+          event: 'research.digest_ready',
+          target: notifyTarget,
+          text: digest.text,
+          sourceAgentId: 'research-handler',
+          objective: `Send AI daily digest for ${digest.topic}`,
+          parentTaskId: task.id,
+          relatedTaskId: task.id,
+          runId: run.runId,
+          resultRef: result.resultRef,
+          idempotencyKey: createNotifyIdempotencyKey(task.id, notifyTarget),
+        })
+      : {};
+    const { notifyTaskId, notifyDispatchStatus, deliveryId } = notification;
 
     await taskRuntime.transition({
       taskId: task.id,
