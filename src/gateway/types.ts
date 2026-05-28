@@ -61,6 +61,51 @@ export type OutboundMessage = {
   replyToMessageId?: string;
 };
 
+export type ChannelIdentityV2 = {
+  channel: string;
+  accountId: string;
+};
+
+export type ChannelActorV2 = {
+  id: string;
+  displayName?: string;
+  roles?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ChannelConversationV2 = {
+  id: string;
+  type: ChannelMessageType;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ChannelInboundEnvelopeV2 = {
+  protocolVersion: 2;
+  id: string;
+  identity: ChannelIdentityV2;
+  conversation: ChannelConversationV2;
+  sender: ChannelActorV2;
+  text: string;
+  attachments?: UnifiedAttachment[];
+  receivedAt: string;
+  routeTraceDebug?: boolean;
+  raw?: unknown;
+  metadata?: Record<string, unknown>;
+};
+
+export type ChannelOutboundEnvelopeV2 = {
+  protocolVersion: 2;
+  target: {
+    identity: ChannelIdentityV2;
+    conversation: ChannelConversationV2;
+    recipient?: ChannelActorV2;
+  };
+  text: string;
+  replyToMessageId?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type ChannelSession = {
   id: string;
   target: ChannelTarget;
@@ -86,6 +131,95 @@ export type DeliveryRecord = {
   createdAt: string;
   updatedAt: string;
 };
+
+export function channelMessageToInboundEnvelopeV2(message: ChannelMessage): ChannelInboundEnvelopeV2 {
+  return {
+    protocolVersion: 2,
+    id: message.messageId,
+    identity: {
+      channel: message.channel,
+      accountId: message.accountId,
+    },
+    conversation: {
+      id: message.conversationId,
+      type: message.messageType,
+    },
+    sender: {
+      id: message.senderId,
+      displayName: message.senderDisplayName,
+    },
+    text: message.text,
+    receivedAt: message.receivedAt,
+    routeTraceDebug: message.routeTraceDebug,
+  };
+}
+
+export function inboundEnvelopeV2ToChannelMessage(envelope: ChannelInboundEnvelopeV2): ChannelMessage {
+  return {
+    channel: envelope.identity.channel,
+    accountId: envelope.identity.accountId,
+    conversationId: envelope.conversation.id,
+    senderId: envelope.sender.id,
+    senderDisplayName: envelope.sender.displayName,
+    messageId: envelope.id,
+    text: envelope.text,
+    messageType: envelope.conversation.type,
+    receivedAt: envelope.receivedAt,
+    routeTraceDebug: envelope.routeTraceDebug,
+  };
+}
+
+export function outboundMessageToEnvelopeV2(message: OutboundMessage): ChannelOutboundEnvelopeV2 {
+  return {
+    protocolVersion: 2,
+    target: {
+      identity: {
+        channel: message.target.channel,
+        accountId: message.target.accountId,
+      },
+      conversation: {
+        id: message.target.conversationId,
+        type: message.target.messageType,
+      },
+      recipient: message.target.senderId ? { id: message.target.senderId } : undefined,
+    },
+    text: message.text,
+    replyToMessageId: message.replyToMessageId,
+  };
+}
+
+export function outboundEnvelopeV2ToMessage(envelope: ChannelOutboundEnvelopeV2): OutboundMessage {
+  return {
+    target: {
+      channel: envelope.target.identity.channel,
+      accountId: envelope.target.identity.accountId,
+      conversationId: envelope.target.conversation.id,
+      senderId: envelope.target.recipient?.id,
+      messageType: envelope.target.conversation.type,
+    },
+    text: envelope.text,
+    replyToMessageId: envelope.replyToMessageId,
+  };
+}
+
+export function inboundEnvelopeV2ToUnifiedRequest(envelope: ChannelInboundEnvelopeV2): UnifiedRequest {
+  const message = inboundEnvelopeV2ToChannelMessage(envelope);
+  const request = toUnifiedRequest(message);
+  return {
+    ...request,
+    attachments: envelope.attachments,
+    metadata: {
+      ...request.metadata,
+      protocolVersion: envelope.protocolVersion,
+      conversationTitle: envelope.conversation.title,
+      conversationMetadata: envelope.conversation.metadata,
+      senderRoles: envelope.sender.roles,
+      senderMetadata: envelope.sender.metadata,
+      raw: envelope.raw,
+      ...(envelope.metadata || {}),
+    },
+  };
+}
 
 export function toUnifiedRequest(message: ChannelMessage): UnifiedRequest {
   return {

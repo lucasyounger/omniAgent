@@ -73,7 +73,7 @@ code, docs, and tests kept in sync.
 
 ## Phase 7: Multi-Channel Shared Core
 
-- [ ] Add Channel protocol v2 with inbound/outbound envelopes, identity, and
+- [x] Add Channel protocol v2 with inbound/outbound envelopes, identity, and
   conversation models.
 - [ ] Add adapter registry for QQBot/HTTP/OneBot/Feishu/CLI/Desktop.
 - [ ] Add shared capability client and view models.

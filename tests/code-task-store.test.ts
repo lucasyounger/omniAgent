@@ -72,9 +72,9 @@ describe('Code task store', () => {
           teamTaskId: started.teamTaskId,
           teamRunId: started.teamRunId,
           status: 'completed',
-          command: 'cc',
-          args: ['--dangerously-skip-permissions'],
-          promptArg: '-p',
+          command: started.command,
+          args: started.args,
+          promptArg: started.promptArg,
         }),
       ]),
     );

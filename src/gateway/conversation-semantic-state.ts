@@ -13,6 +13,7 @@ export type ConversationTurnSummary = {
 export type ConversationSemanticState = {
   conversationId: string;
   channel: string;
+  accountId?: string;
   senderId: string;
   activeModule?: string;
   activeGoalId?: string;
@@ -20,6 +21,13 @@ export type ConversationSemanticState = {
   recentTurns: ConversationTurnSummary[];
   continuationRequest: boolean;
   updatedAt: string;
+};
+
+type ConversationStateKey = {
+  channel: string;
+  accountId?: string;
+  conversationId: string;
+  senderId?: string;
 };
 
 export type ConversationContextInference = {
@@ -37,15 +45,15 @@ const stopWords = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'please'
 const MAX_RECENT_TURNS = Number(process.env.OMNI_GATEWAY_CONTEXT_TURNS || 5);
 const MAX_TURN_SUMMARY_LENGTH = 160;
 
-export async function getConversationSemanticState(input: {
-  channel: string;
-  conversationId: string;
-  senderId?: string;
-}): Promise<ConversationSemanticState | undefined> {
+export async function getConversationSemanticState(input: ConversationStateKey): Promise<ConversationSemanticState | undefined> {
   try {
     const raw = await fs.readFile(stateFile(input), 'utf8');
     return normalizeState(JSON.parse(raw) as ConversationSemanticState);
   } catch {
+    if (input.accountId) {
+      const legacy = await readLegacyAccountlessState(input);
+      if (legacy) return legacy;
+    }
     if (!input.senderId) {
       const senderScoped = await findLatestSenderScopedState(input);
       if (senderScoped) return senderScoped;
@@ -60,9 +68,7 @@ export async function getConversationSemanticState(input: {
   }
 }
 
-export async function setConversationActiveGoal(input: {
-  channel: string;
-  conversationId: string;
+export async function setConversationActiveGoal(input: ConversationStateKey & {
   senderId: string;
   goalId: string;
   activeModule?: string;
@@ -72,6 +78,7 @@ export async function setConversationActiveGoal(input: {
   const state: ConversationSemanticState = {
     conversationId: input.conversationId,
     channel: input.channel,
+    accountId: input.accountId,
     senderId: input.senderId,
     activeModule: input.activeModule || previous?.activeModule,
     activeGoalId: input.goalId,
@@ -85,9 +92,7 @@ export async function setConversationActiveGoal(input: {
   return state;
 }
 
-export async function updateConversationSemanticState(input: {
-  channel: string;
-  conversationId: string;
+export async function updateConversationSemanticState(input: ConversationStateKey & {
   senderId: string;
   inference: ConversationContextInference;
 }): Promise<ConversationSemanticState> {
@@ -96,6 +101,7 @@ export async function updateConversationSemanticState(input: {
   const state: ConversationSemanticState = {
     conversationId: input.conversationId,
     channel: input.channel,
+    accountId: input.accountId,
     senderId: input.senderId,
     activeModule: input.inference.activeModule || previous?.activeModule,
     activeGoalId: previous?.activeGoalId,
@@ -109,9 +115,7 @@ export async function updateConversationSemanticState(input: {
   return state;
 }
 
-export async function appendConversationTurnSummary(input: {
-  channel: string;
-  conversationId: string;
+export async function appendConversationTurnSummary(input: ConversationStateKey & {
   senderId: string;
   messageId?: string;
   text: string;
@@ -132,6 +136,7 @@ export async function appendConversationTurnSummary(input: {
   const state: ConversationSemanticState = {
     conversationId: input.conversationId,
     channel: input.channel,
+    accountId: input.accountId,
     senderId: input.senderId,
     activeModule: previous?.activeModule || entities[0],
     activeGoalId: previous?.activeGoalId,
@@ -144,11 +149,7 @@ export async function appendConversationTurnSummary(input: {
   return state;
 }
 
-export async function clearConversationSemanticState(input: {
-  channel: string;
-  conversationId: string;
-  senderId?: string;
-}): Promise<void> {
+export async function clearConversationSemanticState(input: ConversationStateKey): Promise<void> {
   await fs.rm(stateFile(input), { force: true });
 }
 
@@ -248,21 +249,44 @@ function normalizeState(state: ConversationSemanticState): ConversationSemanticS
   };
 }
 
-async function writeState(input: { channel: string; conversationId: string; senderId?: string }, state: ConversationSemanticState): Promise<void> {
+async function writeState(input: ConversationStateKey, state: ConversationSemanticState): Promise<void> {
   await fs.mkdir(semanticStateRoot, { recursive: true });
   await fs.writeFile(stateFile(input), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
-function stateFile(input: { channel: string; conversationId: string; senderId?: string }): string {
-  return path.join(
-    semanticStateRoot,
-    `${safeFilePart(input.channel)}-${safeFilePart(input.conversationId)}-${safeFilePart(input.senderId || 'unknown')}.json`,
-  );
+function stateFile(input: ConversationStateKey): string {
+  return path.join(semanticStateRoot, stateFileName(input));
 }
 
-async function findLatestSenderScopedState(input: { channel: string; conversationId: string }): Promise<ConversationSemanticState | undefined> {
+function stateFileName(input: ConversationStateKey): string {
+  const parts = [
+    safeFilePart(input.channel),
+    input.accountId ? safeFilePart(input.accountId) : undefined,
+    safeFilePart(input.conversationId),
+    safeFilePart(input.senderId || 'unknown'),
+  ].filter((part): part is string => Boolean(part));
+  return `${parts.join('-')}.json`;
+}
+
+async function readLegacyAccountlessState(input: ConversationStateKey): Promise<ConversationSemanticState | undefined> {
+  if (!input.senderId) return undefined;
   try {
-    const prefix = `${safeFilePart(input.channel)}-${safeFilePart(input.conversationId)}-`;
+    const raw = await fs.readFile(stateFile({
+      channel: input.channel,
+      conversationId: input.conversationId,
+      senderId: input.senderId,
+    }), 'utf8');
+    return normalizeState(JSON.parse(raw) as ConversationSemanticState);
+  } catch {
+    return undefined;
+  }
+}
+
+async function findLatestSenderScopedState(input: { channel: string; accountId?: string; conversationId: string }): Promise<ConversationSemanticState | undefined> {
+  try {
+    const prefix = input.accountId
+      ? `${safeFilePart(input.channel)}-${safeFilePart(input.accountId)}-${safeFilePart(input.conversationId)}-`
+      : `${safeFilePart(input.channel)}-${safeFilePart(input.conversationId)}-`;
     const files = await fs.readdir(semanticStateRoot);
     const states = await Promise.all(files
       .filter(file => file.startsWith(prefix) && file.endsWith('.json'))

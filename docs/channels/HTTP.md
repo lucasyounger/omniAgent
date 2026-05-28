@@ -49,7 +49,7 @@ prompt instead of executing commands.
 
 ## Gateway Routing Pipeline
 
-HTTP, QQBot, and other channel adapters normalize inbound messages to `ChannelMessage`; Gateway then enters the shared `processRequest(UnifiedRequest, config, context)` path before command, semantic, or legacy routing. The initial `sessionId` is derived from `channel:accountId:conversationId:senderId`, so repeated messages from the same source/user/thread share routing context without removing the legacy `ChannelMessage` compatibility wrapper.
+HTTP, QQBot, and other channel adapters normalize inbound messages to `ChannelMessage`; Gateway then enters the shared `processRequest(UnifiedRequest, config, context)` path before command, semantic, or legacy routing. The initial `sessionId` is derived from `channel:accountId:conversationId:senderId`, so repeated messages from the same source/user/thread share routing context without removing the legacy `ChannelMessage` compatibility wrapper. Channel protocol v2 types and converters are available for future adapter migration, but `/message` continues to accept and execute the existing v1 JSON shape in this slice.
 
 Rule Router is intentionally narrow: it handles deterministic slash commands (`/pair`, `/help`, `/status`, `/goal`, `/task`, `/pr`, `/reset`), mention/wake control, empty messages, oversized messages, and obvious system-control injection attempts. `/reset` clears the current sender-scoped semantic routing context without deleting durable goals or tasks. Business natural language such as repo analysis, PR reports, schedules, and goals must continue into semantic/capability routing or legacy fallback instead of being added as rule keywords.
 

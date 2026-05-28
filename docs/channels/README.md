@@ -22,7 +22,12 @@ through Team Runtime.
   dispatch with Agent tool calls.
 - Adapters still emit `ChannelMessage`, but Gateway converts each message into a
   `UnifiedRequest` with stable `source`, `userId`, `sessionId`, `content`, and
-  metadata before invoking the shared request pipeline.
+  metadata before invoking the shared request pipeline. Channel protocol v2 is now
+  available as an additive contract in `src/gateway/types.ts`: inbound envelopes
+  separate channel/account identity, conversation metadata, sender actor metadata,
+  attachments, raw adapter payload, and message text; outbound envelopes mirror the
+  same identity/conversation/recipient model. Current adapters remain on the v1
+  runtime path and use v1/v2 converters for future migration compatibility.
 - Rule Router only handles deterministic slash commands, mention/wake control,
   `/reset` sender-scoped semantic context clearing, and safety boundaries;
   business natural language continues to capability routing or legacy fallback.

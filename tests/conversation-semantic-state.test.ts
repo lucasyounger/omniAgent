@@ -148,6 +148,101 @@ describe('ConversationSemanticState', () => {
     expect(formatHistorySummary(state)).not.toContain('very-long-raw-text very-long-raw-text very-long-raw-text very-long-raw-text');
   });
 
+
+  it('isolates semantic state by account when accountId is provided', async () => {
+    const { getConversationSemanticState, updateConversationSemanticState } = await loadStore();
+
+    await updateConversationSemanticState({
+      channel: 'http',
+      accountId: 'account-a',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+    await updateConversationSemanticState({
+      channel: 'http',
+      accountId: 'account-b',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      inference: {
+        activeModule: 'scheduler',
+        recentEntities: ['scheduler'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    await expect(getConversationSemanticState({
+      channel: 'http',
+      accountId: 'account-a',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+    })).resolves.toMatchObject({ accountId: 'account-a', activeModule: 'memory' });
+    await expect(getConversationSemanticState({
+      channel: 'http',
+      accountId: 'account-b',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+    })).resolves.toMatchObject({ accountId: 'account-b', activeModule: 'scheduler' });
+  });
+
+  it('falls back from account-scoped reads to legacy sender-scoped state', async () => {
+    const { getConversationSemanticState, updateConversationSemanticState } = await loadStore();
+
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    await expect(getConversationSemanticState({
+      channel: 'http',
+      accountId: 'local',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+    })).resolves.toMatchObject({ activeModule: 'memory' });
+  });
+
+  it('keeps legacy callers on the original accountless state path', async () => {
+    const { getConversationSemanticState, updateConversationSemanticState } = await loadStore();
+
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'user-1' })).resolves.toMatchObject({
+      activeModule: 'memory',
+    });
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'user-2' })).resolves.toBeUndefined();
+  });
+
   it('recognizes referent requests without context as low confidence', async () => {
     const { inferConversationContext } = await loadStore();
 

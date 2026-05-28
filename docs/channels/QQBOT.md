@@ -7,7 +7,9 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 ## Responsibilities
 
 - Connect to QQ Bot websocket events. Webhook support is not implemented yet and is a future adapter option.
-- Normalize QQ events into `ChannelMessage`.
+- Normalize QQ events into `ChannelMessage`; Channel protocol v2 converters can map
+  the same data into inbound envelopes with bot identity, conversation, sender
+  actor, raw event metadata, and text when the adapter is migrated.
 - Send outgoing `OutboundMessage` replies through QQ Bot APIs.
 - Keep credentials outside docs and git.
 - Respect group mention-only behavior and allowlists.
@@ -23,7 +25,10 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 - Immediate replies from the shared `processRequest(UnifiedRequest, config, context)` gateway pipeline are sent through
   `sendOutbound`. The adapter still normalizes QQ events to `ChannelMessage`, then
   converts them to `UnifiedRequest` at the Gateway boundary so QQBot, HTTP, and
-  OneBot follow the same command/capability/legacy routing path.
+  OneBot follow the same command/capability/legacy routing path. Outbound protocol
+  v2 envelopes model the same QQ target as channel/account identity plus a
+  conversation and optional recipient actor, but `sendOutbound` continues to accept
+  the existing `OutboundMessage` contract until the later adapter-registry slice.
 - Deferred replies and scheduled channel messages flow through Team Runtime
   inbox messages addressed to `channel-gateway`, then the delivery worker sends
   them to QQ Bot.
