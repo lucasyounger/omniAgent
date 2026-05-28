@@ -50,7 +50,7 @@ code, docs, and tests kept in sync.
   workflow outputs.
 - [x] Normalize verification evidence for tests, typecheck, change-sync,
   GitNexus, and review.
-- [ ] Reconcile PR Pool, Req, GoalRun, and memory candidates from one durable
+- [x] Reconcile PR Pool, Req, GoalRun, and memory candidates from one durable
   step.
 
 ## Phase 5: Local Daemon And Executor Runtime

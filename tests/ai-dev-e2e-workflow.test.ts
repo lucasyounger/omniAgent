@@ -90,6 +90,13 @@ describe('ai-dev-e2e workflow', () => {
       expect.objectContaining({ kind: 'verification', verificationKind: 'review', status: 'required' }),
     ]));
     expect(result.runtimeTaskBindings).toEqual([]);
+    expect(result.reconcile).toMatchObject({
+      status: 'planned',
+      actions: expect.arrayContaining([
+        expect.objectContaining({ target: 'goal_run', targetId: 'goal-memory-os', status: 'planned' }),
+        expect.objectContaining({ target: 'memory', targetId: 'goal:goal-memory-os', status: 'planned' }),
+      ]),
+    });
     expect(result.memoryWritebackCandidates).toEqual([
       { type: 'goal', title: 'AI dev E2E shadow run completed', scope: 'goal:goal-memory-os' },
     ]);
@@ -117,6 +124,12 @@ describe('ai-dev-e2e workflow', () => {
       expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'required' }),
       expect.objectContaining({ kind: 'verification', verificationKind: 'review', status: 'required' }),
     ]));
+    expect(result.reconcile).toMatchObject({
+      status: 'blocked',
+      actions: expect.arrayContaining([
+        expect.objectContaining({ target: 'pr_pool', targetId: 'pr-1', status: 'waiting_evidence' }),
+      ]),
+    });
   });
 
   it('binds dry-run workflow lanes to RuntimeTasks and returns task results', async () => {
@@ -126,6 +139,9 @@ describe('ai-dev-e2e workflow', () => {
     const result = await runAiDevE2EWorkflow({
       mode: 'dry_run',
       request: 'Bind AI dev workflow lanes to runtime tasks',
+      goalId: 'goal-1',
+      reqId: 'req-1',
+      prPoolItemId: 'pr-1',
       requester: 'tester',
       acceptanceCriteria: ['RuntimeTask bindings are visible in workflow output.'],
       requiresApproval: true,
@@ -134,7 +150,7 @@ describe('ai-dev-e2e workflow', () => {
     expect(result.evidence).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'workflow_runtime_tasks' }),
       expect.objectContaining({ kind: 'verification', verificationKind: 'test', status: 'required', command: 'npm test' }),
-      expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'skipped' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'required' }),
     ]));
     expect(result.runtimeTaskBindings).toHaveLength(result.steps.length);
     expect(result.steps.find(step => step.id === 'intake')).toMatchObject({
@@ -146,6 +162,18 @@ describe('ai-dev-e2e workflow', () => {
     });
     expect(result.steps.find(step => step.id === 'execute')).toMatchObject({
       runtimeTaskStatus: 'cancelled',
+    });
+    const reconcileBinding = result.runtimeTaskBindings.find(binding => binding.stepId === 'reconcile');
+    expect(result.reconcile).toMatchObject({
+      status: 'blocked',
+      durableStepTaskId: reconcileBinding?.taskId,
+      resultRef: reconcileBinding?.resultRef,
+      actions: expect.arrayContaining([
+        expect.objectContaining({ target: 'pr_pool', targetId: 'pr-1', status: 'waiting_evidence' }),
+        expect.objectContaining({ target: 'req', targetId: 'req-1', status: 'waiting_evidence' }),
+        expect.objectContaining({ target: 'goal_run', targetId: 'goal-1', status: 'waiting_evidence' }),
+        expect.objectContaining({ target: 'memory', targetId: 'goal:goal-1', status: 'waiting_evidence' }),
+      ]),
     });
 
     const records = await listRuntimeTaskRecords();

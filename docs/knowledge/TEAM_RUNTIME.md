@@ -136,8 +136,10 @@ approval linkage.
   workflow output. These bindings are auditable planning records only: they are
   not dispatched to executor handlers and do not mutate PR Pool state. The same
   output normalizes test, typecheck, change-sync, GitNexus, and review evidence
-  requirements for downstream verification/reconcile consumers. `shadow` mode
-  remains no-side-effect.
+  requirements for downstream verification/reconcile consumers and carries one
+  structured reconcile plan for PR Pool, Req, GoalRun, and memory writeback. The
+  reconcile plan points back to the durable reconcile RuntimeTask binding when
+  the run is in `dry_run`; `shadow` mode remains no-side-effect.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and

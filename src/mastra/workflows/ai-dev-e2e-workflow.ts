@@ -52,6 +52,20 @@ const aiDevE2EEvidenceSchema = z.object({
   sourceRef: z.string().optional(),
 });
 
+const aiDevE2EReconcileActionSchema = z.object({
+  target: z.enum(['pr_pool', 'req', 'goal_run', 'memory']),
+  targetId: z.string().optional(),
+  status: z.enum(['planned', 'waiting_evidence', 'skipped']),
+  summary: z.string(),
+});
+
+const aiDevE2EReconcileSchema = z.object({
+  status: z.enum(['planned', 'blocked', 'skipped']),
+  durableStepTaskId: z.string().optional(),
+  resultRef: z.string().optional(),
+  actions: z.array(aiDevE2EReconcileActionSchema),
+});
+
 const aiDevE2EOutputSchema = z.object({
   runId: z.string(),
   mode: aiDevE2EModeSchema,
@@ -71,6 +85,7 @@ const aiDevE2EOutputSchema = z.object({
   }),
   evidence: z.array(aiDevE2EEvidenceSchema),
   runtimeTaskBindings: z.array(aiDevE2ERuntimeTaskBindingSchema),
+  reconcile: aiDevE2EReconcileSchema,
   memoryWritebackCandidates: z.array(z.object({
     type: z.string(),
     title: z.string(),
@@ -137,6 +152,10 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     : [];
   const steps = attachRuntimeTaskBindings(shadowSteps, runtimeTaskBindings);
   const verificationEvidence = buildVerificationEvidence(parsed, verificationPlan);
+  const memoryWritebackCandidates = parsed.goalId
+    ? [{ type: 'goal', title: 'AI dev E2E shadow run completed', scope: `goal:${parsed.goalId}` }]
+    : [];
+  const reconcile = buildReconcilePlan(parsed, status, runtimeTaskBindings, memoryWritebackCandidates.length);
 
   return aiDevE2EOutputSchema.parse({
     runId,
@@ -163,9 +182,8 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
         : { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
     ],
     runtimeTaskBindings,
-    memoryWritebackCandidates: parsed.goalId
-      ? [{ type: 'goal', title: 'AI dev E2E shadow run completed', scope: `goal:${parsed.goalId}` }]
-      : [],
+    reconcile,
+    memoryWritebackCandidates,
     followUps: parsed.scheduleFollowUp
       ? ['Schedule a follow-up after the shadow plan is confirmed.']
       : [],
@@ -329,6 +347,74 @@ function buildVerificationEvidence(
       summary: 'Collect review evidence covering acceptance, changed scope, safety, docs sync, and tests sync.',
     },
   ];
+}
+
+function buildReconcilePlan(
+  input: z.infer<typeof aiDevE2EInputSchema>,
+  workflowStatus: z.infer<typeof aiDevE2EOutputSchema>['status'],
+  runtimeTaskBindings: z.infer<typeof aiDevE2ERuntimeTaskBindingSchema>[],
+  memoryCandidateCount: number,
+): z.infer<typeof aiDevE2EReconcileSchema> {
+  const reconcileBinding = runtimeTaskBindings.find(binding => binding.stepId === 'reconcile');
+  const blocked = workflowStatus === 'waiting_approval' || workflowStatus === 'needs_input';
+  const actionStatus = blocked ? 'waiting_evidence' : 'planned';
+  const actions: z.infer<typeof aiDevE2EReconcileActionSchema>[] = [
+    input.prPoolItemId
+      ? {
+        target: 'pr_pool',
+        targetId: input.prPoolItemId,
+        status: actionStatus,
+        summary: 'Update PR Pool item with execution, verification, review, and archive-ready evidence.',
+      }
+      : {
+        target: 'pr_pool',
+        status: 'skipped',
+        summary: 'No PR Pool item is linked to this AI Dev E2E run.',
+      },
+    input.reqId
+      ? {
+        target: 'req',
+        targetId: input.reqId,
+        status: actionStatus,
+        summary: 'Update Req status and evidence refs after implementation and review evidence exist.',
+      }
+      : {
+        target: 'req',
+        status: 'skipped',
+        summary: 'No Req document is linked to this AI Dev E2E run.',
+      },
+    input.goalId
+      ? {
+        target: 'goal_run',
+        targetId: input.goalId,
+        status: actionStatus,
+        summary: 'Update GoalRun proof-of-work and next-step state from delivery evidence.',
+      }
+      : {
+        target: 'goal_run',
+        status: 'skipped',
+        summary: 'No Goal is linked to this AI Dev E2E run.',
+      },
+    memoryCandidateCount > 0
+      ? {
+        target: 'memory',
+        targetId: input.goalId ? `goal:${input.goalId}` : undefined,
+        status: actionStatus,
+        summary: `Promote ${memoryCandidateCount} governed memory candidate(s) after delivery review.`,
+      }
+      : {
+        target: 'memory',
+        status: 'skipped',
+        summary: 'No governed memory writeback candidates were produced.',
+      },
+  ];
+
+  return {
+    status: actions.every(action => action.status === 'skipped') ? 'skipped' : blocked ? 'blocked' : 'planned',
+    durableStepTaskId: reconcileBinding?.taskId,
+    resultRef: reconcileBinding?.resultRef,
+    actions,
+  };
 }
 
 function verificationEvidence(

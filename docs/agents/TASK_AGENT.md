@@ -158,7 +158,10 @@ work is delegated, executed, reported, and recovered across all agents.
   the lane's deterministic dry-run result, and returns task ids/status/result refs
   without dispatching executor work or mutating PR Pool state. Workflow output
   also includes normalized verification evidence requirements for test,
-  typecheck, change-sync, GitNexus, and review checks.
+  typecheck, change-sync, GitNexus, and review checks, plus a structured
+  reconcile plan for PR Pool, Req, GoalRun, and memory candidate writeback. In
+  `dry_run`, the reconcile plan points at the durable reconcile RuntimeTask
+  binding so downstream workflow recovery can resume from one auditable step.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,

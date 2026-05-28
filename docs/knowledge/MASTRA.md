@@ -47,7 +47,10 @@ returns task ids/status/result refs in the workflow output without dispatching
 executor work or mutating PR Pool state. Every run now emits normalized
 verification evidence requirements for tests, typecheck, change-sync, GitNexus,
 and review so later verification/reconcile steps can consume one stable contract
-instead of parsing free-form delivery notes.
+instead of parsing free-form delivery notes. The output also includes a
+structured reconcile plan covering PR Pool, Req, GoalRun, and memory writeback
+targets; in `dry_run`, that plan is tied to the durable reconcile RuntimeTask
+binding.
 
 `cron-maintenance-workflow` is registered as the R5 scheduler migration bridge.
 It only declares a Mastra schedule when `OMNI_CRON_SCHEDULER_DRIVER=mastra`, so
