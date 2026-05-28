@@ -152,9 +152,11 @@ work is delegated, executed, reported, and recovered across all agents.
 - AI Dev E2E workflow currently runs in dry-run/shadow mode. It builds a
   Context Pack and returns the full intake → context → clarify → plan → approval
   → PR Pool ingest → execute → verify → review → reconcile → memory writeback
-  → follow-up lane as step output, while explicitly skipping PR Pool mutation,
-  RuntimeTask creation, executor runs, commits, pushes, external sends, and
-  memory writes.
+  → follow-up lane as step output. `shadow` skips PR Pool mutation, RuntimeTask
+  creation, executor runs, commits, pushes, external sends, and memory writes.
+  `dry_run` creates one RuntimeTask binding per lane, transitions each binding to
+  the lane's deterministic dry-run result, and returns task ids/status/result refs
+  without dispatching executor work or mutating PR Pool state.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,

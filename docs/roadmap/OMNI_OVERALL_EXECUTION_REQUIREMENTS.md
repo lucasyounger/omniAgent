@@ -46,7 +46,7 @@ code, docs, and tests kept in sync.
 - [x] Add `ai-dev-e2e-workflow` in dry-run/shadow mode covering intake,
   context, clarify, plan, approval, PR Pool ingest, execute, verify, review,
   reconcile, memory writeback, and follow-up scheduling.
-- [ ] Bind workflow steps to RuntimeTasks and feed RuntimeTask results back to
+- [x] Bind workflow steps to RuntimeTasks and feed RuntimeTask results back to
   workflow outputs.
 - [ ] Normalize verification evidence for tests, typecheck, change-sync,
   GitNexus, and review.

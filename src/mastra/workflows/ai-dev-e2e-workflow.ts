@@ -1,6 +1,8 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { buildContextPack } from '../runtime/context-pack';
+import { taskRuntime } from '../runtime/task-runtime';
+import type { RuntimeTaskStatus } from '../runtime/types';
 
 const aiDevE2EModeSchema = z.enum(['dry_run', 'shadow']);
 const aiDevE2EStepStatusSchema = z.enum(['completed', 'shadowed', 'waiting_approval', 'needs_input', 'skipped']);
@@ -26,6 +28,17 @@ const aiDevE2EStepSchema = z.object({
   label: z.string(),
   status: aiDevE2EStepStatusSchema,
   summary: z.string(),
+  runtimeTaskId: z.string().optional(),
+  runtimeTaskStatus: z.string().optional(),
+  resultRef: z.string().optional(),
+});
+
+const aiDevE2ERuntimeTaskBindingSchema = z.object({
+  stepId: z.string(),
+  taskId: z.string(),
+  status: z.string(),
+  resultRef: z.string(),
+  summary: z.string(),
 });
 
 const aiDevE2EOutputSchema = z.object({
@@ -49,6 +62,7 @@ const aiDevE2EOutputSchema = z.object({
     kind: z.string(),
     summary: z.string(),
   })),
+  runtimeTaskBindings: z.array(aiDevE2ERuntimeTaskBindingSchema),
   memoryWritebackCandidates: z.array(z.object({
     type: z.string(),
     title: z.string(),
@@ -104,6 +118,16 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
   const verificationPlan = parsed.verificationCommands.length
     ? parsed.verificationCommands
     : ['npm run typecheck', 'npm test', 'npm run verify:change-sync', 'gitnexus detect changes before commit'];
+  const shadowSteps = buildShadowSteps(parsed, approvalStatus);
+  const runtimeTaskBindings = parsed.mode === 'dry_run'
+    ? await bindWorkflowStepsToRuntimeTasks({
+      runId,
+      input: parsed,
+      contextSnapshotId: contextPack.snapshot.id,
+      steps: shadowSteps,
+    })
+    : [];
+  const steps = attachRuntimeTaskBindings(shadowSteps, runtimeTaskBindings);
 
   return aiDevE2EOutputSchema.parse({
     runId,
@@ -111,7 +135,7 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     status,
     contextSnapshotId: contextPack.snapshot.id,
     contextPackType: contextPack.task.type,
-    steps: buildShadowSteps(parsed, approvalStatus),
+    steps,
     proposedPrSlice: {
       title: summarizeTitle(parsed.request),
       objective: parsed.request,
@@ -124,8 +148,11 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     },
     evidence: [
       { kind: 'context_snapshot', summary: `Built ${contextPack.task.type} context snapshot ${contextPack.snapshot.id}.` },
-      { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
+      parsed.mode === 'dry_run'
+        ? { kind: 'workflow_runtime_tasks', summary: `Created ${runtimeTaskBindings.length} RuntimeTask bindings without dispatching executor work.` }
+        : { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
     ],
+    runtimeTaskBindings,
     memoryWritebackCandidates: parsed.goalId
       ? [{ type: 'goal', title: 'AI dev E2E shadow run completed', scope: `goal:${parsed.goalId}` }]
       : [],
@@ -155,6 +182,114 @@ function buildShadowSteps(input: z.infer<typeof aiDevE2EInputSchema>, approvalSt
 
 function step(id: string, label: string, status: z.infer<typeof aiDevE2EStepStatusSchema>, summary: string) {
   return { id, label, status, summary };
+}
+
+async function bindWorkflowStepsToRuntimeTasks(input: {
+  runId: string;
+  input: z.infer<typeof aiDevE2EInputSchema>;
+  contextSnapshotId: string;
+  steps: ReturnType<typeof buildShadowSteps>;
+}): Promise<z.infer<typeof aiDevE2ERuntimeTaskBindingSchema>[]> {
+  const bindings: z.infer<typeof aiDevE2ERuntimeTaskBindingSchema>[] = [];
+
+  for (const workflowStep of input.steps) {
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'ai-dev-e2e-workflow',
+      targetAgentId: 'workflow-runtime',
+      objective: `${workflowStep.label}: ${input.input.request}`,
+      parentTaskId: input.runId,
+      requestedBy: input.input.requester,
+      metadata: {
+        taskType: 'workflow.ai_dev_e2e.step',
+        runId: input.runId,
+        workflowId: 'ai-dev-e2e-workflow',
+        workflowRunId: input.runId,
+        workflowStepId: workflowStep.id,
+        contextSnapshotId: input.contextSnapshotId,
+        goalId: input.input.goalId,
+        reqId: input.input.reqId,
+        prPoolItemId: input.input.prPoolItemId,
+        payload: {
+          mode: input.input.mode,
+          stepStatus: workflowStep.status,
+          summary: workflowStep.summary,
+        },
+      },
+    });
+    const resultRef = `workflow:${input.runId}:${workflowStep.id}`;
+    const status = await transitionRuntimeTaskForWorkflowStep(task.id, workflowStep.status, resultRef, workflowStep.summary, input.runId);
+    bindings.push({
+      stepId: workflowStep.id,
+      taskId: task.id,
+      status,
+      resultRef,
+      summary: workflowStep.summary,
+    });
+  }
+
+  return bindings;
+}
+
+async function transitionRuntimeTaskForWorkflowStep(
+  taskId: string,
+  stepStatus: z.infer<typeof aiDevE2EStepStatusSchema>,
+  resultRef: string,
+  summary: string,
+  runId: string,
+): Promise<RuntimeTaskStatus> {
+  if (stepStatus === 'waiting_approval' || stepStatus === 'needs_input') {
+    const task = await taskRuntime.waitForUserConfirm({
+      taskId,
+      reason: summary,
+      sourceAgentId: 'ai-dev-e2e-workflow',
+    });
+    return task.status;
+  }
+
+  if (stepStatus === 'skipped') {
+    const task = await taskRuntime.cancelTask({
+      taskId,
+      reason: summary,
+      sourceAgentId: 'ai-dev-e2e-workflow',
+    });
+    return task.status;
+  }
+
+  await taskRuntime.transition({
+    taskId,
+    nextStatus: 'running',
+    reason: `Binding ${stepStatus} workflow step.`,
+    sourceAgentId: 'ai-dev-e2e-workflow',
+  });
+  const task = await taskRuntime.transition({
+    taskId,
+    nextStatus: 'succeeded',
+    reason: summary,
+    sourceAgentId: 'ai-dev-e2e-workflow',
+    metadata: {
+      runId,
+      resultRef,
+      workflowStepStatus: stepStatus,
+    },
+  });
+  return task.status;
+}
+
+function attachRuntimeTaskBindings(
+  steps: ReturnType<typeof buildShadowSteps>,
+  bindings: z.infer<typeof aiDevE2ERuntimeTaskBindingSchema>[],
+) {
+  const bindingByStep = new Map(bindings.map(binding => [binding.stepId, binding]));
+  return steps.map(workflowStep => {
+    const binding = bindingByStep.get(workflowStep.id);
+    if (!binding) return workflowStep;
+    return {
+      ...workflowStep,
+      runtimeTaskId: binding.taskId,
+      runtimeTaskStatus: binding.status,
+      resultRef: binding.resultRef,
+    };
+  });
 }
 
 function summarizeTitle(request: string): string {

@@ -131,6 +131,11 @@ approval linkage.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
+- AI Dev E2E `dry_run` creates RuntimeTask bindings for each workflow lane and
+  feeds each task id, terminal dry-run status, and result ref back into the
+  workflow output. These bindings are auditable planning records only: they are
+  not dispatched to executor handlers and do not mutate PR Pool state. `shadow`
+  mode remains no-side-effect.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and

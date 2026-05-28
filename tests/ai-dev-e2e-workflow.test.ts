@@ -82,6 +82,7 @@ describe('ai-dev-e2e workflow', () => {
     expect(result.evidence).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'workflow_shadow' }),
     ]));
+    expect(result.runtimeTaskBindings).toEqual([]);
     expect(result.memoryWritebackCandidates).toEqual([
       { type: 'goal', title: 'AI dev E2E shadow run completed', scope: 'goal:goal-memory-os' },
     ]);
@@ -105,5 +106,64 @@ describe('ai-dev-e2e workflow', () => {
     });
     expect(result.steps.find(step => step.id === 'clarify')).toMatchObject({ status: 'needs_input' });
     expect(result.proposedPrSlice.verificationPlan).toContain('npm run verify:change-sync');
+  });
+
+  it('binds dry-run workflow lanes to RuntimeTasks and returns task results', async () => {
+    const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { listRuntimeTaskEvents, listRuntimeTaskRecords } = await import('../src/mastra/runtime/runtime-task-store');
+
+    const result = await runAiDevE2EWorkflow({
+      mode: 'dry_run',
+      request: 'Bind AI dev workflow lanes to runtime tasks',
+      requester: 'tester',
+      acceptanceCriteria: ['RuntimeTask bindings are visible in workflow output.'],
+      requiresApproval: true,
+    });
+
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_runtime_tasks' }),
+    ]));
+    expect(result.runtimeTaskBindings).toHaveLength(result.steps.length);
+    expect(result.steps.find(step => step.id === 'intake')).toMatchObject({
+      runtimeTaskStatus: 'succeeded',
+      resultRef: expect.stringContaining(`workflow:${result.runId}:intake`),
+    });
+    expect(result.steps.find(step => step.id === 'approval')).toMatchObject({
+      runtimeTaskStatus: 'waiting_user_confirm',
+    });
+    expect(result.steps.find(step => step.id === 'execute')).toMatchObject({
+      runtimeTaskStatus: 'cancelled',
+    });
+
+    const records = await listRuntimeTaskRecords();
+    expect(records).toHaveLength(result.steps.length);
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        requestedBy: 'tester',
+        parentTaskId: result.runId,
+        metadata: expect.objectContaining({
+          taskType: 'workflow.ai_dev_e2e.step',
+          workflowId: 'ai-dev-e2e-workflow',
+          workflowRunId: result.runId,
+          workflowStepId: 'intake',
+          contextSnapshotId: result.contextSnapshotId,
+          resultRef: expect.stringContaining(`workflow:${result.runId}:intake`),
+        }),
+        resultRef: expect.stringContaining(`workflow:${result.runId}:intake`),
+        status: 'succeeded',
+      }),
+    ]));
+    const intakeBinding = result.runtimeTaskBindings.find(binding => binding.stepId === 'intake');
+    expect(intakeBinding).toBeDefined();
+    await expect(listRuntimeTaskEvents({ taskId: intakeBinding!.taskId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'runtime.task.created' }),
+      ]),
+    );
+    await expect(listRuntimeTaskEvents({ runId: result.runId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'runtime.task.transitioned', toStatus: 'succeeded', resultRef: expect.stringContaining(`workflow:${result.runId}:intake`) }),
+      ]),
+    );
   });
 });
