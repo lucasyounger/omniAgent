@@ -156,7 +156,9 @@ work is delegated, executed, reported, and recovered across all agents.
   creation, executor runs, commits, pushes, external sends, and memory writes.
   `dry_run` creates one RuntimeTask binding per lane, transitions each binding to
   the lane's deterministic dry-run result, and returns task ids/status/result refs
-  without dispatching executor work or mutating PR Pool state.
+  without dispatching executor work or mutating PR Pool state. Workflow output
+  also includes normalized verification evidence requirements for test,
+  typecheck, change-sync, GitNexus, and review checks.
 - Task type registry defines 25 granular task types and exposes capability
   metadata for each one. Capability metadata keeps the existing `taskType` and
   default target mapping intact while adding category, examples, tools,

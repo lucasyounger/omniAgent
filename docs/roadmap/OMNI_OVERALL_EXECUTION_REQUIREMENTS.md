@@ -48,7 +48,7 @@ code, docs, and tests kept in sync.
   reconcile, memory writeback, and follow-up scheduling.
 - [x] Bind workflow steps to RuntimeTasks and feed RuntimeTask results back to
   workflow outputs.
-- [ ] Normalize verification evidence for tests, typecheck, change-sync,
+- [x] Normalize verification evidence for tests, typecheck, change-sync,
   GitNexus, and review.
 - [ ] Reconcile PR Pool, Req, GoalRun, and memory candidates from one durable
   step.

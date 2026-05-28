@@ -82,6 +82,13 @@ describe('ai-dev-e2e workflow', () => {
     expect(result.evidence).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'workflow_shadow' }),
     ]));
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'verification', verificationKind: 'test', status: 'required', command: 'npx vitest run tests/memory-maintenance-workflow.test.ts' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'typecheck', status: 'required', command: 'npm run typecheck' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'change_sync', status: 'required', command: 'npm run verify:change-sync' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'required' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'review', status: 'required' }),
+    ]));
     expect(result.runtimeTaskBindings).toEqual([]);
     expect(result.memoryWritebackCandidates).toEqual([
       { type: 'goal', title: 'AI dev E2E shadow run completed', scope: 'goal:goal-memory-os' },
@@ -106,6 +113,10 @@ describe('ai-dev-e2e workflow', () => {
     });
     expect(result.steps.find(step => step.id === 'clarify')).toMatchObject({ status: 'needs_input' });
     expect(result.proposedPrSlice.verificationPlan).toContain('npm run verify:change-sync');
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'required' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'review', status: 'required' }),
+    ]));
   });
 
   it('binds dry-run workflow lanes to RuntimeTasks and returns task results', async () => {
@@ -122,6 +133,8 @@ describe('ai-dev-e2e workflow', () => {
 
     expect(result.evidence).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'workflow_runtime_tasks' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'test', status: 'required', command: 'npm test' }),
+      expect.objectContaining({ kind: 'verification', verificationKind: 'gitnexus', status: 'skipped' }),
     ]));
     expect(result.runtimeTaskBindings).toHaveLength(result.steps.length);
     expect(result.steps.find(step => step.id === 'intake')).toMatchObject({

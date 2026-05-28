@@ -41,6 +41,17 @@ const aiDevE2ERuntimeTaskBindingSchema = z.object({
   summary: z.string(),
 });
 
+const aiDevE2EVerificationKindSchema = z.enum(['test', 'typecheck', 'change_sync', 'gitnexus', 'review']);
+const aiDevE2EEvidenceStatusSchema = z.enum(['required', 'skipped', 'passed', 'failed', 'not_run', 'blocked']);
+const aiDevE2EEvidenceSchema = z.object({
+  kind: z.string(),
+  summary: z.string(),
+  verificationKind: aiDevE2EVerificationKindSchema.optional(),
+  status: aiDevE2EEvidenceStatusSchema.optional(),
+  command: z.string().optional(),
+  sourceRef: z.string().optional(),
+});
+
 const aiDevE2EOutputSchema = z.object({
   runId: z.string(),
   mode: aiDevE2EModeSchema,
@@ -58,10 +69,7 @@ const aiDevE2EOutputSchema = z.object({
     testSyncRequirements: z.array(z.string()),
     shadowOnly: z.literal(true),
   }),
-  evidence: z.array(z.object({
-    kind: z.string(),
-    summary: z.string(),
-  })),
+  evidence: z.array(aiDevE2EEvidenceSchema),
   runtimeTaskBindings: z.array(aiDevE2ERuntimeTaskBindingSchema),
   memoryWritebackCandidates: z.array(z.object({
     type: z.string(),
@@ -128,6 +136,7 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     })
     : [];
   const steps = attachRuntimeTaskBindings(shadowSteps, runtimeTaskBindings);
+  const verificationEvidence = buildVerificationEvidence(parsed, verificationPlan);
 
   return aiDevE2EOutputSchema.parse({
     runId,
@@ -148,6 +157,7 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     },
     evidence: [
       { kind: 'context_snapshot', summary: `Built ${contextPack.task.type} context snapshot ${contextPack.snapshot.id}.` },
+      ...verificationEvidence,
       parsed.mode === 'dry_run'
         ? { kind: 'workflow_runtime_tasks', summary: `Created ${runtimeTaskBindings.length} RuntimeTask bindings without dispatching executor work.` }
         : { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
@@ -290,6 +300,54 @@ function attachRuntimeTaskBindings(
       resultRef: binding.resultRef,
     };
   });
+}
+
+function buildVerificationEvidence(
+  input: z.infer<typeof aiDevE2EInputSchema>,
+  verificationPlan: string[],
+): z.infer<typeof aiDevE2EEvidenceSchema>[] {
+  const gitnexusRequired = Boolean(input.affectedAreas.length || input.prPoolItemId);
+  return [
+    verificationEvidence('test', selectVerificationCommand(verificationPlan, /(?:^|[\s:])(?:test|vitest)(?:$|\s)/i, 'npm test'), 'Collect focused or full test command output before delivery.'),
+    verificationEvidence('typecheck', selectVerificationCommand(verificationPlan, /typecheck|tsc\s+--noEmit/i, 'npm run typecheck'), 'Collect TypeScript typecheck output before delivery.'),
+    verificationEvidence('change_sync', selectVerificationCommand(verificationPlan, /verify:change-sync|change-sync/i, 'npm run verify:change-sync'), 'Collect code/docs/tests sync verification before delivery.'),
+    {
+      kind: 'verification',
+      verificationKind: 'gitnexus',
+      status: gitnexusRequired ? 'required' : 'skipped',
+      command: gitnexusRequired ? 'gitnexus impact before edits; gitnexus detect_changes before commit' : undefined,
+      sourceRef: 'GitNexus CodeImpactContextBlock',
+      summary: gitnexusRequired
+        ? 'Collect GitNexus impact and changed-flow evidence before delivery.'
+        : 'GitNexus verification is skipped until code impact context is in scope.',
+    },
+    {
+      kind: 'verification',
+      verificationKind: 'review',
+      status: 'required',
+      sourceRef: 'AI Dev E2E review lane',
+      summary: 'Collect review evidence covering acceptance, changed scope, safety, docs sync, and tests sync.',
+    },
+  ];
+}
+
+function verificationEvidence(
+  verificationKind: z.infer<typeof aiDevE2EVerificationKindSchema>,
+  command: string,
+  summary: string,
+): z.infer<typeof aiDevE2EEvidenceSchema> {
+  return {
+    kind: 'verification',
+    verificationKind,
+    status: 'required',
+    command,
+    sourceRef: 'AI Dev E2E verification contract',
+    summary,
+  };
+}
+
+function selectVerificationCommand(verificationPlan: string[], pattern: RegExp, fallback: string): string {
+  return verificationPlan.find(command => pattern.test(command)) || fallback;
 }
 
 function summarizeTitle(request: string): string {

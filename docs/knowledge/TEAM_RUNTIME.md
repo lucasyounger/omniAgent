@@ -134,8 +134,10 @@ approval linkage.
 - AI Dev E2E `dry_run` creates RuntimeTask bindings for each workflow lane and
   feeds each task id, terminal dry-run status, and result ref back into the
   workflow output. These bindings are auditable planning records only: they are
-  not dispatched to executor handlers and do not mutate PR Pool state. `shadow`
-  mode remains no-side-effect.
+  not dispatched to executor handlers and do not mutate PR Pool state. The same
+  output normalizes test, typecheck, change-sync, GitNexus, and review evidence
+  requirements for downstream verification/reconcile consumers. `shadow` mode
+  remains no-side-effect.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and

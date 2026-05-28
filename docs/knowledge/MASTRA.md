@@ -44,7 +44,10 @@ does not create PR Pool items, RuntimeTasks, commits, pushes, external messages,
 or memory writes. `dry_run` mode creates one auditable RuntimeTask binding per
 workflow lane, transitions each binding to the deterministic dry-run status, and
 returns task ids/status/result refs in the workflow output without dispatching
-executor work or mutating PR Pool state.
+executor work or mutating PR Pool state. Every run now emits normalized
+verification evidence requirements for tests, typecheck, change-sync, GitNexus,
+and review so later verification/reconcile steps can consume one stable contract
+instead of parsing free-form delivery notes.
 
 `cron-maintenance-workflow` is registered as the R5 scheduler migration bridge.
 It only declares a Mastra schedule when `OMNI_CRON_SCHEDULER_DRIVER=mastra`, so
