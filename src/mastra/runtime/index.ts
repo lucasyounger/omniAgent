@@ -331,17 +331,25 @@ export type {
 } from './executor-runtime-registry';
 export {
   appendExecutorRunTranscript,
+  claimNextExecutorRun,
   createExecutorRun,
+  garbageCollectExecutorRuns,
   getExecutorRun,
+  heartbeatExecutorRunLease,
   listExecutorRuns,
   readExecutorRunTranscript,
   updateExecutorRunStatus,
 } from './executor-run-store';
 export type {
+  ClaimExecutorRunInput,
+  ClaimExecutorRunResult,
   CreateExecutorRunInput,
   ExecutorRun,
+  ExecutorRunLease,
   ExecutorRunStatus,
   ExecutorTranscriptEvent,
   ExecutorTranscriptEventType,
+  GarbageCollectExecutorRunsResult,
+  HeartbeatExecutorRunLeaseInput,
 } from './executor-run-store';
 export type { RuntimeRiskLevel, RuntimeTask, RuntimeTaskStatus, ToolExecutionContext, ToolGatewayPolicy } from './types';

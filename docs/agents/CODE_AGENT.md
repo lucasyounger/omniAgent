@@ -44,9 +44,11 @@ execution through Team Runtime.
   the durable discovery surface for later daemon and ExecutorRun work.
 - ExecutorRun records live under `~/.omni/runs/executor-runs`. The run index
   tracks runtime id/kind, status, objective, linked RuntimeTask/CodeTask ids,
-  workspace path, timestamps, exit code, and metadata. Each run also has a JSONL
-  transcript for messages, tool calls, errors, diffs, verification, approval
-  waits, and status changes.
+  workspace path, timestamps, exit code, lease, and metadata. Each run also has
+  a JSONL transcript for messages, tool calls, errors, diffs, verification,
+  approval waits, and status changes. Background daemons claim queued runs with
+  leases, heartbeat active work, respect owner concurrency limits, reclaim
+  expired claims, and garbage-collect stale or retained run records.
 - PR Pool workspace preparation exposes the resolved workspace/worktree path,
   editable and forbidden path scopes, cleanup policy, and rollback hints before
   executor work starts. Path checks reject escapes, forbidden paths, and edits

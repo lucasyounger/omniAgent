@@ -136,4 +136,128 @@ describe('executor run store', () => {
       expect.objectContaining({ type: 'status', payload: { status: 'failed', exitCode: 1 } }),
     ]));
   });
+
+  it('claims queued runs with leases and enforces owner concurrency', async () => {
+    const {
+      claimNextExecutorRun,
+      createExecutorRun,
+      heartbeatExecutorRunLease,
+      getExecutorRun,
+      readExecutorRunTranscript,
+    } = await loadExecutorRunStore();
+    const first = await createExecutorRun({
+      runtimeId: 'codex',
+      runtimeKind: 'codex',
+      objective: 'First queued run',
+      now: new Date('2026-05-28T02:00:00.000Z'),
+    });
+    await createExecutorRun({
+      runtimeId: 'opencode',
+      runtimeKind: 'opencode',
+      objective: 'Second queued run',
+      now: new Date('2026-05-28T02:00:01.000Z'),
+    });
+
+    const claimed = await claimNextExecutorRun({
+      ownerId: 'daemon-1',
+      runtimeIds: ['codex'],
+      leaseTtlMs: 60_000,
+      maxConcurrentClaims: 1,
+      now: new Date('2026-05-28T02:01:00.000Z'),
+    });
+    const limited = await claimNextExecutorRun({
+      ownerId: 'daemon-1',
+      maxConcurrentClaims: 1,
+      now: new Date('2026-05-28T02:01:01.000Z'),
+    });
+    const heartbeat = await heartbeatExecutorRunLease({
+      runId: first.runId,
+      ownerId: 'daemon-1',
+      leaseTtlMs: 120_000,
+      now: new Date('2026-05-28T02:01:30.000Z'),
+    });
+
+    expect(claimed).toMatchObject({
+      claimed: true,
+      run: {
+        runId: first.runId,
+        status: 'claimed',
+        lease: {
+          ownerId: 'daemon-1',
+          claimedAt: '2026-05-28T02:01:00.000Z',
+          heartbeatAt: '2026-05-28T02:01:00.000Z',
+          expiresAt: '2026-05-28T02:02:00.000Z',
+        },
+      },
+    });
+    expect(limited).toEqual({ claimed: false, reason: 'concurrency_limit_reached' });
+    expect(heartbeat.lease).toMatchObject({
+      ownerId: 'daemon-1',
+      claimedAt: '2026-05-28T02:01:00.000Z',
+      heartbeatAt: '2026-05-28T02:01:30.000Z',
+      expiresAt: '2026-05-28T02:03:30.000Z',
+    });
+    await expect(getExecutorRun(first.runId)).resolves.toMatchObject({ status: 'claimed' });
+    await expect(readExecutorRunTranscript(first.runId)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'status', message: 'Executor run claimed by daemon-1.' }),
+      expect.objectContaining({ type: 'status', message: 'Executor run lease heartbeat from daemon-1.' }),
+    ]));
+  });
+
+  it('reclaims expired claims and garbage-collects stale and retained runs', async () => {
+    const {
+      claimNextExecutorRun,
+      createExecutorRun,
+      garbageCollectExecutorRuns,
+      getExecutorRun,
+      listExecutorRuns,
+      updateExecutorRunStatus,
+    } = await loadExecutorRunStore();
+    const stale = await createExecutorRun({
+      runtimeId: 'codex',
+      runtimeKind: 'codex',
+      objective: 'Stale claimed run',
+      now: new Date('2026-05-28T02:00:00.000Z'),
+    });
+    const oldCompleted = await createExecutorRun({
+      runtimeId: 'opencode',
+      runtimeKind: 'opencode',
+      objective: 'Old completed run',
+      now: new Date('2026-05-28T02:00:00.000Z'),
+    });
+    await claimNextExecutorRun({
+      ownerId: 'daemon-old',
+      leaseTtlMs: 1_000,
+      now: new Date('2026-05-28T02:01:00.000Z'),
+    });
+    const reclaimed = await claimNextExecutorRun({
+      ownerId: 'daemon-new',
+      leaseTtlMs: 60_000,
+      now: new Date('2026-05-28T02:02:00.000Z'),
+    });
+    await updateExecutorRunStatus({
+      runId: oldCompleted.runId,
+      status: 'completed',
+      exitCode: 0,
+      now: new Date('2026-05-28T02:00:30.000Z'),
+    });
+
+    const gc = await garbageCollectExecutorRuns({
+      completedRetentionMs: 30_000,
+      now: new Date('2026-05-28T02:02:59.000Z'),
+    });
+
+    expect(reclaimed).toMatchObject({
+      claimed: true,
+      run: { runId: stale.runId, lease: { ownerId: 'daemon-new' } },
+    });
+    expect(gc).toEqual({ abandoned: [], deleted: [oldCompleted.runId] });
+    await expect(getExecutorRun(stale.runId)).resolves.toMatchObject({
+      status: 'claimed',
+      lease: { ownerId: 'daemon-new' },
+    });
+    await expect(listExecutorRuns()).resolves.not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ runId: oldCompleted.runId }),
+    ]));
+  });
 });

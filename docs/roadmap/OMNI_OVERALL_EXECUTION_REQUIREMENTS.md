@@ -61,7 +61,7 @@ code, docs, and tests kept in sync.
   diffs, verification, and approval waits.
 - [x] Strengthen workspace manager around worktree policy, allowed paths,
   cleanup, and rollback hints.
-- [ ] Add claim/lease/concurrency/GC behavior for background executor runs.
+- [x] Add claim/lease/concurrency/GC behavior for background executor runs.
 
 ## Phase 6: Event Bus And Projections
 

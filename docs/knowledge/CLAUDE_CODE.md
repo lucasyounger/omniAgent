@@ -34,7 +34,10 @@ runtime discovery layer for the local daemon.
 ExecutorRun storage lives in `src/mastra/runtime/executor-run-store.ts`. It
 writes a durable run index under `~/.omni/runs/executor-runs/runs.json` and one
 transcript JSONL file per run. Transcript events cover messages, tool calls,
-errors, diffs, verification results, approval waits, and status changes.
+errors, diffs, verification results, approval waits, and status changes. Local
+daemons claim queued runs with an owner-scoped lease, heartbeat the lease while
+working, honor per-owner concurrency limits, can reclaim expired claims, and can
+garbage-collect expired leases or old terminal run records.
 
 PR Pool workspace preparation lives in
 `src/mastra/runtime/pr-pool/worktree-manager.ts`. `prepareWorkspaceForPrItem`

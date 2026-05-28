@@ -148,8 +148,11 @@ approval linkage.
 - ExecutorRun storage records each local executor attempt under
   `~/.omni/runs/executor-runs`. The run index preserves runtime id/kind, status,
   objective, linked RuntimeTask/CodeTask ids, workspace path, timestamps, exit
-  code, and metadata; each run has a transcript JSONL file for messages, tool
-  calls, errors, diffs, verification, approval waits, and status changes.
+  code, lease, and metadata; each run has a transcript JSONL file for messages,
+  tool calls, errors, diffs, verification, approval waits, and status changes.
+  Local daemons claim queued runs with expiring owner leases, heartbeat active
+  work, respect per-owner concurrency limits, reclaim expired claims, and
+  garbage-collect abandoned or retention-expired run records.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
