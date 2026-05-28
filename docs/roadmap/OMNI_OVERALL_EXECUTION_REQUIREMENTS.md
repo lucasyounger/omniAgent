@@ -66,7 +66,7 @@ code, docs, and tests kept in sync.
 ## Phase 6: Event Bus And Projections
 
 - [x] Add append-only DomainEvent schema/store.
-- [ ] Add projections for Goal timeline, PR Pool board, RuntimeTask timeline,
+- [x] Add projections for Goal timeline, PR Pool board, RuntimeTask timeline,
   and approval inbox.
 - [ ] Add shared streaming API for CLI/Web/Desktop consumers.
 - [ ] Connect notifications to schedule/runtime/memory/review events.

@@ -314,6 +314,19 @@ export { runtimeEvents } from './events';
 export { appendDomainEvent, listDomainEvents, readDomainEvents } from './domain-event-store';
 export type { AppendDomainEventInput, DomainEvent, DomainEventSeverity, ListDomainEventsFilter } from './domain-event-store';
 export {
+  buildApprovalInboxProjection,
+  buildGoalTimelineProjection,
+  buildPrPoolBoardProjection,
+  buildRuntimeTaskTimelineProjection,
+} from './domain-projections';
+export type {
+  ApprovalInboxProjection,
+  GoalTimelineProjection,
+  PrPoolBoardProjection,
+  RuntimeTaskTimelineProjection,
+  TimelineEntry,
+} from './domain-projections';
+export {
   defaultExecutorRuntimeCandidates,
   detectExecutorRuntimes,
   heartbeatExecutorRuntime,

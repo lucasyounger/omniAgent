@@ -158,6 +158,11 @@ approval linkage.
   a type, source, subject type/id, optional payload, correlation/causation ids,
   severity, and timestamp so later projections can build Goal timelines, PR Pool
   boards, RuntimeTask timelines, and approval inboxes from one shared event log.
+- Domain projection builders consume the shared DomainEvent log to derive Goal
+  timelines, PR Pool board columns, RuntimeTask timelines, and approval inbox
+  waiting/resolved buckets. These projections are pure read models exposed through
+  `runtimeEvents.projections` and the runtime index; they do not mutate the
+  underlying event log.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
