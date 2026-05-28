@@ -77,5 +77,5 @@ code, docs, and tests kept in sync.
   conversation models.
 - [x] Add adapter registry for QQBot/HTTP/OneBot/Feishu/CLI/Desktop.
 - [x] Add shared capability client and view models.
-- [ ] Keep Feishu IM as a channel adapter while docs/calendar/approval remain
+- [x] Keep Feishu IM as a channel adapter while docs/calendar/approval remain
   integration tools.

@@ -56,9 +56,10 @@ through Team Runtime.
 - Adapter Registry exposes the current and planned channel surfaces through one
   safe status/start/send facade. Built-ins are `http`, `onebot`, `qqbot`,
   `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior while
-  Feishu, CLI, and Desktop are explicit placeholders until their transports are
-  implemented. Registry status responses never include credentials, access tokens,
-  or raw session ids.
+  Feishu IM, CLI, and Desktop are explicit channel-adapter placeholders until
+  their transports are implemented. Feishu docs, calendar, and approval remain
+  integration tools rather than channel transports. Registry status responses never
+  include credentials, access tokens, or raw session ids.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records
@@ -71,6 +72,9 @@ through Team Runtime.
   for NapCat-style local QQ bridges.
 - Official QQ Bot channel: websocket event adapter plus official HTTP send APIs
   when `OMNI_QQBOT_APPID` and `OMNI_QQBOT_CLIENTSECRET` are configured.
+- Feishu IM channel: reserved adapter id `feishu` for future message receive/send
+  transport. Feishu docs, calendar, and approval are integration-tool surfaces and
+  must not be modeled as chat channels.
 - Goal Runtime QQ feedback helpers: mock adapters used by Goal Runtime tests and
   MVP feedback loops; they are not a real QQ delivery channel.
 

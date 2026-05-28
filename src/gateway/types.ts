@@ -106,6 +106,8 @@ export type ChannelOutboundEnvelopeV2 = {
   metadata?: Record<string, unknown>;
 };
 
+export type GatewayAdapterKind = 'channel' | 'integration';
+
 export type GatewayAdapterId = 'http' | 'onebot' | 'qqbot' | 'feishu' | 'cli' | 'desktop';
 
 export type GatewayAdapterCapabilities = {
@@ -119,6 +121,7 @@ export type GatewayAdapterState = 'disabled' | 'ready' | 'running' | 'not_implem
 export type GatewayAdapterStatus = {
   id: GatewayAdapterId;
   displayName: string;
+  kind: GatewayAdapterKind;
   configured: boolean;
   enabled: boolean;
   state: GatewayAdapterState | string;
@@ -129,6 +132,7 @@ export type GatewayAdapterStatus = {
 export type GatewayAdapter = {
   id: GatewayAdapterId;
   displayName: string;
+  kind: GatewayAdapterKind;
   capabilities: GatewayAdapterCapabilities;
   isConfigured: (config: import('./config').GatewayConfig) => boolean;
   status?: (config: import('./config').GatewayConfig) => GatewayAdapterStatus;

@@ -137,12 +137,19 @@ describe('Gateway HTTP server', () => {
     try {
       const address = server.address() as AddressInfo;
       const response = await fetch(`http://127.0.0.1:${address.port}/adapters/status`);
-      const body = (await response.json()) as { ok: boolean; adapters: Array<{ id: string }> };
+      const body = (await response.json()) as { ok: boolean; adapters: Array<{ id: string; kind?: string; metadata?: Record<string, unknown> }> };
       const serialized = JSON.stringify(body);
 
       expect(response.status).toBe(200);
       expect(body.ok).toBe(true);
       expect(body.adapters.map(adapter => adapter.id)).toEqual(['http', 'onebot', 'qqbot', 'feishu', 'cli', 'desktop']);
+      expect(body.adapters.find(adapter => adapter.id === 'feishu')).toMatchObject({
+        kind: 'channel',
+        metadata: {
+          boundary: 'channel_adapter',
+          integrationTools: ['feishu_docs', 'feishu_calendar', 'feishu_approval'],
+        },
+      });
       expect(serialized).not.toContain('secret-value');
       expect(serialized).not.toContain('accessToken');
       expect(serialized).not.toContain('sessionId');

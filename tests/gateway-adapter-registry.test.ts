@@ -52,7 +52,7 @@ describe('Gateway adapter registry', () => {
       expect.objectContaining({ id: 'http', configured: true, enabled: true, state: 'ready' }),
       expect.objectContaining({ id: 'onebot', configured: false, enabled: false, state: 'disabled' }),
       expect.objectContaining({ id: 'qqbot', configured: false, enabled: false, state: 'disabled' }),
-      expect.objectContaining({ id: 'feishu', configured: false, enabled: false, state: 'not_implemented' }),
+      expect.objectContaining({ id: 'feishu', kind: 'channel', configured: false, enabled: false, state: 'not_implemented' }),
       expect.objectContaining({ id: 'cli', configured: false, enabled: false, state: 'not_implemented' }),
       expect.objectContaining({ id: 'desktop', configured: false, enabled: false, state: 'not_implemented' }),
     ]));
@@ -70,6 +70,27 @@ describe('Gateway adapter registry', () => {
       enabled: true,
       state: 'ready',
       capabilities: { inbound: true, outbound: true, start: false },
+    });
+  });
+
+  it('keeps Feishu IM as a channel adapter boundary distinct from integration tools', async () => {
+    const { listGatewayAdapterStatuses } = await import('../src/gateway/adapter-registry');
+
+    const status = listGatewayAdapterStatuses(baseConfig()).find(adapter => adapter.id === 'feishu');
+
+    expect(status).toMatchObject({
+      id: 'feishu',
+      displayName: 'Feishu IM',
+      kind: 'channel',
+      configured: false,
+      enabled: false,
+      state: 'not_implemented',
+      capabilities: { inbound: false, outbound: false, start: false },
+      metadata: {
+        protocol: 'im',
+        boundary: 'channel_adapter',
+        integrationTools: ['feishu_docs', 'feishu_calendar', 'feishu_approval'],
+      },
     });
   });
 

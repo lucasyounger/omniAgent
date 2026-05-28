@@ -1,17 +1,19 @@
 import type { GatewayConfig } from './config';
 import { sendOneBotOutbound, sendQQBotOutbound } from './delivery';
 import { getQQBotAdapterStatus, startQQBotAdapter } from './qqbot-adapter';
-import type { GatewayAdapter, GatewayAdapterId, GatewayAdapterStatus, OutboundMessage } from './types';
+import type { GatewayAdapter, GatewayAdapterId, GatewayAdapterKind, GatewayAdapterStatus, OutboundMessage } from './types';
 
 const builtInAdapters: GatewayAdapter[] = [
   {
     id: 'http',
     displayName: 'HTTP Webhook',
+    kind: 'channel',
     capabilities: { inbound: true, outbound: false, start: false },
     isConfigured: () => true,
     status: config => adapterStatus({
       id: 'http',
       displayName: 'HTTP Webhook',
+      kind: 'channel',
       configured: true,
       state: 'ready',
       capabilities: { inbound: true, outbound: false, start: false },
@@ -21,11 +23,13 @@ const builtInAdapters: GatewayAdapter[] = [
   {
     id: 'onebot',
     displayName: 'OneBot HTTP',
+    kind: 'channel',
     capabilities: { inbound: true, outbound: true, start: false },
     isConfigured: config => Boolean(config.oneBotHttpUrl),
     status: config => adapterStatus({
       id: 'onebot',
       displayName: 'OneBot HTTP',
+      kind: 'channel',
       configured: Boolean(config.oneBotHttpUrl),
       state: config.oneBotHttpUrl ? 'ready' : 'disabled',
       capabilities: { inbound: true, outbound: Boolean(config.oneBotHttpUrl), start: false },
@@ -36,6 +40,7 @@ const builtInAdapters: GatewayAdapter[] = [
   {
     id: 'qqbot',
     displayName: 'QQBot',
+    kind: 'channel',
     capabilities: { inbound: true, outbound: true, start: true },
     isConfigured: config => Boolean(config.qqbotAppId && config.qqbotClientSecret),
     status: config => {
@@ -43,6 +48,7 @@ const builtInAdapters: GatewayAdapter[] = [
       return adapterStatus({
         id: 'qqbot',
         displayName: 'QQBot',
+        kind: 'channel',
         configured: Boolean(config.qqbotAppId && config.qqbotClientSecret),
         state: qqbot.configured ? String(qqbot.state || 'ready').toLowerCase() : 'disabled',
         capabilities: { inbound: true, outbound: true, start: true },
@@ -58,7 +64,11 @@ const builtInAdapters: GatewayAdapter[] = [
     start: startQQBotAdapter,
     send: async message => sendQQBotOutbound(message),
   },
-  placeholderAdapter('feishu', 'Feishu IM'),
+  placeholderAdapter('feishu', 'Feishu IM', {
+    protocol: 'im',
+    boundary: 'channel_adapter',
+    integrationTools: ['feishu_docs', 'feishu_calendar', 'feishu_approval'],
+  }),
   placeholderAdapter('cli', 'CLI Channel'),
   placeholderAdapter('desktop', 'Desktop Channel'),
 ];
@@ -75,6 +85,7 @@ export function listGatewayAdapterStatuses(config: GatewayConfig): GatewayAdapte
   return builtInAdapters.map(adapter => adapter.status?.(config) || adapterStatus({
     id: adapter.id,
     displayName: adapter.displayName,
+    kind: adapter.kind,
     configured: adapter.isConfigured(config),
     state: adapter.isConfigured(config) ? 'ready' : 'disabled',
     capabilities: adapter.capabilities,
@@ -107,18 +118,21 @@ export async function sendViaGatewayAdapter(message: OutboundMessage, config: Ga
   return true;
 }
 
-function placeholderAdapter(id: GatewayAdapterId, displayName: string): GatewayAdapter {
+function placeholderAdapter(id: GatewayAdapterId, displayName: string, metadata?: Record<string, unknown>): GatewayAdapter {
   return {
     id,
     displayName,
+    kind: 'channel',
     capabilities: { inbound: false, outbound: false, start: false },
     isConfigured: () => false,
     status: () => adapterStatus({
       id,
       displayName,
+      kind: 'channel',
       configured: false,
       state: 'not_implemented',
       capabilities: { inbound: false, outbound: false, start: false },
+      metadata,
     }),
   };
 }
@@ -126,6 +140,7 @@ function placeholderAdapter(id: GatewayAdapterId, displayName: string): GatewayA
 function adapterStatus(input: {
   id: GatewayAdapterId;
   displayName: string;
+  kind: GatewayAdapterKind;
   configured: boolean;
   state: GatewayAdapterStatus['state'];
   capabilities: GatewayAdapterStatus['capabilities'];
@@ -134,6 +149,7 @@ function adapterStatus(input: {
   return {
     id: input.id,
     displayName: input.displayName,
+    kind: input.kind,
     configured: input.configured,
     enabled: input.configured,
     state: input.state,
