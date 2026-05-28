@@ -153,6 +153,11 @@ approval linkage.
   Local daemons claim queued runs with expiring owner leases, heartbeat active
   work, respect per-owner concurrency limits, reclaim expired claims, and
   garbage-collect abandoned or retention-expired run records.
+- DomainEvent storage records cross-capability events under
+  `~/.omni/runs/domain-events/events.jsonl` as append-only JSONL. Each event has
+  a type, source, subject type/id, optional payload, correlation/causation ids,
+  severity, and timestamp so later projections can build Goal timelines, PR Pool
+  boards, RuntimeTask timelines, and approval inboxes from one shared event log.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
