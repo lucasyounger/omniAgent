@@ -23,6 +23,14 @@ CodeAgent can also record executor metadata for alternate local coding CLIs.
 `OMNI_CODEX_ARGS` / `OMNI_CODEX_PROMPT_ARG` override the generic CodeAgent
 argument variables for those runs. `custom` uses the configured command override.
 
+ExecutorRuntime registry detection lives in
+`src/mastra/runtime/executor-runtime-registry.ts`. It probes `cc`, `opencode`,
+`codex`, `gemini`, and an optional custom command, then writes
+`~/.omni/runs/executor-runtimes/registry.json` with CLI kind, command, version,
+capabilities, max concurrency, status, and heartbeat metadata. The registry is
+readable without starting CodeAgent execution and is intended as the durable
+runtime discovery layer for the local daemon.
+
 ## Progress
 
 Stdout and stderr are captured as JSONL events in `~/.omni/runs/code-runs/{taskId}.jsonl`.

@@ -55,7 +55,7 @@ code, docs, and tests kept in sync.
 
 ## Phase 5: Local Daemon And Executor Runtime
 
-- [ ] Add ExecutorRuntime registry for AI CLI detection, version,
+- [x] Add ExecutorRuntime registry for AI CLI detection, version,
   capabilities, status, concurrency, and heartbeat.
 - [ ] Add ExecutorRun store and transcript for messages, tool calls, errors,
   diffs, verification, and approval waits.

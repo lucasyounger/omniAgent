@@ -13,6 +13,7 @@ execution through Team Runtime.
 - `src/mastra/tools/pr-pool-tools.ts` (read-only context tools)
 - `src/mastra/tools/runtime-task-tools.ts` (status/list context tools)
 - `src/mastra/lib/team-runtime-store.ts`
+- `src/mastra/runtime/executor-runtime-registry.ts`
 
 ## Key Behavior
 
@@ -37,6 +38,10 @@ execution through Team Runtime.
   `OMNI_CODEX_ARGS`, `OMNI_CODE_AGENT_PROMPT_ARG`,
   `OMNI_OPENCODE_PROMPT_ARG`, and `OMNI_CODEX_PROMPT_ARG`. Explicit
   `command`, `args`, and `promptArg` payload values win over executor defaults.
+- ExecutorRuntime registry detection records available local coding CLIs under
+  `~/.omni/runs/executor-runtimes/registry.json` with kind, command, version,
+  capabilities, max concurrency, status, and heartbeat metadata. This registry is
+  the durable discovery surface for later daemon and ExecutorRun work.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn the selected executor or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.

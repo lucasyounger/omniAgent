@@ -311,4 +311,22 @@ export {
   ToolGatewayBlockedError,
 } from './tool-gateway';
 export { runtimeEvents } from './events';
+export {
+  defaultExecutorRuntimeCandidates,
+  detectExecutorRuntimes,
+  heartbeatExecutorRuntime,
+  listExecutorRuntimes,
+  readExecutorRuntimeRegistry,
+  upsertExecutorRuntime,
+  writeExecutorRuntimeRegistry,
+} from './executor-runtime-registry';
+export type {
+  ExecutorCommandResult,
+  ExecutorCommandRunner,
+  ExecutorRuntime,
+  ExecutorRuntimeCandidate,
+  ExecutorRuntimeKind,
+  ExecutorRuntimeRegistry,
+  ExecutorRuntimeStatus,
+} from './executor-runtime-registry';
 export type { RuntimeRiskLevel, RuntimeTask, RuntimeTaskStatus, ToolExecutionContext, ToolGatewayPolicy } from './types';

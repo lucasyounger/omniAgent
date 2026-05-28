@@ -140,6 +140,11 @@ approval linkage.
   structured reconcile plan for PR Pool, Req, GoalRun, and memory writeback. The
   reconcile plan points back to the durable reconcile RuntimeTask binding when
   the run is in `dry_run`; `shadow` mode remains no-side-effect.
+- ExecutorRuntime registry records detected local AI CLI runtimes under
+  `~/.omni/runs/executor-runtimes/registry.json`. Each record captures runtime
+  kind, command, version, capabilities, max concurrency, status, and heartbeat
+  timestamp so future daemon claim/lease logic can reason about available
+  executor capacity without probing CLIs on every task dispatch.
 - Task Dispatcher currently supports code, knowledge, channel, notify,
   research, schedule-handler, PR pool, and Goal task types. Notify delivery
   dispatch preserves the `notify.send_channel_message` RuntimeTask lifecycle and
