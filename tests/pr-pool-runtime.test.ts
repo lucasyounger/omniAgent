@@ -3,6 +3,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn((command, args, options, callback) => {
+    if (typeof options === 'function') {
+      options(null, '', '');
+      return;
+    }
+    callback(null, '', '');
+  }),
+}));
+
 vi.mock('../src/mastra/lib/code-task-store', () => ({
   getCodeTask: vi.fn(),
 }));
@@ -195,6 +205,33 @@ describe('PR pool runtime', () => {
     });
     const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
     expect(events).toContain('proposal_ingested');
+  });
+
+
+  it('archives items and applies prepared workspace cleanup policy', async () => {
+    const { execFile } = await import('node:child_process');
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create({
+      ...input('Archive cleanup'),
+      workspacePolicy: { cleanup: 'delete_on_archive' },
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.transition(item.id, 'completed');
+    const worktreePath = path.join(tempRoot, 'archive-cleanup-worktree');
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
+    await prPoolRuntime.archive(item.id, 'completed');
+
+    expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: path.resolve(tempRoot) }, expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('git', ['branch', '-d', `omni/${item.id}`], { cwd: path.resolve(tempRoot) }, expect.any(Function));
   });
 
   it('reconciles completed and failed CodeTask runs back to PR items', async () => {

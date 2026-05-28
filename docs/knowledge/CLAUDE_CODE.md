@@ -36,6 +36,15 @@ writes a durable run index under `~/.omni/runs/executor-runs/runs.json` and one
 transcript JSONL file per run. Transcript events cover messages, tool calls,
 errors, diffs, verification results, approval waits, and status changes.
 
+PR Pool workspace preparation lives in
+`src/mastra/runtime/pr-pool/worktree-manager.ts`. `prepareWorkspaceForPrItem`
+creates or reuses the item worktree when `workspacePolicy.useWorktree` is true,
+returns the resolved workspace path, editable and forbidden path policy, cleanup
+policy, and rollback hints. `assertWorkspacePathAllowed` rejects paths that
+escape the prepared workspace, match forbidden paths, or fall outside configured
+editable paths. `cleanupPreparedWorkspace` removes managed worktrees only when
+the PR item policy sets `cleanup: "delete_on_archive"`.
+
 ## Progress
 
 Stdout and stderr are captured as JSONL events in `~/.omni/runs/code-runs/{taskId}.jsonl`.

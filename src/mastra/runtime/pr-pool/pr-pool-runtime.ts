@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { cleanupWorktree } from './worktree-manager';
+import { cleanupPreparedWorkspace } from './worktree-manager';
 import { getCodeTask } from '../../lib/code-task-store';
 import { proposalToCreatePRItemInput, type PRPoolProposal } from './pr-pool-proposal';
 import {
@@ -186,8 +186,8 @@ export const prPoolRuntime = {
   async archive(id: string, reason: PRArchiveEntry['archiveReason']): Promise<PRArchiveEntry> {
     const item = await getPrPoolItem(id);
     const entry = await archivePrPoolItem(id, reason);
-    if (item?.workspace.worktreePath) {
-      await cleanupWorktree(item, { keepBranch: true });
+    if (item) {
+      await cleanupPreparedWorkspace(item);
     }
     return entry;
   },

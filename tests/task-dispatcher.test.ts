@@ -802,6 +802,15 @@ describe('Task Dispatcher', () => {
             editablePaths: ['src/**'],
             forbiddenPaths: ['secrets/**'],
           }),
+          workspacePreparation: expect.objectContaining({
+            prItemId: item.id,
+            workspacePath: tempRoot,
+            editablePaths: ['src/**'],
+            forbiddenPaths: ['secrets/**'],
+            rollbackHints: expect.arrayContaining([
+              expect.stringContaining(`Rollback by removing worktree ${tempRoot}`),
+            ]),
+          }),
           retryContext: {
             retryCount: 0,
             maxRetries: 3,

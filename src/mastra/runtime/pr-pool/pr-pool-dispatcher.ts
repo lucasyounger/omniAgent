@@ -2,7 +2,7 @@ import { completeTeamRun, failTeamRun, startTeamTaskRun } from '../../lib/team-r
 import type { CodeTaskExecutor } from '../../lib/code-task-store';
 import { runPrPoolCronScan } from './pr-pool-scheduler';
 import { prPoolRuntime } from './pr-pool-runtime';
-import { ensureWorktree } from './worktree-manager';
+import { prepareWorkspaceForPrItem, type PreparedWorkspace } from './worktree-manager';
 import type { CreatePRItemInput, PRItem } from './pr-pool-store';
 import type { PRPoolProposal } from './pr-pool-proposal';
 import { validatePrPoolProposal } from './pr-pool-proposal';
@@ -143,9 +143,10 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     if (developingItem.status !== 'developing') {
       throw new Error(`Cannot develop PR pool item in status ${developingItem.status}: ${prItemId}`);
     }
-    const worktreeItem = await ensureWorktree(developingItem);
+    const preparedWorkspace = await prepareWorkspaceForPrItem(developingItem);
+    const worktreeItem = (await prPoolRuntime.get(prItemId)) || developingItem;
     const codeAgentBriefPath = await writeCodeAgentPrBrief(worktreeItem);
-    const codeTaskPayload = buildCodeTaskPayload(worktreeItem, task, codeAgentBriefPath, payload, executor);
+    const codeTaskPayload = buildCodeTaskPayload(worktreeItem, task, codeAgentBriefPath, payload, executor, preparedWorkspace);
 
     const codeTask = await taskRuntime.createTask({
       sourceAgentId: 'pr-pool-runtime',
@@ -358,9 +359,10 @@ function buildCodeTaskPayload(
   codeAgentBriefPath: string,
   payload: Record<string, unknown>,
   executor: CodeTaskExecutor,
+  preparedWorkspace: PreparedWorkspace,
 ) {
   return {
-    workspacePath: item.workspace.worktreePath || item.workspace.repoPath,
+    workspacePath: preparedWorkspace.workspacePath,
     objective: item.codeAgentPrompt,
     contextBrief: formatPrItemContext(item, codeAgentBriefPath),
     codeAgentBriefPath,
@@ -378,6 +380,7 @@ function buildCodeTaskPayload(
     docSyncRequirements: item.docSyncRequirements,
     testSyncRequirements: item.testSyncRequirements,
     workspacePolicy: item.workspacePolicy,
+    workspacePreparation: preparedWorkspace,
     impact: item.impact,
     dependencies: item.dependencies,
     constraints: item.constraints,

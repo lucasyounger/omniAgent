@@ -59,7 +59,7 @@ code, docs, and tests kept in sync.
   capabilities, status, concurrency, and heartbeat.
 - [x] Add ExecutorRun store and transcript for messages, tool calls, errors,
   diffs, verification, and approval waits.
-- [ ] Strengthen workspace manager around worktree policy, allowed paths,
+- [x] Strengthen workspace manager around worktree policy, allowed paths,
   cleanup, and rollback hints.
 - [ ] Add claim/lease/concurrency/GC behavior for background executor runs.
 

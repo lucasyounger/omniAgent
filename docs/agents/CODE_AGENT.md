@@ -47,6 +47,11 @@ execution through Team Runtime.
   workspace path, timestamps, exit code, and metadata. Each run also has a JSONL
   transcript for messages, tool calls, errors, diffs, verification, approval
   waits, and status changes.
+- PR Pool workspace preparation exposes the resolved workspace/worktree path,
+  editable and forbidden path scopes, cleanup policy, and rollback hints before
+  executor work starts. Path checks reject escapes, forbidden paths, and edits
+  outside the PR item's editable policy; managed worktrees are removed only when
+  the item cleanup policy is `delete_on_archive`.
 - Supports `executionMode: patch_proposal`, which writes a review artifact and
   does not spawn the selected executor or modify the workspace.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
