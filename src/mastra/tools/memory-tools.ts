@@ -115,6 +115,7 @@ export const proposeDocUpdateTool = createTool({
         content: z.string(),
       }),
     ),
+    metadata: z.record(z.string(), z.unknown()).optional(),
     approvalToken: approvalTokenSchema,
   }),
   outputSchema: z.object({
@@ -132,6 +133,7 @@ export const proposeDocUpdateTool = createTool({
         content: z.string(),
       }),
     ),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   }),
   execute: async input => executeWithToolGateway('propose-doc-update', memoryWritePolicy, input, () => writeDocUpdateProposal(input)),
 });

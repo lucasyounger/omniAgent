@@ -953,6 +953,42 @@ describe('Gateway message handler', () => {
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
 
+  it('shows approval inbox and handles PR delete and revise commands', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    const { handleChannelMessage } = await loadHandler();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const draft = await prPoolRuntime.create({
+      title: 'Inbox draft',
+      objective: 'Review inbox draft',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['visible in inbox'],
+      codeAgentPrompt: 'Implement inbox draft',
+    });
+    const completed = await prPoolRuntime.create({
+      title: 'Revision candidate',
+      objective: 'Revise through gateway',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['revision scheduled'],
+      codeAgentPrompt: 'Implement revision candidate',
+    });
+    await prPoolRuntime.confirm(completed.id);
+    await prPoolRuntime.transition(completed.id, 'scheduled');
+    await prPoolRuntime.transition(completed.id, 'developing');
+    await prPoolRuntime.transition(completed.id, 'completed');
+
+    const inbox = await handleChannelMessage(message('/inbox', 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+    const deleteReply = await handleChannelMessage(message(`/pr delete ${draft.id}`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+    const reviseReply = await handleChannelMessage(message(`/pr revise ${completed.id} add focused tests`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+
+    expect(inbox[0].text).toContain('待确认 Inbox');
+    expect(inbox[0].text).toContain(draft.id);
+    expect(deleteReply[0].text).toContain('已删除');
+    expect(reviseReply[0].text).toContain('已创建修订任务');
+    await expect(prPoolRuntime.get(draft.id)).resolves.toMatchObject({ status: 'deleted' });
+  });
+
   it('does not fast-path natural language PR pool execution through gateway regex', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';

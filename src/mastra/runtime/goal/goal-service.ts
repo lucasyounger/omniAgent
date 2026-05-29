@@ -29,6 +29,12 @@ export type GoalStatusSummary = {
   goal: Goal;
   latestRun?: GoalRun;
   feedbackCount: number;
+  prItems: Array<{
+    id: string;
+    status: string;
+    title: string;
+    nextCommands: string[];
+  }>;
 };
 
 export type GoalFeedbackAction = 'note' | 'pause' | 'resume' | 'cancel_run' | 'deep_dive' | 'change_priority';
@@ -121,10 +127,28 @@ export async function getGoalStatus(goalId: string): Promise<GoalStatusSummary> 
   if (!goal) throw new Error(`Goal not found: ${goalId}`);
   const runs = await listGoalRuns(goalId);
   const feedback = await listFeedbackEvents(goalId);
+  const runPrItemIds = runs.flatMap(run => run.prItemIds || []);
+  const goalPrItems = await prPoolRuntime.list({ goalId });
+  const prItemsById = new Map(goalPrItems.map(item => [item.id, item]));
+  for (const prItemId of runPrItemIds) {
+    if (!prItemsById.has(prItemId)) {
+      const item = await prPoolRuntime.get(prItemId);
+      if (item) prItemsById.set(item.id, item);
+    }
+  }
+  const prItems = [...prItemsById.values()]
+    .filter(item => item.status === 'draft' || item.status === 'ready')
+    .map(item => ({
+      id: item.id,
+      status: item.status,
+      title: item.title,
+      nextCommands: buildPrItemNextCommands(item.id, item.status),
+    }));
   return {
     goal,
     latestRun: runs.at(-1),
     feedbackCount: feedback.length,
+    prItems,
   };
 }
 
@@ -226,6 +250,12 @@ export async function scanDueGoals(input: GoalScanDueInput = {}): Promise<GoalSc
   }
 
   return { scanned: goals.length, enqueued, skipped };
+}
+
+function buildPrItemNextCommands(id: string, status: string): string[] {
+  const commands = [`/pr show ${id}`, `/pr delete ${id}`, `/pr revise ${id} <comment>`];
+  if (status === 'draft') commands.splice(1, 0, `/pr confirm ${id}`);
+  return commands;
 }
 
 function isGoalDue(goal: Goal, runs: GoalRun[], now: Date): boolean {

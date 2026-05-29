@@ -262,47 +262,61 @@ describe('PR pool runtime', () => {
     ]);
   });
 
-  it('reconciles completed and failed CodeTask runs back to PR items', async () => {
+
+  it('safely deletes only draft or ready items and blocks active deletion', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const draft = await prPoolRuntime.create(input('Delete draft'));
+    const active = await prPoolRuntime.create(input('Do not delete active'));
+    await prPoolRuntime.confirm(active.id);
+    await prPoolRuntime.transition(active.id, 'scheduled');
+
+    await expect(prPoolRuntime.delete(draft.id)).resolves.toMatchObject({ status: 'deleted' });
+    await expect(prPoolRuntime.delete(active.id)).rejects.toThrow('Cannot delete PR pool item in status scheduled');
+  });
+
+  it('schedules revision tasks with user comments and reconciles completed revisions', async () => {
+    vi.doMock('../src/mastra/runtime/task-dispatcher', () => ({
+      dispatchRuntimeTask: vi.fn(async () => ({ taskId: 'revision-task', status: 'dispatched', targetAgentId: 'code-agent' })),
+    }));
     const { getCodeTask } = await import('../src/mastra/lib/code-task-store');
     vi.mocked(getCodeTask).mockImplementation(async taskId => ({
       taskId,
       teamTaskId: `runtime-${taskId}`,
       teamRunId: `run-${taskId}`,
       workspacePath: tempRoot,
-      objective: 'develop',
-      status: taskId === 'code-ok' ? 'completed' : 'failed',
+      objective: 'revise',
+      status: 'completed',
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
-      exitCode: taskId === 'code-ok' ? 0 : 1,
+      exitCode: 0,
       logFile: path.join(tempRoot, `${taskId}.jsonl`),
-      executionMode: 'patch_proposal',
+      executionMode: 'direct',
       patchFile: undefined,
       executor: 'claude_code',
       command: 'cc',
-      args: ['--dangerously-skip-permissions'],
+      args: [],
       promptArg: '-p',
-      recentEvents: taskId === 'code-ok' ? [] : [{ type: 'task_failed', message: 'tests failed', ts: new Date().toISOString() }],
+      recentEvents: [],
     }));
     const { prPoolRuntime } = await loadRuntime();
-    const completed = await prPoolRuntime.create(input('Complete me'));
-    const failed = await prPoolRuntime.create(input('Fail me'));
-    await prPoolRuntime.confirm(completed.id);
-    await prPoolRuntime.transition(completed.id, 'scheduled');
-    await prPoolRuntime.transition(completed.id, 'developing');
-    await prPoolRuntime.update(completed.id, { run: { ...completed.run, codeTaskId: 'code-ok' } });
-    await prPoolRuntime.confirm(failed.id);
-    await prPoolRuntime.transition(failed.id, 'scheduled');
-    await prPoolRuntime.transition(failed.id, 'developing');
-    await prPoolRuntime.update(failed.id, { run: { ...failed.run, codeTaskId: 'code-bad' } });
+    const item = await prPoolRuntime.create(input('Revise me'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.transition(item.id, 'completed');
 
-    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+    const revised = await prPoolRuntime.revise(item.id, 'Please add tests before archive');
+    const reconciled = await prPoolRuntime.reconcileRevisedItem(item.id);
 
-    expect(result).toMatchObject({ scanned: 2, completed: 1, failed: 1 });
-    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({ status: 'completed', run: { lastRunId: 'run-code-ok', lastCompletedAt: expect.any(String) } });
-    await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({
-      status: 'failed',
-      run: { lastRunId: 'run-code-bad', lastFailureReason: 'tests failed' },
-      blocking: { reason: 'tests failed', category: 'runtime_error' },
+    expect(revised).toMatchObject({
+      status: 'developing',
+      run: {
+        reviseTaskId: expect.stringMatching(/^task-/),
+        revisionCount: 1,
+        lastRevisionComment: 'Please add tests before archive',
+      },
     });
+    expect(reconciled).toMatchObject({ status: 'completed', run: { lastRunId: expect.stringMatching(/^run-task-/) } });
   });
 });
+

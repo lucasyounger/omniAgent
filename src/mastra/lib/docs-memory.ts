@@ -49,6 +49,7 @@ export type DocUpdateProposal = {
     summary: string;
     content: string;
   }>;
+  metadata?: Record<string, unknown>;
 };
 
 export type ListMemoryRecordsFilter = {

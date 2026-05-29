@@ -394,6 +394,9 @@ function buildRetryContext(item: PRItem) {
     retryCount: item.run.retryCount,
     maxRetries: item.run.maxRetries,
     previousCodeTaskId: item.run.previousCodeTaskId,
+    revisionCount: item.run.revisionCount || 0,
+    lastRevisionComment: item.run.lastRevisionComment,
+    reviseTaskId: item.run.reviseTaskId,
     lastFailureReason: item.run.lastFailureReason || item.blocking?.reason,
     blocking: item.blocking,
   };

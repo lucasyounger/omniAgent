@@ -91,6 +91,12 @@ describe('docs memory', () => {
           content: '- prefers concise updates',
         },
       ],
+      metadata: {
+        goalId: 'goal-1',
+        runId: 'run-1',
+        artifactPath: '/tmp/wiki-diff.md',
+        origin: 'topic_research',
+      },
     });
 
     const proposalFile = path.join(tempRoot, '.omni', 'memory', 'doc-update-proposals.jsonl');
@@ -105,6 +111,12 @@ describe('docs memory', () => {
       reason: 'Capture inferred user preference for review.',
       targetFiles: ['memory/USER.md'],
       risk: 'medium',
+      metadata: {
+        goalId: 'goal-1',
+        runId: 'run-1',
+        artifactPath: '/tmp/wiki-diff.md',
+        origin: 'topic_research',
+      },
     });
     expect(persistedProposal.proposedAt).toEqual(expect.any(String));
     expect(userMemory).not.toContain('prefers concise updates');

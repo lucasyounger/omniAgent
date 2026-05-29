@@ -19,6 +19,11 @@ export function formatGoalStatus(summary: GoalStatusSummary): string {
     `Objective: ${summary.goal.objective}`,
     summary.latestRun ? `Latest Run: ${formatGoalRun(summary.latestRun)}` : 'Latest Run: none',
     `Feedback: ${summary.feedbackCount}`,
+    '',
+    'PR Pool Candidates:',
+    ...(summary.prItems.length
+      ? summary.prItems.map(item => `- ${item.id} | ${item.status} | ${item.title}\n  - ${item.nextCommands.join('\n  - ')}`)
+      : ['- None.']),
   ].join('\n');
 }
 

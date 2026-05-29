@@ -71,7 +71,10 @@ explicit compatibility adapter or migration path.
 - Progress should be recorded as Team Events.
 - Final output should be written as a Result file, not stored only in chat.
 - Inbox messages notify agents; they should contain summaries and result refs,
-  not large raw outputs.
+  not large raw outputs. Gateway `/inbox` and `/status approvals` aggregate unread
+  `channel-gateway` inbox messages with Tool Gateway approvals, PR Pool draft/ready
+  review items, and docs-memory update proposals so user-facing confirmations have
+  one entrypoint.
 - Completion normally notifies the source agent and `omni-router-agent`.
 - Feature code should not directly write `metadata.runtimeStatus`; use
   TaskRuntime transition helpers.

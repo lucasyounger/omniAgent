@@ -86,6 +86,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - `pause-pr-pool-item`
 - `retry-pr-pool-item`
 - `delete-pr-pool-item`
+- `revise-pr-pool-item`
 
 ## Contract
 
@@ -114,7 +115,7 @@ work is delegated, executed, reported, and recovered across all agents.
   `src/mastra/tools/tool-registry.ts`. OmniRouter receives only public facades
   and read/status tools; specialist handlers and agents use internal tool sets
   for executor work or low-level protocol operations.
-- `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
+- `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; `/pr delete` stays behind the delete facade/runtime safety checks and `/pr revise` schedules CodeAgent revision work with user feedback preserved for reconcile/archive. Natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
 - The generic RuntimeTask facade exposes create, dispatch, create-and-dispatch, status/list, cancel, and retry operations so future Goal/Req/Schedule/Notify facades do not duplicate `taskRuntime.createTask(...)` + `dispatchRuntimeTask(...)` code.
 - Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
 - Goal and Req native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Goal create/run/feedback enqueue `goal.*` tasks; Req create/import/confirm/reject/update enqueue `req.*` tasks. Goal/Req read tools remain direct audited reads.

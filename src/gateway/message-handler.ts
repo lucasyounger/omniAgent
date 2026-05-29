@@ -1,4 +1,9 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { prPoolRuntime } from '../mastra/runtime/pr-pool/pr-pool-runtime';
+import { listApprovalRequests } from '../mastra/runtime/approval-store';
+import { memoryRoot } from '../mastra/lib/paths';
+import { listAgentInbox } from '../mastra/lib/team-runtime-store';
 import type { PRItem } from '../mastra/runtime/pr-pool/pr-pool-store';
 import {
   applyGoalFeedbackTool,
@@ -14,6 +19,7 @@ import {
   listPrPoolItemsTool,
   pausePrPoolItemTool,
   retryPrPoolItemTool,
+  revisePrPoolItemTool,
 } from '../mastra/tools/pr-pool-tools';
 import {
   formatGoalHelp,
@@ -95,6 +101,10 @@ export async function handleUnifiedRequest(request: UnifiedRequest, message: Cha
 
     if (rule.command === '/help') {
       return [reply(message, helpText())];
+    }
+
+    if (rule.command === '/status approvals' || rule.command === '/inbox') {
+      return [reply(message, await handleApprovalsInbox())];
     }
 
     if (rule.command === '/status') {
@@ -814,7 +824,12 @@ async function handleGoalChannelRequest(message: ChannelMessage, request: GoalCh
       const output = dispatch.status === 'dispatched' ? objectValue(dispatch.result?.output) : undefined;
       const runId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.runId) : undefined;
       const summary = stringValue(output?.summary);
-      return runId ? `Goal Run 已完成：${runId}${summary ? `\n${summary}` : ''}` : `Goal Run 失败：${dispatch.status}`;
+      const prCandidates = arrayValue(output?.prCandidates);
+      return runId ? [
+        `Goal Run 已完成：${runId}`,
+        summary,
+        formatPrCandidates(prCandidates),
+      ].filter((item): item is string => Boolean(item)).join('\n') : `Goal Run 失败：${dispatch.status}`;
     }
     if (request.action === 'feedback') {
       const goalId = dispatch.status === 'dispatched' ? stringValue(dispatch.result?.goalId) : undefined;
@@ -906,8 +921,15 @@ async function handlePrCommand(raw: string): Promise<string> {
     }
     case 'delete':
       if (!arg) return '用法: /pr delete <id>';
-      await callNativeTool(deletePrPoolItemTool, { prItemId: arg });
+      await callNativeTool(deletePrPoolItemTool, { prItemId: arg, approvalToken: 'channel-gateway-approved' });
       return `PR ${arg} 已删除`;
+    case 'revise': {
+      const [id, ...commentParts] = parts.slice(1);
+      const comment = commentParts.join(' ').trim();
+      if (!id || !comment) return '用法: /pr revise <id> <comment>';
+      const revised = await callNativeTool<{ prItemId: string; comment: string }, PRItem>(revisePrPoolItemTool, { prItemId: id, comment });
+      return `PR ${id} 已创建修订任务：${revised.run.reviseTaskId || revised.run.codeTaskId}`;
+    }
     case 'pause':
       if (!arg) return '用法: /pr pause <id>';
       await callNativeTool(pausePrPoolItemTool, { prItemId: arg });
@@ -924,7 +946,7 @@ async function handlePrCommand(raw: string): Promise<string> {
       if (!arg) return '用法: /pr develop <id>';
       return developPrItem(arg);
     default:
-      return '用法: /pr <list|show|confirm|confirm-all|delete|pause|retry|archive|develop> [id]';
+      return '用法: /pr <list|show|confirm|confirm-all|delete|revise|pause|retry|archive|develop> [id]';
   }
 }
 
@@ -968,6 +990,68 @@ function formatPrDetail(item: PRItem | undefined): string {
   ]
     .filter((line): line is string => Boolean(line))
     .join('\n');
+}
+
+function formatPrCandidates(value: unknown[] | undefined): string | undefined {
+  if (!value?.length) return undefined;
+  const lines = value.flatMap(item => {
+    const candidate = objectValue(item);
+    const id = stringValue(candidate?.id);
+    if (!id) return [];
+    const status = stringValue(candidate?.status);
+    const title = stringValue(candidate?.title);
+    const commands = stringArrayValue(candidate?.commands);
+    return [
+      `- ${id}${status ? ` (${status})` : ''}${title ? ` | ${title}` : ''}`,
+      ...commands.map(command => `  - ${command}`),
+    ];
+  });
+  return lines.length ? ['PR Candidates:', ...lines].join('\n') : undefined;
+}
+
+async function handleApprovalsInbox(): Promise<string> {
+  const [prDrafts, prReady, approvals, inbox, docProposals] = await Promise.all([
+    callNativeTool<Record<string, unknown>, PRItem[]>(listPrPoolItemsTool, { status: 'draft' }),
+    callNativeTool<Record<string, unknown>, PRItem[]>(listPrPoolItemsTool, { status: 'ready' }),
+    listApprovalRequests({ status: 'pending' }),
+    listAgentInbox({ recipientAgentId: 'channel-gateway', status: 'unread', limit: 10 }),
+    readDocUpdateProposals(),
+  ]);
+  const lines = [
+    '待确认 Inbox:',
+    'PR Pool draft:',
+    ...(prDrafts.length ? prDrafts.map(item => `- ${item.id} | ${item.title} | /pr show ${item.id} | /pr confirm ${item.id} | /pr revise ${item.id} <comment> | /pr delete ${item.id}`) : ['- None.']),
+    'PR Pool ready:',
+    ...(prReady.length ? prReady.map(item => `- ${item.id} | ${item.title} | /pr show ${item.id} | /pr develop ${item.id} | /pr revise ${item.id} <comment> | /pr delete ${item.id}`) : ['- None.']),
+    'Doc update proposals:',
+    ...(docProposals.length ? docProposals.map(item => `- ${item.id} | ${item.risk} | ${item.targetFiles.join(', ')} | 审阅 memory/doc-update-proposals.jsonl`) : ['- None.']),
+    'Tool Gateway approvals:',
+    ...(approvals.length ? approvals.map(item => `- ${item.requestId} | ${item.toolId} | ${item.risk} | 通过 approval 工具处理`) : ['- None.']),
+    'Gateway inbox:',
+    ...(inbox.length ? inbox.map(item => `- ${item.messageId} | ${item.type} | ${item.summary}`) : ['- None.']),
+  ];
+  return lines.join('\n');
+}
+
+type InboxDocProposal = {
+  id: string;
+  risk: string;
+  targetFiles: string[];
+};
+
+async function readDocUpdateProposals(): Promise<InboxDocProposal[]> {
+  const filePath = path.join(memoryRoot, 'doc-update-proposals.jsonl');
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as InboxDocProposal)
+      .slice(-10);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 async function callOmniRouter(message: ChannelMessage, config: GatewayConfig) {
@@ -1031,7 +1115,7 @@ function helpText() {
     '/help \u67e5\u770b\u5e2e\u52a9',
     '/status \u67e5\u770b\u72b6\u6001',
     '/task <workspacePath> :: <objective> \u521b\u5efa\u5f02\u6b65 CodeAgent \u4efb\u52a1',
-    '/pr <list|show|confirm|confirm-all|delete|pause|retry|archive> [id] \u7ba1\u7406 PR \u6c60',
+    '/pr <list|show|confirm|confirm-all|delete|revise|pause|retry|archive> [id] \u7ba1\u7406 PR \u6c60',
     '/goal <create|list|status|run|feedback> [参数] 管理长期 Goal',
     '/pair <token> \u914d\u5bf9\u5f53\u524d\u4f1a\u8bdd',
     '',

@@ -414,10 +414,28 @@ describe('goal runtime workspace manager', () => {
       artifactPolicy: ['daily_digest'],
     });
 
-    const output = await executeGoalRun({ goalId: 'executor-topic-goal', runId: 'executor-run-001' });
+    const output = await executeGoalRun({
+      goalId: 'executor-topic-goal',
+      runId: 'executor-run-001',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'user-1',
+        messageType: 'dm',
+      },
+    });
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const deliveries = await listDeliveries();
     const runDir = path.join(tempRoot, '.omni', 'goals', 'executor-topic-goal', 'runs', 'executor-run-001');
 
     expect(output.summary).toContain('Generated topic digest');
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('文档更新建议待审阅'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
     await expect(fs.readFile(path.join(runDir, 'output.json'), 'utf8')).resolves.toContain('daily-digest.md');
     await expect(fs.readFile(path.join(runDir, 'proof-of-work.md'), 'utf8')).resolves.toContain('Generated daily digest and wiki diff');
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'goals', 'executor-topic-goal', 'artifacts', 'run-summary.md'), 'utf8')).resolves.toContain('Goal Run Summary');

@@ -6,7 +6,7 @@ export type RuleRouterResult =
   | { kind: 'continue' };
 
 const MAX_MESSAGE_LENGTH = 20_000;
-const COMMANDS = new Set(['/help', '/status', '/goal', '/task', '/pr', '/pair', '/reset']);
+const COMMANDS = new Set(['/help', '/status', '/status approvals', '/inbox', '/goal', '/task', '/pr', '/pair', '/reset']);
 const WAKE_PREFIX = /^@(?:omniagent|omni|bot)\b[\s,:：，-]*/i;
 
 export function routeRule(request: UnifiedRequest): RuleRouterResult {
@@ -28,12 +28,14 @@ export function routeRule(request: UnifiedRequest): RuleRouterResult {
     return { kind: 'continue' };
   }
 
-  const [command = '', ...rest] = text.split(/\s+/);
+  const [first = '', second = '', ...rest] = text.split(/\s+/);
+  const command = first === '/status' && second === 'approvals' ? '/status approvals' : first;
+  const commandRest = command === '/status approvals' ? rest : [second, ...rest];
   if (COMMANDS.has(command)) {
     return {
       kind: 'command',
       command,
-      args: rest.join(' ') || undefined,
+      args: commandRest.join(' ') || undefined,
     };
   }
 

@@ -82,7 +82,9 @@ Use `src/mastra/runtime/goal` or the aggregate runtime export:
 - `updateGoalRunStatus(goalId, runId, status)` records status transitions.
 - `completeGoalRun(input)` marks a run succeeded, writes `proof-of-work.md`, and requires non-empty work evidence.
 - `failGoalRun(input)` marks a run failed and records the failure reason.
-- `executeGoalRun(input)` routes `goal.run` to the workflow for the persisted goal type, writes `output.json`, updates `artifacts/run-summary.md`, and writes `error.json` if execution fails.
+- `executeGoalRun(input)` routes `goal.run` to the workflow for the persisted goal type, writes `output.json`, updates `artifacts/run-summary.md`, and writes `error.json` if execution fails. If the workflow produces PR Pool drafts, `output.json` and `run-summary.md` include `prCandidates` with `/pr show`, `/pr confirm`, `/pr delete`, `/pr revise`, and `/pr confirm-all` next commands.
+- `getGoalStatus(goalId)` aggregates draft/ready PR Pool items linked by `goalId` or GoalRun `prItemIds` and returns next commands for review/develop/delete/revise.
+- `topic_research` runs that generate `wiki-diff.md` create a `knowledge.doc_update_proposal`-equivalent doc proposal in docs memory and notify the caller when a channel target is available; the workflow never writes approved wiki/docs content directly.
 - `mergeProofOfWork(base, patch)` combines proof sections without duplicates.
 
 PR-16 adds retry/reconcile helpers:

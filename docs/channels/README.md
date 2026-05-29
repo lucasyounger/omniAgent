@@ -52,7 +52,8 @@ through Team Runtime.
   status queries, and low-confidence clarification. Schedule times supplied by
   channel users are interpreted as CST (UTC+8), normalized to UTC for cron
   storage/execution, and converted back to CST in schedule-list replies.
-- PR Pool requests route through capability/tool selection and native PR Pool facades. Explicit PR commands keep compatibility, while natural-language execution no longer depends on a dedicated Gateway regex fast path.
+- PR Pool requests route through capability/tool selection and native PR Pool facades. Explicit PR commands keep compatibility, including `/pr delete <id>` through the runtime/tool facade and `/pr revise <id> <comment>` for CodeAgent revision scheduling. Natural-language execution no longer depends on a dedicated Gateway regex fast path.
+- `/status approvals` and `/inbox` provide a unified review queue for PR Pool draft/ready items, docs-memory update proposals, Tool Gateway approvals, and unread gateway inbox messages.
 - Adapter Registry exposes the current and planned channel surfaces through one
   safe status/start/send facade. Built-ins are `http`, `onebot`, `qqbot`,
   `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior while

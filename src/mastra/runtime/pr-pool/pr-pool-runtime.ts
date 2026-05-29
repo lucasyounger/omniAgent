@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { cleanupPreparedWorkspace } from './worktree-manager';
 import { getCodeTask } from '../../lib/code-task-store';
+import { taskRuntime } from '../task-runtime';
+import { runtimeTaskTypes } from '../task-types';
 import { queueRuntimeNotification } from '../notification-dispatch';
 import { proposalToCreatePRItemInput, type PRPoolProposal } from './pr-pool-proposal';
 import type { ChannelTarget } from '../../../gateway/types';
@@ -133,7 +135,95 @@ export const prPoolRuntime = {
     return updatePrPoolItem(id, patch);
   },
 
-  delete(id: string): Promise<PRItem> {
+  async revise(id: string, comment: string): Promise<PRItem> {
+    const item = await getPrPoolItem(id);
+    const trimmedComment = comment.trim();
+    if (!item) {
+      throw new Error(`PR pool item not found: ${id}`);
+    }
+    if (!trimmedComment) {
+      throw new Error('PR pool revise requires a non-empty comment.');
+    }
+    if (item.status !== 'completed' && item.status !== 'failed' && item.status !== 'waiting_user_confirm') {
+      throw new Error(`Cannot revise PR pool item in status ${item.status}: ${id}`);
+    }
+
+    const objective = [`Revise PR Pool item ${id}: ${item.title}`, '', 'User revision comment:', trimmedComment].join('\n');
+    const codeTask = await taskRuntime.createTask({
+      sourceAgentId: 'pr-pool-runtime',
+      targetAgentId: 'code-agent',
+      objective,
+      metadata: {
+        taskType: runtimeTaskTypes.codeTask,
+        payload: {
+          workspacePath: item.workspace.worktreePath || item.workspace.repoPath,
+          objective,
+          contextBrief: [
+            `PR Pool Item: ${id}`,
+            `Title: ${item.title}`,
+            `Status: ${item.status}`,
+            `Previous CodeTask: ${item.run.codeTaskId || item.run.previousCodeTaskId || 'none'}`,
+            '',
+            'Original objective:',
+            item.objective,
+            '',
+            'Original implementation prompt:',
+            item.codeAgentPrompt,
+            '',
+            'User revision comment:',
+            trimmedComment,
+          ].join('\n'),
+          executionMode: 'direct',
+          prItemId: id,
+          revisionComment: trimmedComment,
+        },
+      },
+    });
+    const { dispatchRuntimeTask } = await import('../task-dispatcher');
+    const dispatch = await dispatchRuntimeTask(codeTask.id);
+    const updated = await updatePrPoolItem(id, {
+      status: dispatch.status === 'waiting_user_confirm' ? 'waiting_user_confirm' : dispatch.status === 'failed' ? 'failed' : 'developing',
+      run: {
+        ...item.run,
+        previousCodeTaskId: item.run.codeTaskId || item.run.previousCodeTaskId,
+        reviseTaskId: codeTask.id,
+        codeTaskId: codeTask.id,
+        revisionCount: (item.run.revisionCount || 0) + 1,
+        lastRevisionComment: trimmedComment,
+        lastDispatchedAt: new Date().toISOString(),
+      },
+      blocking: dispatch.status === 'failed'
+        ? { category: 'runtime_error', reason: dispatch.reason || 'Revision task dispatch failed.', detectedAt: new Date().toISOString() }
+        : undefined,
+    });
+    await appendPrPoolEvent({
+      prItemId: id,
+      type: 'revision_requested',
+      from: item.status,
+      to: updated.status,
+      detail: JSON.stringify({ comment: trimmedComment, codeTaskId: codeTask.id, dispatchStatus: dispatch.status }),
+    });
+    return updated;
+  },
+
+  async reconcileRevisedItem(id: string): Promise<PRItem> {
+    const item = await getPrPoolItem(id);
+    if (!item) {
+      throw new Error(`PR pool item not found: ${id}`);
+    }
+    if (!item.run.reviseTaskId) return item;
+    const codeTask = await getCodeTask(item.run.reviseTaskId);
+    if (codeTask.status !== 'completed') return item;
+    const updated = await updatePrPoolItem(id, {
+      status: 'completed',
+      run: { ...item.run, lastRunId: codeTask.teamRunId, lastCompletedAt: new Date().toISOString() },
+      blocking: undefined,
+    });
+    await appendPrPoolEvent({ prItemId: id, type: 'revision_completed', from: item.status, to: 'completed', detail: JSON.stringify({ codeTaskId: codeTask.taskId }) });
+    return updated;
+  },
+
+  async delete(id: string): Promise<PRItem> {
     return deletePrPoolItem(id);
   },
 

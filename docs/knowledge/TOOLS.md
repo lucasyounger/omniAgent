@@ -63,11 +63,13 @@ RuntimeTask now has Mastra-native facade tools for generic durable work:
 the agent boundary while preserving Task Dispatcher as the execution backend.
 
 PR Pool now exposes native facades for list/get/create/ingest/confirm/develop/scan/
-archive/pause/retry/delete operations. Read tools use `pr_pool.read`; normal writes
+archive/pause/retry/delete/revise operations. Read tools use `pr_pool.read`; normal writes
 use `pr_pool.write`; destructive delete uses `pr_pool.delete`; develop and batch scan
 remain approval-gated through `pr_pool.develop` and `pr_pool.batch_develop`. The
 Gateway `/pr` command is a compatibility layer over these tools instead of owning a
-separate PR Pool implementation.
+separate PR Pool implementation. `/pr delete <id>` passes through the delete facade
+and PR Pool Runtime safety checks; `/pr revise <id> <comment>` creates a CodeAgent
+revision RuntimeTask and stores revision metadata for later reconcile/archive.
 
 ## Req Runtime Tools
 

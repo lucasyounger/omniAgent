@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **OmniAgent** (1907 symbols, 5944 relationships, 144 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **pr-mpqgxc0f-34c6** (1755 symbols, 5785 relationships, 130 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -17,7 +17,7 @@ This project is indexed by GitNexus as **OmniAgent** (1907 symbols, 5944 relatio
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/OmniAgent/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/pr-mpqgxc0f-34c6/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -56,10 +56,10 @@ This project is indexed by GitNexus as **OmniAgent** (1907 symbols, 5944 relatio
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/OmniAgent/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/OmniAgent/clusters` | All functional areas |
-| `gitnexus://repo/OmniAgent/processes` | All execution flows |
-| `gitnexus://repo/OmniAgent/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/pr-mpqgxc0f-34c6/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/pr-mpqgxc0f-34c6/clusters` | All functional areas |
+| `gitnexus://repo/pr-mpqgxc0f-34c6/processes` | All execution flows |
+| `gitnexus://repo/pr-mpqgxc0f-34c6/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 

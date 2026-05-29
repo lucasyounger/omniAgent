@@ -19,7 +19,10 @@ threads; docs memory remains the auditable long-term knowledge layer.
 - Lists and reads docs memory files.
 - Appends low-risk summaries to `~/.omni/memory/EPISODIC_LOG.md`.
 - Writes typed reviewable proposals to `~/.omni/memory/doc-update-proposals.jsonl`.
-  Proposal types are `user`, `project`, `lesson`, and `reference`.
+  Proposal types are `user`, `project`, `lesson`, and `reference`. Proposals can
+  include structured metadata such as Goal IDs, run IDs, artifact paths, and
+  origin details so reviewers can trace why generated docs changes were suggested
+  without auto-writing official wiki/docs.
 - Maintains structured Memory Ledger records in
   `~/.omni/memory/memory-ledger.json`. Records are typed as `user`, `project`,
   `goal`, `decision`, `reference`, or `execution_learning`, scoped by

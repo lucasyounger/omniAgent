@@ -5,7 +5,7 @@ import { taskRuntime } from '../../task-runtime';
 import { runtimeTaskTypes } from '../../task-types';
 import type { RuntimeTask } from '../../types';
 import type { DispatchResult } from '../types';
-import { booleanValue, readPayload, readTaskType, stringArrayValue, stringValue } from '../utils';
+import { booleanValue, readNotifyTargetFromMetadataOrPayload, readPayload, readTaskType, stringArrayValue, stringValue } from '../utils';
 
 function createGoalRuntimeRunId() {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -70,7 +70,7 @@ export async function dispatchGoalTask(task: RuntimeTask): Promise<DispatchResul
       const goalId = stringValue(payload.goalId) || stringValue(payload.id);
       if (!goalId) throw new Error('goal.run requires payload.goalId.');
       const runId = stringValue(payload.runId) || createGoalRuntimeRunId();
-      const output = await executeGoalRun({ goalId, runId, runMode: stringValue(payload.runMode) });
+      const output = await executeGoalRun({ goalId, runId, runMode: stringValue(payload.runMode), notifyTarget: readNotifyTargetFromMetadataOrPayload({ metadata: task.metadata, payload }) });
       summary = output.summary;
       goalResult = {
         goalId,

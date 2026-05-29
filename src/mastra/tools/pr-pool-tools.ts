@@ -305,6 +305,14 @@ export const deletePrPoolItemTool = createTool({
   execute: async input => executeWithToolGateway('delete-pr-pool-item', prPoolDeletePolicy, input, () => prPoolRuntime.delete(input.prItemId)),
 });
 
+export const revisePrPoolItemTool = createTool({
+  id: 'revise-pr-pool-item',
+  description: 'Create and dispatch a CodeAgent revision task for a completed, failed, or waiting PR Pool item.',
+  inputSchema: z.object({ prItemId: z.string(), comment: z.string(), approvalToken: approvalTokenSchema }),
+  outputSchema: prItemSchema,
+  execute: async input => executeWithToolGateway('revise-pr-pool-item', prPoolWritePolicy, input, () => prPoolRuntime.revise(input.prItemId, input.comment)),
+});
+
 export const prPoolTools = {
   listPrPoolItemsTool,
   getPrPoolItemTool,
@@ -317,4 +325,5 @@ export const prPoolTools = {
   pausePrPoolItemTool,
   retryPrPoolItemTool,
   deletePrPoolItemTool,
+  revisePrPoolItemTool,
 };

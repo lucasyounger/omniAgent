@@ -43,11 +43,14 @@ export type PRItemApproval = {
 export type PRItemRun = {
   runtimeTaskId?: string;
   codeTaskId?: string;
+  reviseTaskId?: string;
   previousCodeTaskId?: string;
   lastRunId?: string;
   codeAgentBriefPath?: string;
   retryCount: number;
   maxRetries: number;
+  revisionCount?: number;
+  lastRevisionComment?: string;
   lastFailureReason?: string;
   lastDispatchedAt?: string;
   lastCompletedAt?: string;

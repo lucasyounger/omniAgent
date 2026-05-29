@@ -32,8 +32,13 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
-  await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
+  await vi.dynamicImportSettled();
+  try {
+    await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EBUSY')) throw error;
+  }
 });
 
 describe('PR Pool native tools', () => {
@@ -101,5 +106,43 @@ describe('PR Pool native tools', () => {
     const archivedItem = JSON.parse(await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'archive', item.id, 'item.json'), 'utf8'));
     expect(archivedItem).toMatchObject({ id: item.id, status: 'completed' });
     await expect(prPoolRuntime.get(item.id)).resolves.toBeUndefined();
+  });
+
+  it('deletes draft items and schedules revision tasks through native tools', async () => {
+    const { createPrPoolItemTool, deletePrPoolItemTool, revisePrPoolItemTool, prPoolRuntime } = await loadPrPoolTools();
+
+    const draft = await executeTool<Record<string, unknown>, { id: string; status: string }>(createPrPoolItemTool, {
+      title: 'Draft delete facade item',
+      objective: 'Exercise delete facade',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['tests'], risk: 'low' },
+      acceptanceCriteria: ['delete works'],
+      codeAgentPrompt: 'Delete fixture',
+    });
+    await expect(executeTool(deletePrPoolItemTool, { prItemId: draft.id, approvalToken: 'test-approved' })).resolves.toMatchObject({
+      id: draft.id,
+      status: 'deleted',
+    });
+
+    const completed = await executeTool<Record<string, unknown>, { id: string; status: string }>(createPrPoolItemTool, {
+      title: 'Revision facade item',
+      objective: 'Exercise revision facade',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['tests'], risk: 'low' },
+      acceptanceCriteria: ['revision works'],
+      codeAgentPrompt: 'Revise fixture',
+    });
+    await prPoolRuntime.update(completed.id, { status: 'completed' });
+
+    await expect(
+      executeTool(revisePrPoolItemTool, { prItemId: completed.id, comment: 'Please tighten tests' }),
+    ).resolves.toMatchObject({
+      id: completed.id,
+      status: 'developing',
+      run: {
+        reviseTaskId: expect.stringMatching(/^task-/),
+        lastRevisionComment: 'Please tighten tests',
+      },
+    });
   });
 });

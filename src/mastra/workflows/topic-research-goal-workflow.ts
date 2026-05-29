@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { ChannelTarget } from '../../gateway/types';
 import { projectRoot } from '../lib/paths';
+import { proposeDocUpdateTool } from '../tools/memory-tools';
+import { queueRuntimeNotification } from '../runtime/notification-dispatch';
 import { rankEvidence, saveEvidenceBatch, type EvidenceItem } from '../runtime/evidence';
 import { prPoolRuntime } from '../runtime/pr-pool/pr-pool-runtime';
 import {
@@ -24,6 +27,7 @@ export type TopicResearchGoalWorkflowInput = {
   goalId: string;
   runId: string;
   topic?: string;
+  notifyTarget?: ChannelTarget;
 };
 
 export type TopicResearchGoalWorkflowResult = {
@@ -37,7 +41,7 @@ export type TopicResearchGoalWorkflowResult = {
     wikiDiff: string;
     memoryProposal: string;
     proofOfWork: string;
-    prItems?: string[];
+    prItems?: Array<{ id: string; status: string; title: string; commands: string[] }>;
   };
 };
 
@@ -77,11 +81,12 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
   const digest = renderDailyDigest(goal, evidence);
   const wikiDiff = renderWikiDiff(goal, evidence);
   const memoryProposal = renderMemoryProposal(goal, evidence);
+  const docProposal = await createWikiDocUpdateProposal({ goal, runId: input.runId, wikiDiff, wikiDiffPath: artifacts.wikiDiff, notifyTarget: input.notifyTarget });
   const proofOfWork: ProofOfWork = {
     did: ['Loaded topic research goal', 'Collected mock research evidence', 'Deduplicated and ranked evidence', 'Generated daily digest and wiki diff'],
     sourcesRead: evidence.map(item => item.sourceUrl ?? item.title),
     artifactsCreated: ['plan.md', 'sources.json', 'evidence.jsonl', 'daily-digest.md', 'wiki-diff.md', 'memory-proposal.md'],
-    memoryProposals: ['memory-proposal.md'],
+    memoryProposals: ['memory-proposal.md', `doc-update-proposal:${docProposal.id}`],
     testsRun: [],
     risks: ['Research providers are mocked in PR-17 MVP.'],
     nextActions: ['Review digest feedback before the next run.'],
@@ -108,7 +113,7 @@ export async function runTopicResearchGoalWorkflow(input: TopicResearchGoalWorkf
         tags: ['goal', 'topic-research'],
         metadata: { evidenceId: item.id, sourceUrl: item.sourceUrl },
       });
-      prItems.push(prItem.id);
+      prItems.push({ id: prItem.id, status: prItem.status, title: prItem.title, commands: [`/pr show ${prItem.id}`, `/pr confirm ${prItem.id}`, `/pr delete ${prItem.id}`, `/pr revise ${prItem.id} <comment>`, '/pr confirm-all'] });
     }
     artifacts.prItems = prItems;
   }
@@ -153,4 +158,44 @@ function renderMemoryProposal(goal: Goal, evidence: EvidenceItem[]): string {
     '- Keep as goal memory candidate until user approves consolidation.',
     '',
   ].join('\n');
+}
+
+async function createWikiDocUpdateProposal(input: { goal: Goal; runId: string; wikiDiff: string; wikiDiffPath: string; notifyTarget?: ChannelTarget }) {
+  const proposal = await runRuntimeTool(proposeDocUpdateTool, {
+    proposalType: 'project',
+    reason: `topic_research Goal ${input.goal.id} generated wiki-diff.md and needs user review before docs/wiki update.`,
+    targetFiles: ['wiki-diff.md'],
+    risk: 'medium',
+    changes: [{
+      file: 'wiki-diff.md',
+      operation: 'append',
+      summary: `Review wiki diff for ${input.goal.title}`,
+      content: input.wikiDiff,
+    }],
+    metadata: {
+      goalId: input.goal.id,
+      runId: input.runId,
+      artifactPath: input.wikiDiffPath,
+      artifact: 'wiki-diff.md',
+    },
+  }) as { id: string };
+
+  await queueRuntimeNotification({
+    event: 'memory.proposal_created',
+    target: input.notifyTarget,
+    text: [`文档更新建议待审阅`, `Proposal: ${proposal.id}`, `Goal: ${input.goal.id}`, `Run: ${input.runId}`, `Artifact: ${input.wikiDiffPath}`, 'Next: /inbox'].join('\n'),
+    sourceAgentId: 'topic-research-goal-workflow',
+    relatedTaskId: proposal.id,
+    runId: input.runId,
+    entityId: proposal.id,
+    metadata: { goalId: input.goal.id, artifactPath: input.wikiDiffPath },
+  });
+  return proposal;
+}
+
+async function runRuntimeTool(tool: { execute?: unknown }, input: unknown): Promise<unknown> {
+  if (typeof tool.execute !== 'function') {
+    throw new Error('Runtime tool is not executable.');
+  }
+  return (tool.execute as (input: unknown, options?: Record<string, unknown>) => Promise<unknown>)(input, {});
 }
