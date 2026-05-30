@@ -148,20 +148,33 @@ export type ChannelSession = {
   updatedAt: string;
 };
 
+export type DeliverySourceType = 'team_result' | 'team_event' | 'team_inbox' | 'runtime_task' | 'workflow' | 'tool';
+
+export type DeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'dead_letter';
+
 export type DeliveryRecord = {
   deliveryId: string;
   idempotencyKey: string;
+  messageKey: string;
+  sourceType: DeliverySourceType;
+  sourceId: string;
+  traceId: string;
+  channel: string;
   target: ChannelTarget;
+  outboundEnvelope: ChannelOutboundEnvelopeV2;
   text: string;
-  status: 'pending' | 'sent' | 'failed' | 'dead_letter';
+  status: DeliveryStatus;
   attempt: number;
   maxAttempts: number;
   nextRetryAt?: string;
+  channelMessageId?: string;
+  ackAt?: string;
   sourceInboxMessageId?: string;
   taskId?: string;
   runId?: string;
   resultRef?: string;
   error?: string;
+  deadLetterReason?: string;
   createdAt: string;
   updatedAt: string;
 };

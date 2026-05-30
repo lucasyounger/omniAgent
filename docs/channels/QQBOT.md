@@ -30,8 +30,17 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
   conversation and optional recipient actor, but `sendOutbound` continues to accept
   the existing `OutboundMessage` contract until the later adapter-registry slice.
 - Deferred replies and scheduled channel messages flow through Team Runtime
-  inbox messages addressed to `channel-gateway`, then the delivery worker sends
-  them to QQ Bot.
+  inbox messages addressed to `channel-gateway`, then the reliable delivery outbox
+  stores a traceable `DeliveryRecord` before the worker sends them to QQ Bot. The
+  record keeps `sourceType`, `sourceId`, `traceId`, `messageKey`, channel, target,
+  and `ChannelOutboundEnvelopeV2` so a Team Runtime result/inbox item can be traced
+  to the outbound send attempt.
+- `messageKey` is the delivery idempotency key. Re-enqueueing the same source,
+  channel target, and template kind returns the existing outbox record instead of
+  creating a duplicate outbound notification.
+- Delivery status progresses through `pending -> sending -> sent` on success and
+  `pending/sending -> failed -> dead_letter` on repeated failure. Sent records set
+  `ackAt`; dead-letter records keep `deadLetterReason`.
 - Gateway exposes `GET /qqbot/status` for local diagnostics. The same safe status
   data is also represented in `GET /adapters/status` under adapter id `qqbot`,
   alongside HTTP, OneBot, Feishu, CLI, and Desktop registry entries. The registry

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gatewayRunsRoot } from '../mastra/lib/paths';
-import type { ChannelSession, DeliveryRecord } from './types';
+import type { ChannelOutboundEnvelopeV2, ChannelSession, DeliveryRecord, DeliverySourceType } from './types';
 
 const sessionsFile = path.join(gatewayRunsRoot, 'sessions.json');
 const deliveriesFile = path.join(gatewayRunsRoot, 'deliveries.json');
@@ -79,20 +79,55 @@ export async function pairSession(input: Omit<ChannelSession, 'id' | 'createdAt'
   return session;
 }
 
-export async function createDelivery(input: Omit<DeliveryRecord, 'deliveryId' | 'idempotencyKey' | 'status' | 'attempt' | 'maxAttempts' | 'createdAt' | 'updatedAt'> & {
+export async function createDelivery(input: Omit<DeliveryRecord, 'deliveryId' | 'idempotencyKey' | 'messageKey' | 'sourceType' | 'sourceId' | 'traceId' | 'channel' | 'outboundEnvelope' | 'status' | 'attempt' | 'maxAttempts' | 'createdAt' | 'updatedAt'> & {
   idempotencyKey?: string;
+  messageKey?: string;
+  sourceType?: DeliverySourceType;
+  sourceId?: string;
+  traceId?: string;
+  outboundEnvelope?: ChannelOutboundEnvelopeV2;
   maxAttempts?: number;
 }) {
   const deliveries = await readArray<DeliveryRecord>(deliveriesFile);
   const now = new Date().toISOString();
-  const idempotencyKey = input.idempotencyKey || createDeliveryKey(input);
-  const existing = deliveries.find(item => item.idempotencyKey === idempotencyKey);
+  const sourceType = input.sourceType || 'team_inbox';
+  const sourceId = input.sourceId || input.sourceInboxMessageId || input.resultRef || input.runId || input.taskId || 'manual';
+  const traceId = input.traceId || input.runId || input.taskId || sourceId;
+  const outboundEnvelope = input.outboundEnvelope || {
+    protocolVersion: 2,
+    target: {
+      identity: {
+        channel: input.target.channel,
+        accountId: input.target.accountId,
+      },
+      conversation: {
+        id: input.target.conversationId,
+        type: input.target.messageType,
+      },
+      recipient: input.target.senderId ? { id: input.target.senderId } : undefined,
+    },
+    text: input.text,
+  };
+  const messageKey = input.messageKey || input.idempotencyKey || createDeliveryKey({
+    sourceId,
+    channel: input.target.channel,
+    accountId: input.target.accountId,
+    conversationId: input.target.conversationId,
+    templateKind: String(outboundEnvelope.metadata?.templateKind || 'text'),
+  });
+  const existing = deliveries.find(item => item.messageKey === messageKey || item.idempotencyKey === messageKey);
   if (existing) {
     return existing;
   }
   const delivery: DeliveryRecord = {
     deliveryId: createId('delivery'),
-    idempotencyKey,
+    idempotencyKey: messageKey,
+    messageKey,
+    sourceType,
+    sourceId,
+    traceId,
+    channel: input.target.channel,
+    outboundEnvelope,
     status: 'pending',
     attempt: 0,
     maxAttempts: input.maxAttempts || Number(process.env.OMNI_GATEWAY_DELIVERY_MAX_ATTEMPTS || 3),
@@ -121,6 +156,9 @@ export async function updateDeliveryStatus(deliveryId: string, status: DeliveryR
   }
   delivery.status = status;
   delivery.error = error;
+  if (status === 'sent') {
+    delivery.ackAt = new Date().toISOString();
+  }
   delivery.updatedAt = new Date().toISOString();
   await writeArray(deliveriesFile, deliveries);
   return delivery;
@@ -136,6 +174,7 @@ export async function markDeliveryAttempt(input: { deliveryId: string; error: st
   delivery.attempt = (delivery.attempt || 0) + 1;
   delivery.error = input.error;
   delivery.status = delivery.attempt >= delivery.maxAttempts ? 'dead_letter' : 'failed';
+  delivery.deadLetterReason = delivery.status === 'dead_letter' ? input.error : undefined;
   delivery.nextRetryAt =
     delivery.status === 'failed'
       ? new Date(Date.now() + (input.retryDelayMs || Number(process.env.OMNI_GATEWAY_DELIVERY_RETRY_DELAY_MS || 30_000))).toISOString()
@@ -145,13 +184,12 @@ export async function markDeliveryAttempt(input: { deliveryId: string; error: st
   return delivery;
 }
 
-function createDeliveryKey(input: { sourceInboxMessageId?: string; taskId?: string; runId?: string; target: { channel: string; accountId: string; conversationId: string } }) {
+function createDeliveryKey(input: { sourceId: string; channel: string; accountId: string; conversationId: string; templateKind: string }) {
   return [
-    input.sourceInboxMessageId || 'manual',
-    input.taskId || 'no-task',
-    input.runId || 'no-run',
-    input.target.channel,
-    input.target.accountId,
-    input.target.conversationId,
+    input.sourceId,
+    input.channel,
+    input.accountId,
+    input.conversationId,
+    input.templateKind,
   ].join(':');
 }

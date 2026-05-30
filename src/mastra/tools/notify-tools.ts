@@ -13,7 +13,7 @@ const channelTargetSchema = z.object({
   messageType: z.enum(['dm', 'group', 'guild', 'system']),
 });
 
-const deliveryStatusSchema = z.enum(['pending', 'sent', 'failed', 'dead_letter']);
+const deliveryStatusSchema = z.enum(['pending', 'sending', 'sent', 'failed', 'dead_letter']);
 const approvalTokenSchema = z.string().optional().describe('Approval token issued by Tool Gateway for approval-required execution.');
 const notifyWritePolicy = { risk: 'medium', capability: 'notify.write', audit: true } as const;
 const notifyDeliveryPolicy = { risk: 'medium', capability: 'notify.delivery_queue', audit: true } as const;

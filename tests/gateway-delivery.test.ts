@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildQQBotMessageRequest, sendOutbound } from '../src/gateway/delivery';
 import type { GatewayConfig } from '../src/gateway/config';
 import type { OutboundMessage } from '../src/gateway/types';
@@ -13,8 +16,25 @@ function baseConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfig {
   };
 }
 
-afterEach(() => {
+let tempRoot: string;
+
+async function loadGatewayStore() {
+  vi.resetModules();
+  process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+  return import('../src/gateway/gateway-store');
+}
+
+beforeEach(async () => {
+  tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-gateway-delivery-test-'));
+  await fs.writeFile(path.join(tempRoot, 'package.json'), JSON.stringify({ name: 'omni-agent' }), 'utf8');
+});
+
+afterEach(async () => {
   vi.restoreAllMocks();
+  delete process.env.OMNI_PROJECT_ROOT;
+  delete process.env.OMNI_HOME;
+  await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
 describe('Gateway delivery', () => {
@@ -98,14 +118,83 @@ describe('Gateway delivery', () => {
     }));
   });
 
-  it('logs unsupported outbound channels through the existing fallback', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  it('creates idempotent outbox records with trace metadata and V2 envelopes', async () => {
+    const store = await loadGatewayStore();
+    const target = {
+      channel: 'qqbot',
+      accountId: 'default',
+      conversationId: 'user-openid',
+      senderId: 'user-openid',
+      messageType: 'dm' as const,
+    };
 
-    await sendOutbound({
-      target: { channel: 'desktop', accountId: 'local', conversationId: 'conv-1', messageType: 'dm' },
-      text: 'hello desktop',
-    }, baseConfig());
+    const first = await store.createDelivery({
+      target,
+      text: 'done',
+      sourceType: 'team_inbox',
+      sourceId: 'inbox-1',
+      traceId: 'run-1',
+      messageKey: 'inbox-1:qqbot:default:user-openid:team.run.completed',
+      sourceInboxMessageId: 'inbox-1',
+      taskId: 'task-1',
+      runId: 'run-1',
+    });
+    const duplicate = await store.createDelivery({
+      target,
+      text: 'done again',
+      sourceType: 'team_inbox',
+      sourceId: 'inbox-1',
+      traceId: 'run-1',
+      messageKey: 'inbox-1:qqbot:default:user-openid:team.run.completed',
+    });
+    const deliveries = await store.listDeliveries();
 
-    expect(log).toHaveBeenCalledWith('[gateway:desktop] -> conv-1: hello desktop');
+    expect(duplicate.deliveryId).toBe(first.deliveryId);
+    expect(deliveries).toHaveLength(1);
+    expect(first).toMatchObject({
+      sourceType: 'team_inbox',
+      sourceId: 'inbox-1',
+      traceId: 'run-1',
+      messageKey: 'inbox-1:qqbot:default:user-openid:team.run.completed',
+      channel: 'qqbot',
+      status: 'pending',
+      outboundEnvelope: {
+        protocolVersion: 2,
+        text: 'done',
+        target: {
+          identity: { channel: 'qqbot', accountId: 'default' },
+          conversation: { id: 'user-openid', type: 'dm' },
+          recipient: { id: 'user-openid' },
+        },
+      },
+    });
+  });
+
+  it('moves delivery records through sending, sent, failed, and dead-letter states', async () => {
+    const store = await loadGatewayStore();
+    const delivery = await store.createDelivery({
+      target: { channel: 'qqbot', accountId: 'default', conversationId: 'user-openid', messageType: 'dm' },
+      text: 'retry me',
+      sourceType: 'team_inbox',
+      sourceId: 'inbox-2',
+      traceId: 'run-2',
+      maxAttempts: 2,
+    });
+
+    await expect(store.updateDeliveryStatus(delivery.deliveryId, 'sending')).resolves.toMatchObject({ status: 'sending' });
+    await expect(store.updateDeliveryStatus(delivery.deliveryId, 'sent')).resolves.toMatchObject({
+      status: 'sent',
+      ackAt: expect.any(String),
+    });
+    await expect(store.markDeliveryAttempt({ deliveryId: delivery.deliveryId, error: 'temporary', retryDelayMs: 1 })).resolves.toMatchObject({
+      status: 'failed',
+      attempt: 1,
+      nextRetryAt: expect.any(String),
+    });
+    await expect(store.markDeliveryAttempt({ deliveryId: delivery.deliveryId, error: 'permanent', retryDelayMs: 1 })).resolves.toMatchObject({
+      status: 'dead_letter',
+      attempt: 2,
+      deadLetterReason: 'permanent',
+    });
   });
 });

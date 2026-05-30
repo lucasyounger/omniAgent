@@ -9,7 +9,7 @@ import {
 import type { GatewayConfig } from './config';
 import { createDelivery, listDeliveries, markDeliveryAttempt, updateDeliveryStatus } from './gateway-store';
 import { getQQBotAccessToken } from './qqbot-adapter';
-import type { ChannelTarget, OutboundMessage } from './types';
+import type { ChannelOutboundEnvelopeV2, ChannelTarget, OutboundMessage } from './types';
 
 type ChannelSourceMetadata = {
   kind?: string;
@@ -83,9 +83,32 @@ export async function deliverPendingInbox(config: GatewayConfig) {
           `Summary: ${result?.summary || inboxMessage.summary}`,
         ].join('\n');
 
+      const outboundEnvelope: ChannelOutboundEnvelopeV2 = {
+        protocolVersion: 2,
+        target: {
+          identity: {
+            channel: target.channel,
+            accountId: target.accountId,
+          },
+          conversation: {
+            id: target.conversationId,
+            type: target.messageType,
+          },
+          recipient: target.senderId ? { id: target.senderId } : undefined,
+        },
+        text,
+        metadata: {
+          templateKind: inboxMessage.type,
+        },
+      };
       const delivery = await createDelivery({
         target,
         text,
+        sourceType: 'team_inbox',
+        sourceId: inboxMessage.messageId,
+        traceId: inboxMessage.runId || inboxMessage.taskId || inboxMessage.messageId,
+        messageKey: [inboxMessage.messageId, target.channel, target.accountId, target.conversationId, inboxMessage.type].join(':'),
+        outboundEnvelope,
         sourceInboxMessageId: inboxMessage.messageId,
         taskId: inboxMessage.taskId,
         runId: inboxMessage.runId,
@@ -106,6 +129,7 @@ async function deliverQueuedDeliveries(config: GatewayConfig) {
   const deliveries = (await listDeliveries()).filter(
     delivery =>
       delivery.status === 'pending' ||
+      delivery.status === 'sending' ||
       (delivery.status === 'failed' && delivery.nextRetryAt && new Date(delivery.nextRetryAt).getTime() <= now),
   );
 
@@ -116,6 +140,7 @@ async function deliverQueuedDeliveries(config: GatewayConfig) {
 
 async function attemptDelivery(deliveryId: string, message: OutboundMessage, config: GatewayConfig) {
   try {
+    await updateDeliveryStatus(deliveryId, 'sending');
     await sendOutbound(message, config);
     await updateDeliveryStatus(deliveryId, 'sent');
   } catch (error) {
