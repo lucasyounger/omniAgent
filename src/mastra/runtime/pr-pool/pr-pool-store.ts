@@ -53,6 +53,14 @@ export type PRItemExecutionJobView = {
   workspacePath?: string;
   logFile?: string;
   patchFile?: string;
+  diffReview?: {
+    schemaVersion: 1;
+    codeTaskId: string;
+    changedFiles: string[];
+    diffSummary: string;
+    verificationSummary: string;
+    producedAt: string;
+  };
   updatedAt: string;
 };
 
@@ -785,6 +793,9 @@ function buildPrItemArtifactRefs(item: PRItem): PRItemExecutionArtifactRef[] {
   }
   if (item.run.executionJob?.patchFile) {
     refs.push({ schemaVersion: 1, type: 'patch', name: 'code-task-patch', ref: `code-task://${item.run.executionJob.codeTaskId}/patch`, summary: 'Expandable CodeTask patch reference.' });
+  }
+  if (item.run.executionJob?.diffReview) {
+    refs.push({ schemaVersion: 1, type: 'artifact', name: 'code-task-diff-review', ref: `code-task://${item.run.executionJob.codeTaskId}/diff-review`, summary: item.run.executionJob.diffReview.diffSummary });
   }
   return refs;
 }

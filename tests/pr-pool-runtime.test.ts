@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CodeTaskEvent, CodeTaskExecutor, CodeTaskStatus } from '../src/mastra/lib/code-task-store';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((command, args, options, callback) => {
@@ -25,6 +26,53 @@ async function loadRuntime() {
   process.env.OMNI_PROJECT_ROOT = tempRoot;
   process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+}
+
+function mockCodeTask(overrides: Partial<{
+  taskId: string; teamTaskId: string; teamRunId: string;
+  workspacePath: string; objective: string; status: CodeTaskStatus;
+  startedAt: string; endedAt: string | undefined; exitCode: number | undefined;
+  logFile: string; executionMode: 'direct' | 'patch_proposal'; patchFile: string | undefined;
+  executor: CodeTaskExecutor; command: string; args: string[]; promptArg: string;
+  recentEvents: CodeTaskEvent[];
+  verificationEvidence: { status: 'passed' | 'failed' | 'pending'; summary: string; sources: Array<{ type: 'code_task_log' | 'team_result'; ref: string }>; updatedAt: string };
+  diffReview: {
+    schemaVersion: 1;
+    codeTaskId: string;
+    changedFiles: string[];
+    diffSummary: string;
+    verificationSummary: string;
+    producedAt: string;
+  } | undefined;
+}> = {}) {
+  const taskId = overrides.taskId ?? 'code-task';
+  const status = overrides.status ?? 'completed';
+  return {
+    taskId,
+    teamTaskId: overrides.teamTaskId ?? `runtime-${taskId}`,
+    teamRunId: overrides.teamRunId ?? `run-${taskId}`,
+    workspacePath: overrides.workspacePath ?? tempRoot,
+    objective: overrides.objective ?? 'develop',
+    status,
+    startedAt: overrides.startedAt ?? new Date().toISOString(),
+    endedAt: overrides.endedAt ?? (status === 'queued' ? undefined : new Date().toISOString()),
+    exitCode: overrides.exitCode ?? (status === 'queued' ? undefined : status === 'completed' ? 0 : 1),
+    logFile: overrides.logFile ?? path.join(tempRoot, `${taskId}.jsonl`),
+    executionMode: overrides.executionMode ?? 'direct',
+    patchFile: overrides.patchFile ?? undefined,
+    executor: overrides.executor ?? 'claude_code',
+    command: overrides.command ?? 'cc',
+    args: overrides.args ?? [],
+    promptArg: overrides.promptArg ?? '-p',
+    recentEvents: overrides.recentEvents ?? [],
+    verificationEvidence: overrides.verificationEvidence ?? {
+      status: status === 'completed' ? 'passed' : status === 'queued' ? 'pending' : 'failed',
+      summary: `Code task ${taskId} ${status}.`,
+      sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+      updatedAt: new Date().toISOString(),
+    },
+    diffReview: overrides.diffReview ?? undefined,
+  };
 }
 
 beforeEach(async () => {
@@ -290,31 +338,20 @@ describe('PR pool runtime', () => {
     const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
     vi.mocked(getCodeTask).mockRejectedValue(new Error('not a CodeTask id'));
     vi.mocked(listCodeTasks).mockResolvedValue([
-      {
+      mockCodeTask({
         taskId: 'code-real',
         teamTaskId: 'task-code-runtime',
         teamRunId: 'run-code-real',
-        workspacePath: tempRoot,
-        objective: 'develop',
-        status: 'completed',
-        startedAt: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        exitCode: 0,
-        logFile: path.join(tempRoot, 'code-real.jsonl'),
-        executionMode: 'direct',
-        patchFile: undefined,
-        executor: 'claude_code',
-        command: 'cc',
         args: ['--dangerously-skip-permissions'],
-        promptArg: '-p',
-        recentEvents: [],
-        verificationEvidence: {
-          status: 'passed',
-          summary: 'Code task code-real completed.',
-          sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-real.jsonl') }],
-          updatedAt: new Date().toISOString(),
+        diffReview: {
+          schemaVersion: 1,
+          codeTaskId: 'code-real',
+          changedFiles: ['src/mastra/lib/code-task-store.ts'],
+          diffSummary: '1 file changed, 2 insertions(+)',
+          verificationSummary: 'Code task code-real completed with exit code 0.',
+          producedAt: new Date().toISOString(),
         },
-      },
+      }),
     ]);
     const { prPoolRuntime } = await loadRuntime();
     const item = await prPoolRuntime.create(input('Resolve runtime id'));
@@ -338,6 +375,9 @@ describe('PR pool runtime', () => {
           runtimeTaskId: 'task-code-runtime',
           teamRunId: 'run-code-real',
           status: 'completed',
+          diffReview: {
+            changedFiles: ['src/mastra/lib/code-task-store.ts'],
+          },
         },
       },
       evidence: {
@@ -356,43 +396,30 @@ describe('PR pool runtime', () => {
         status: 'passed',
         refs: [expect.objectContaining({ ref: 'code-task-log://code-real.jsonl' })],
       },
-      refs: expect.arrayContaining([expect.objectContaining({ type: 'log', ref: 'code-task://code-real/log' })]),
+      refs: expect.arrayContaining([
+        expect.objectContaining({ type: 'log', ref: 'code-task://code-real/log' }),
+        expect.objectContaining({
+          type: 'artifact',
+          name: 'code-task-diff-review',
+          ref: 'code-task://code-real/diff-review',
+          summary: '1 file changed, 2 insertions(+)',
+        }),
+      ]),
     });
   });
   it('treats completed CodeTasks with approval blockers as failed PR items', async () => {
     const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
     vi.mocked(listCodeTasks).mockResolvedValue([]);
-    vi.mocked(getCodeTask).mockResolvedValue({
+    vi.mocked(getCodeTask).mockResolvedValue(mockCodeTask({
       taskId: 'code-blocked',
-      teamTaskId: 'runtime-code-blocked',
-      teamRunId: 'run-code-blocked',
-      workspacePath: tempRoot,
-      objective: 'develop',
-      status: 'completed',
-      startedAt: new Date().toISOString(),
-      endedAt: new Date().toISOString(),
-      exitCode: 0,
-      logFile: path.join(tempRoot, 'code-blocked.jsonl'),
-      executionMode: 'direct',
-      patchFile: undefined,
-      executor: 'claude_code',
-      command: 'cc',
-      args: [],
-      promptArg: '-p',
       recentEvents: [
         {
-          type: 'stdout',
+          type: 'stdout' as const,
           message: 'GitNexus 返回 HIGH impact，需要先停下并确认继续。',
           ts: new Date().toISOString(),
         },
       ],
-      verificationEvidence: {
-        status: 'passed',
-        summary: 'Code task code-blocked completed.',
-        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-blocked.jsonl') }],
-        updatedAt: new Date().toISOString(),
-      },
-    });
+    }));
     const { prPoolRuntime } = await loadRuntime();
     const item = await prPoolRuntime.create(input('Blocked completed task'));
     await prPoolRuntime.confirm(item.id);
@@ -436,31 +463,17 @@ describe('PR pool runtime', () => {
   it('projects queued CodeTasks as waiting for user confirmation evidence', async () => {
     const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
     vi.mocked(listCodeTasks).mockResolvedValue([]);
-    vi.mocked(getCodeTask).mockResolvedValue({
+    vi.mocked(getCodeTask).mockResolvedValue(mockCodeTask({
       taskId: 'code-queued',
-      teamTaskId: 'runtime-code-queued',
-      teamRunId: 'run-code-queued',
-      workspacePath: tempRoot,
-      objective: 'develop',
       status: 'queued',
-      startedAt: new Date().toISOString(),
-      endedAt: undefined,
-      exitCode: undefined,
-      logFile: path.join(tempRoot, 'code-queued.jsonl'),
-      executionMode: 'direct',
-      patchFile: undefined,
-      executor: 'claude_code',
-      command: 'cc',
-      args: [],
-      promptArg: '-p',
-      recentEvents: [],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'pending',
         summary: 'Waiting for confirmation.',
         sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-queued.jsonl') }],
         updatedAt: new Date().toISOString(),
       },
-    });
+    }));
     const { prPoolRuntime } = await loadRuntime();
     const item = await prPoolRuntime.create(input('Queued task'));
     await prPoolRuntime.confirm(item.id);
@@ -505,6 +518,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'passed',
         summary: `Code task ${taskId} completed.`,
@@ -554,6 +568,7 @@ describe('PR pool runtime', () => {
       args: ['--dangerously-skip-permissions'],
       promptArg: '-p',
       recentEvents: taskId === 'code-ok' ? [] : [{ type: 'task_failed', message: 'tests failed', ts: new Date().toISOString() }],
+      diffReview: undefined,
       verificationEvidence: {
         status: taskId === 'code-ok' ? 'passed' : 'failed',
         summary: taskId === 'code-ok' ? `Code task ${taskId} completed.` : `Code task ${taskId} failed.`,
@@ -645,6 +660,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'passed',
         summary: `Code task ${taskId} completed.`,
@@ -702,6 +718,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'passed',
         summary: `Code task ${taskId} completed.`,
@@ -748,6 +765,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [{ type: 'task_failed', message: 'Build error: module not found', ts: new Date().toISOString() }],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'failed',
         summary: `Code task ${taskId} failed.`,
@@ -800,6 +818,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [{ type: 'task_failed', message: 'Persistent failure', ts: new Date().toISOString() }],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'failed',
         summary: `Code task ${taskId} failed.`,
@@ -847,6 +866,7 @@ describe('PR pool runtime', () => {
       args: [],
       promptArg: '-p',
       recentEvents: [],
+      diffReview: undefined,
       verificationEvidence: {
         status: 'passed',
         summary: `Code task ${taskId} completed.`,

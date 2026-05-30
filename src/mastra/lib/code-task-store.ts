@@ -13,6 +13,15 @@ import {
 export type CodeTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type CodeTaskExecutor = 'claude_code' | 'opencode' | 'codex' | 'custom';
 
+export type DiffReviewArtifact = {
+  schemaVersion: 1;
+  codeTaskId: string;
+  changedFiles: string[];
+  diffSummary: string;
+  verificationSummary: string;
+  producedAt: string;
+};
+
 export type CodeTaskEvent = {
   type: 'task_started' | 'stdout' | 'stderr' | 'task_completed' | 'task_failed';
   message: string;
@@ -37,6 +46,7 @@ export type CodeTask = {
   command?: string;
   args?: string[];
   promptArg?: string;
+  diffReview?: DiffReviewArtifact;
 };
 
 const tasks = new Map<string, CodeTask>();
@@ -88,6 +98,7 @@ async function persistTaskSnapshot(task: CodeTask) {
     command: task.command,
     args: task.args,
     promptArg: task.promptArg,
+    diffReview: task.diffReview,
   };
   const existingIndex = items.findIndex(item => item.taskId === task.taskId);
   if (existingIndex === -1) {
@@ -373,6 +384,7 @@ export async function startCodeTask(input: {
       task.status = code === 0 ? 'completed' : 'failed';
       task.endedAt = new Date().toISOString();
       task.exitCode = code;
+      task.diffReview = buildDiffReview(task, output);
       await appendTaskEvent(task, {
         type: code === 0 ? 'task_completed' : 'task_failed',
         message: `Claude Code exited with code ${code}.`,
@@ -533,6 +545,7 @@ function summarizeTask(task: CodeTask) {
     args: task.args,
     promptArg: task.promptArg,
     verificationEvidence,
+    diffReview: task.diffReview,
     recentEvents,
   };
 }
@@ -560,4 +573,56 @@ function buildVerificationEvidence(task: CodeTask, recentEvents: CodeTaskEvent[]
     ],
     updatedAt: task.endedAt || task.startedAt,
   };
+}
+
+function buildDiffReview(task: CodeTask, output: string): DiffReviewArtifact | undefined {
+  const changedFiles = extractChangedFiles(output);
+  if (!changedFiles.length && task.executionMode === 'patch_proposal') return undefined;
+
+  return {
+    schemaVersion: 1,
+    codeTaskId: task.taskId,
+    changedFiles,
+    diffSummary: extractDiffSummary(output),
+    verificationSummary: task.status === 'completed'
+      ? `Code task ${task.taskId} completed with exit code 0.`
+      : `Code task ${task.taskId} failed with exit code ${task.exitCode}.`,
+    producedAt: new Date().toISOString(),
+  };
+}
+
+function extractChangedFiles(output: string): string[] {
+  const filePattern = /(?:modified|created|deleted|renamed):\s+(.+)/gi;
+  const files = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = filePattern.exec(output)) !== null) {
+    files.add(match[1].trim());
+  }
+  const diffFilePattern = /(?:---|\+\+\+)\s+(?:(?:a|b)\/)?(.+?)(?:\r?\n|$)/g;
+  while ((match = diffFilePattern.exec(output)) !== null) {
+    const file = match[1].trim();
+    if (file !== '/dev/null' && !file.startsWith('null')) {
+      files.add(file);
+    }
+  }
+  return [...files].sort();
+}
+
+function extractDiffSummary(output: string): string {
+  const lines = output.split(/\r?\n/);
+  const summaryLines: string[] = [];
+  for (const line of lines) {
+    if (/^\d+ file[s]? changed/.test(line.trim())) {
+      summaryLines.push(line.trim());
+      break;
+    }
+  }
+  if (!summaryLines.length) {
+    const insertions = (output.match(/^\+[^+]/gm) || []).length;
+    const deletions = (output.match(/^-[^-]/gm) || []).length;
+    if (insertions || deletions) {
+      summaryLines.push(`${insertions} insertion(s), ${deletions} deletion(s)`);
+    }
+  }
+  return summaryLines.join('; ') || 'No diff summary available.';
 }

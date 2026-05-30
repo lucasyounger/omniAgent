@@ -435,6 +435,7 @@ function buildResolvedRunPatch(item: PRItem, codeTask: ResolvedCodeTask): PRItem
       workspacePath: codeTask.workspacePath,
       logFile: codeTask.logFile,
       patchFile: codeTask.patchFile,
+      diffReview: codeTask.diffReview,
       updatedAt: codeTask.endedAt || codeTask.startedAt,
     },
   };

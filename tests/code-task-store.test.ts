@@ -332,4 +332,55 @@ describe('Code task store', () => {
       output: expect.stringContaining('result: completed'),
     });
   });
+
+  it('records diff review artifacts from direct executor output', async () => {
+    const scriptFile = path.join(tempRoot, 'emit-diff-review.js');
+    await fs.writeFile(
+      scriptFile,
+      [
+        "console.log('modified: src/mastra/lib/code-task-store.ts');",
+        "console.log('--- a/tests/code-task-store.test.ts');",
+        "console.log('+++ b/tests/code-task-store.test.ts');",
+        "console.log('+expect(diffReview).toBeDefined()');",
+        "console.log('-expect(diffReview).toBeUndefined()');",
+      ].join('\n'),
+      'utf8',
+    );
+
+    const store = await loadCodeTaskStore();
+    const started = await store.startCodeTask({
+      workspacePath: tempRoot,
+      objective: 'diff review artifact test',
+      command: process.execPath,
+      args: [scriptFile],
+      promptArg: '--prompt',
+    });
+
+    let current = started;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (current.status !== 'running') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      current = await store.getCodeTask(started.taskId);
+    }
+
+    expect(current).toMatchObject({
+      status: 'completed',
+      diffReview: {
+        schemaVersion: 1,
+        codeTaskId: started.taskId,
+        changedFiles: ['src/mastra/lib/code-task-store.ts', 'tests/code-task-store.test.ts'],
+        diffSummary: '1 insertion(s), 1 deletion(s)',
+        verificationSummary: `Code task ${started.taskId} completed with exit code 0.`,
+      },
+    });
+    expect(current.diffReview?.producedAt).toBeTruthy();
+
+    const recovered = await store.getCodeTask(started.taskId);
+    expect(recovered).toMatchObject({
+      taskId: started.taskId,
+      diffReview: expect.objectContaining({
+        changedFiles: ['src/mastra/lib/code-task-store.ts', 'tests/code-task-store.test.ts'],
+      }),
+    });
+  });
 });

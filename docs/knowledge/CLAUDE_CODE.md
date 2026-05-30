@@ -63,7 +63,11 @@ Stdout and stderr are captured as JSONL events in `~/.omni/runs/code-runs/{taskI
 
 Code task summaries now expose structured `verificationEvidence`
 (`passed`/`failed`/`pending`, summary, source refs, updated timestamp) derived from
-recent stdout/stderr signals and the Team Run result reference.
+recent stdout/stderr signals and the Team Run result reference. Completed direct
+executor runs also expose a compact `diffReview` artifact with changed files, a
+diff summary, verification summary, and produced timestamp. PR Pool evidence
+bundles reference this artifact as `code-task://{taskId}/diff-review` instead of
+copying full diffs or raw transcripts.
 
 CodeAgent also writes Team Runtime progress events, durable run results, and
 inbox notifications. `start-code-task` returns both the legacy code task

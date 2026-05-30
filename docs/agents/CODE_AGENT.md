@@ -63,6 +63,10 @@ execution through Team Runtime.
   `draft` until reviewed.
 - Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
 - Captures stdout/stderr in `~/.omni/runs/code-runs/{taskId}.jsonl`.
+- Completed direct executor runs expose compact `diffReview` metadata with
+  changed files, diff summary, verification summary, and produced timestamp.
+  PR Pool evidence bundles reference it as `code-task://{taskId}/diff-review`
+  without copying full diffs or raw transcripts.
 - Writes Team Runtime events for progress.
 - Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
 - Sends completion or failure inbox messages.
