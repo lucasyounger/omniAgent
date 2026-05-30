@@ -1,6 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { buildContextPack } from '../runtime/context-pack';
+import { createWorkflowRun } from '../runtime/execution-engine';
 import { taskRuntime } from '../runtime/task-runtime';
 import type { RuntimeTaskStatus } from '../runtime/types';
 
@@ -156,8 +157,7 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
     ? [{ type: 'goal', title: 'AI dev E2E shadow run completed', scope: `goal:${parsed.goalId}` }]
     : [];
   const reconcile = buildReconcilePlan(parsed, status, runtimeTaskBindings, memoryWritebackCandidates.length);
-
-  return aiDevE2EOutputSchema.parse({
+  const output = aiDevE2EOutputSchema.parse({
     runId,
     mode: parsed.mode,
     status,
@@ -188,6 +188,49 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
       ? ['Schedule a follow-up after the shadow plan is confirmed.']
       : [],
   });
+
+  await persistAiDevE2EWorkflowRun(parsed, output);
+  return output;
+}
+
+async function persistAiDevE2EWorkflowRun(
+  input: z.infer<typeof aiDevE2EInputSchema>,
+  output: z.infer<typeof aiDevE2EOutputSchema>,
+) {
+  const blocked = output.status === 'waiting_approval' || output.status === 'needs_input';
+  await createWorkflowRun({
+    id: output.runId,
+    source: 'ai_dev_e2e',
+    status: blocked ? 'paused' : 'succeeded',
+    goal: input.request,
+    taskId: output.reconcile.durableStepTaskId,
+    input,
+    output,
+    startedAt: new Date().toISOString(),
+    completedAt: blocked ? undefined : new Date().toISOString(),
+    pausedAt: blocked ? new Date().toISOString() : undefined,
+    failureReason: blocked ? output.steps.find(step => step.status === 'waiting_approval' || step.status === 'needs_input')?.summary : undefined,
+    failedStepId: blocked ? output.steps.find(step => step.status === 'waiting_approval' || step.status === 'needs_input')?.id : undefined,
+    stepResults: output.steps.map(step => ({
+      stepId: step.id,
+      taskId: step.runtimeTaskId,
+      status: workflowStepStatusToRunStatus(step.status),
+      result: {
+        label: step.label,
+        summary: step.summary,
+        runtimeTaskStatus: step.runtimeTaskStatus,
+        resultRef: step.resultRef,
+      },
+      reason: step.summary,
+      completedAt: new Date().toISOString(),
+    })),
+  });
+}
+
+function workflowStepStatusToRunStatus(status: z.infer<typeof aiDevE2EStepStatusSchema>) {
+  if (status === 'waiting_approval' || status === 'needs_input') return 'waiting_user_confirm';
+  if (status === 'shadowed' || status === 'completed') return 'succeeded';
+  return status;
 }
 
 function buildShadowSteps(input: z.infer<typeof aiDevE2EInputSchema>, approvalStatus: z.infer<typeof aiDevE2EStepStatusSchema>) {

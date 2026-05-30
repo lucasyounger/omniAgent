@@ -46,6 +46,7 @@ afterEach(async () => {
 describe('ai-dev-e2e workflow', () => {
   it('covers the full AI dev loop in shadow mode without side effects', async () => {
     const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { getWorkflowRun } = await import('../src/mastra/runtime/execution-engine');
 
     const result = await runAiDevE2EWorkflow({
       request: 'Add governed Goal memory writeback support',
@@ -101,10 +102,23 @@ describe('ai-dev-e2e workflow', () => {
       { type: 'goal', title: 'AI dev E2E shadow run completed', scope: 'goal:goal-memory-os' },
     ]);
     expect(result.followUps).toEqual(['Schedule a follow-up after the shadow plan is confirmed.']);
+
+    await expect(getWorkflowRun(result.runId)).resolves.toMatchObject({
+      id: result.runId,
+      source: 'ai_dev_e2e',
+      status: 'succeeded',
+      goal: 'Add governed Goal memory writeback support',
+      output: expect.objectContaining({ runId: result.runId }),
+      stepResults: expect.arrayContaining([
+        expect.objectContaining({ stepId: 'context', status: 'succeeded' }),
+        expect.objectContaining({ stepId: 'pr_pool_ingest', status: 'skipped' }),
+      ]),
+    });
   });
 
   it('uses code execution context and pauses when approval is required', async () => {
     const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { getWorkflowRun } = await import('../src/mastra/runtime/execution-engine');
 
     const result = await runAiDevE2EWorkflow({
       request: 'Execute an approved PR Pool slice',
@@ -128,6 +142,18 @@ describe('ai-dev-e2e workflow', () => {
       status: 'blocked',
       actions: expect.arrayContaining([
         expect.objectContaining({ target: 'pr_pool', targetId: 'pr-1', status: 'waiting_evidence' }),
+      ]),
+    });
+
+    await expect(getWorkflowRun(result.runId)).resolves.toMatchObject({
+      id: result.runId,
+      source: 'ai_dev_e2e',
+      status: 'paused',
+      failedStepId: 'clarify',
+      failureReason: 'Acceptance criteria are missing for real execution.',
+      stepResults: expect.arrayContaining([
+        expect.objectContaining({ stepId: 'clarify', status: 'waiting_user_confirm' }),
+        expect.objectContaining({ stepId: 'approval', status: 'waiting_user_confirm' }),
       ]),
     });
   });
@@ -176,6 +202,8 @@ describe('ai-dev-e2e workflow', () => {
       ]),
     });
 
+    const { getWorkflowRun } = await import('../src/mastra/runtime/execution-engine');
+
     const records = await listRuntimeTaskRecords();
     expect(records).toHaveLength(result.steps.length);
     expect(records).toEqual(expect.arrayContaining([
@@ -206,5 +234,16 @@ describe('ai-dev-e2e workflow', () => {
         expect.objectContaining({ type: 'runtime.task.transitioned', toStatus: 'succeeded', resultRef: expect.stringContaining(`workflow:${result.runId}:intake`) }),
       ]),
     );
+    await expect(getWorkflowRun(result.runId)).resolves.toMatchObject({
+      id: result.runId,
+      source: 'ai_dev_e2e',
+      status: 'paused',
+      taskId: reconcileBinding?.taskId,
+      stepResults: expect.arrayContaining([
+        expect.objectContaining({ stepId: 'intake', taskId: intakeBinding?.taskId, status: 'succeeded' }),
+        expect.objectContaining({ stepId: 'approval', status: 'waiting_user_confirm' }),
+        expect.objectContaining({ stepId: 'execute', status: 'skipped' }),
+      ]),
+    });
   });
 });

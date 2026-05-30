@@ -136,7 +136,11 @@ approval linkage.
 - Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
 - AI Dev E2E `dry_run` creates RuntimeTask bindings for each workflow lane and
   feeds each task id, terminal dry-run status, and result ref back into the
-  workflow output. These bindings are auditable planning records only: they are
+  workflow output. Each `shadow` or `dry_run` invocation also persists a compact
+  WorkflowRun record under `~/.omni/runs/workflow/{runId}.json` with source
+  `ai_dev_e2e`, normalized step results, the original input, and the parsed
+  output so Web/Desktop/CLI clients can resume from the WorkflowRun store instead
+  of replaying in-memory workflow output. These bindings are auditable planning records only: they are
   not dispatched to executor handlers and do not mutate PR Pool state. The same
   output normalizes test, typecheck, change-sync, GitNexus, and review evidence
   requirements for downstream verification/reconcile consumers and carries one

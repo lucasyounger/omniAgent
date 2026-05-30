@@ -26,7 +26,7 @@ export type WorkflowStepExecutionResult = {
 export type WorkflowRunRecord = {
   id: string;
   planId?: string;
-  source: 'runtime_task' | 'execution_plan' | 'capability_plan';
+  source: 'runtime_task' | 'execution_plan' | 'capability_plan' | 'ai_dev_e2e';
   status: WorkflowRunStatus;
   goal?: string;
   taskId?: string;
@@ -165,7 +165,7 @@ async function executeSingleStepPlan(plan: ExecutionPlan, step: ExecutionPlanSte
   });
 }
 
-async function createWorkflowRun(input: Pick<WorkflowRunRecord, 'source' | 'input' | 'stepResults'> & Partial<WorkflowRunRecord>): Promise<WorkflowRunRecord> {
+export async function createWorkflowRun(input: Pick<WorkflowRunRecord, 'source' | 'input' | 'stepResults'> & Partial<WorkflowRunRecord>): Promise<WorkflowRunRecord> {
   const now = new Date().toISOString();
   const record: WorkflowRunRecord = {
     id: createWorkflowRunId(),
