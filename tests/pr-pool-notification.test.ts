@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ChannelTarget } from '../src/gateway/types';
 import type { PRItem } from '../src/mastra/runtime/pr-pool/pr-pool-store';
 
-vi.mock('../src/mastra/runtime/task-runtime', () => ({
-  taskRuntime: {
-    createTask: vi.fn(),
-  },
+vi.mock('../src/mastra/runtime/notification-dispatch', () => ({
+  queueRuntimeNotification: vi.fn(),
 }));
 
 describe('PR pool notifications', () => {
@@ -19,24 +17,18 @@ describe('PR pool notifications', () => {
     expect(notification.buildPrItemBlockedNotification(item)).toContain('等待确认');
   });
 
-  it('creates notify runtime tasks when a target is provided', async () => {
-    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+  it('dispatches notify runtime tasks when a target is provided', async () => {
+    const { queueRuntimeNotification } = await import('../src/mastra/runtime/notification-dispatch');
     const { sendPrPoolNotification } = await import('../src/mastra/runtime/pr-pool/notification');
     const target: ChannelTarget = { channel: 'http', accountId: 'local', conversationId: 'conv-1', senderId: 'user-1', messageType: 'dm' };
 
     await sendPrPoolNotification('hello', target);
 
-    expect(taskRuntime.createTask).toHaveBeenCalledWith({
+    expect(queueRuntimeNotification).toHaveBeenCalledWith({
+      event: 'pr_pool.notification',
+      target,
+      text: 'hello',
       sourceAgentId: 'pr-pool-runtime',
-      targetAgentId: 'notify-agent',
-      objective: 'hello',
-      metadata: {
-        taskType: 'notify.send_channel_message',
-        payload: {
-          text: 'hello',
-          target,
-        },
-      },
     });
   });
 });
@@ -53,7 +45,23 @@ function itemFixture(): PRItem {
     dependencies: [],
     impact: { modules: ['runtime'], risk: 'low' },
     acceptanceCriteria: ['works'],
+    verificationPlan: ['Run scoped tests'],
+    docSyncRequirements: ['Update docs when needed'],
+    testSyncRequirements: ['Update tests when behavior changes'],
+    workspacePolicy: {
+      useWorktree: true,
+      editablePaths: [],
+      forbiddenPaths: ['.git/**', '.env', '.env.*'],
+      allowDependencyInstall: false,
+      allowNetwork: false,
+      allowCommit: false,
+      allowPush: false,
+      cleanup: 'keep',
+    },
     codeAgentPrompt: 'Implement',
+    nonGoals: [],
+    constraints: [],
+    references: [],
     approval: {},
     run: { retryCount: 0, maxRetries: 3 },
     tags: [],

@@ -1,6 +1,6 @@
 # TaskAgent
 
-Status: protocol/tooling role, not yet a standalone Mastra `Agent`.
+Status: Runtime Task Protocol role, not a standalone Mastra `Agent`.
 
 TaskAgent is the conceptual owner of OmniAgent's Team Runtime. It defines how
 work is delegated, executed, reported, and recovered across all agents.
@@ -18,18 +18,38 @@ work is delegated, executed, reported, and recovered across all agents.
 - `src/mastra/runtime/task-runtime.ts`
 - `src/mastra/runtime/task-dispatcher.ts`
 - `src/mastra/tools/team-runtime-tools.ts`
-- `src/mastra/tools/index.ts`
+- `src/mastra/tools/runtime-task-tools.ts`
+- `src/mastra/tools/cron-tools.ts`
+- `src/mastra/tools/notify-tools.ts`
+- `src/mastra/tools/knowledge-task-tools.ts`
+- `src/mastra/tools/pr-pool-tools.ts`
+- `src/mastra/workflows/ai-dev-e2e-workflow.ts`
+- `src/mastra/workflows/composite-task-workflow.ts`
 - `src/mastra/agents/omni-router-agent.ts`
 - `src/mastra/agents/code-agent.ts`
 - `src/mastra/agents/cron-agent.ts`
 
-## Runtime Files
-
+- Req task types: `req.create/list/status/confirm_document/reject_document/confirm_item/reject_item/update_item_status/import` are handled by Task Dispatcher through `req-handler`, call the Req runtime service boundary directly, and write to `.omni/reqs`. Public Req Mastra tools enqueue these RuntimeTasks for write/import/confirmation actions so handler execution does not recurse back through public tools.
+- Knowledge task types `knowledge.memory_index`, `knowledge.episode`, and `knowledge.doc_update_proposal` are handled by Task Dispatcher through `knowledge-agent` compatibility dispatch while executing the corresponding Mastra memory tools.
+- `research.ai_daily_digest` Runtime Tasks generate digest content through the Mastra Workflow `research-daily-digest-workflow`, then preserve the existing Team Run result and optional notify child-task behavior.
+- Goal cron scan: `goal.cron_scan` scans active module improvement Goals and enqueues due runs while avoiding same-day duplicates.
 - `~/.omni/runs/team/tasks.json`
 - `~/.omni/runs/team/runs.json`
 - `~/.omni/runs/team/events.jsonl`
 - `~/.omni/runs/team/inbox/{agentId}.jsonl`
 - `~/.omni/runs/team/results/{runId}.json`
+
+- `research-agent`, `notify-agent`, `goal-runtime`, `req-runtime`, and
+  `pr-pool-runtime` are registry-visible runtime services, not standalone Mastra
+  Agents. They resolve through Task Dispatcher handlers so deterministic service
+  execution stays behind RuntimeTask lifecycle, Tool Gateway policy, and Team Run
+  result contracts.
+- Unsupported `notify-agent` or `research-agent` task types fail with a concrete
+  missing task-type handler reason instead of being described as pending agent
+  implementations.
+- TaskAgent remains a protocol/tooling role rather than a standalone Mastra
+  Agent until it needs reasoning or user interaction beyond deterministic runtime
+  service execution.
 
 ## Tools
 
@@ -48,6 +68,26 @@ work is delegated, executed, reported, and recovered across all agents.
 - `recover-interrupted-team-runs`
 - `mark-timed-out-team-runs`
 
+- `create-runtime-task`
+- `dispatch-runtime-task`
+- `create-and-dispatch-runtime-task`
+- `get-runtime-task-status`
+- `list-runtime-tasks`
+- `cancel-runtime-task`
+- `retry-runtime-task`
+- `list-pr-pool-items`
+- `get-pr-pool-item`
+- `create-pr-pool-item`
+- `ingest-pr-pool-proposal`
+- `confirm-pr-pool-item`
+- `develop-pr-pool-item`
+- `scan-pr-pool-ready-items`
+- `archive-pr-pool-item`
+- `pause-pr-pool-item`
+- `retry-pr-pool-item`
+- `delete-pr-pool-item`
+- `revise-pr-pool-item`
+
 ## Contract
 
 - User-facing task lifecycle changes should go through TaskRuntime.
@@ -57,12 +97,12 @@ work is delegated, executed, reported, and recovered across all agents.
 - Final output should be written as a Result file.
 - Inbox messages are notifications, not the source of truth.
 - Large outputs should be referenced through `resultRef`, not copied into inbox.
-- Completion should notify the source agent and normally `omni-router-agent`.
+- Runtime notifications are low-noise RuntimeTasks. `src/mastra/runtime/notification-dispatch.ts` creates `notify.send_channel_message` child tasks and dispatches them through the existing notify handler instead of writing directly to the Gateway delivery queue. Generated notify tasks carry `metadata.suppressRuntimeNotifications=true`, and TaskRuntime only auto-notifies `waiting_user_confirm` and `failed` transitions by default; `succeeded` requires explicit `notifyOnRuntimeStatus` or `notifyOnTerminal` opt-in.
 - Runs left `running` across restart should be recovered as `interrupted`.
 - Overdue runs should be marked `timed_out`.
 - Runtime status transitions must follow the TaskRuntime state machine. Do not
   write `metadata.runtimeStatus` directly from feature code.
-- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher handlers
+- Pending Runtime Tasks are dispatched by Task Dispatcher. Dispatcher core now resolves executable handlers through `src/mastra/runtime/task-dispatcher/handler-registry.ts`, which centralizes exact taskType, taskType prefix, and targetAgentId routing while preserving the public `dispatchRuntimeTask(taskId)` entry point. Concrete deterministic execution lives in focused handler modules under `src/mastra/runtime/task-dispatcher/handlers/` for schedule, channel, notify, research, goal, req, PR Pool, CodeAgent, and KnowledgeAgent work. Dispatcher handlers
   must use the same Tool Gateway policies as user-facing tools.
 - Approval-required tasks should create durable approval requests. Approving a
   request injects an approval token into linked task payload metadata and moves
@@ -70,7 +110,18 @@ work is delegated, executed, reported, and recovered across all agents.
 
 ## Current Behavior
 
-- CodeAgent automatically creates a Team Task if `start-claude-code-task` is
+- RuntimeTask, PR Pool, Goal, Req, Schedule, Notify, and Knowledge now have Mastra-native tool facades. Agent-facing routing should prefer these `createTool(...)` facades for schema validation, Tool Gateway audit/approval, and task creation, while Task Dispatcher remains the durable execution backend.
+- Public/internal tool boundaries are defined in
+  `src/mastra/tools/tool-registry.ts`. OmniRouter receives only public facades
+  and read/status tools; specialist handlers and agents use internal tool sets
+  for executor work or low-level protocol operations.
+- `/pr` channel commands are compatibility entrypoints over the PR Pool native tools; `/pr delete` stays behind the delete facade/runtime safety checks and `/pr revise` schedules CodeAgent revision work with user feedback preserved for reconcile/archive. Natural-language PR Pool execution no longer uses a dedicated Gateway regex fast path and should route through capability/tool selection or OmniRouter tool calling.
+- The generic RuntimeTask facade exposes create, dispatch, create-and-dispatch, status/list, cancel, and retry operations so future Goal/Req/Schedule/Notify facades do not duplicate `taskRuntime.createTask(...)` + `dispatchRuntimeTask(...)` code.
+- Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
+- Goal and Req native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Goal create/run/feedback enqueue `goal.*` tasks; Req create/import/confirm/reject/update enqueue `req.*` tasks. Goal/Req read tools remain direct audited reads.
+- Schedule/Notify/Knowledge native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Schedule creation enqueues `schedule.create`, notifications enqueue `notify.send_channel_message`, and public knowledge writes enqueue `knowledge.*` tasks; low-level cron/delivery/memory tools remain internal compatibility boundaries.
+- CodeAgent receives only PR Pool/RuntimeTask read-status tools in addition to code tools, so it can inspect assigned context without recursively starting PR Pool development. CronAgent receives RuntimeTask status/dispatch helpers plus the approval-gated PR Pool scan tool for scheduler/admin operation.
+- CodeAgent automatically creates a Team Task if `start-code-task` is
   called without `teamTaskId`.
 - CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
 - CodeAgent writes completed or failed results and inbox messages.
@@ -88,30 +139,172 @@ work is delegated, executed, reported, and recovered across all agents.
 - Gateway `/task <workspacePath> :: <objective>` commands create `code-agent`
   Runtime Tasks and enter Task Dispatcher instead of directly starting
   CodeAgent.
-- Code tasks without an approval token transition to `waiting_user_confirm`;
-  approving the linked Tool Gateway request injects the token and moves the task
-  back to `pending`.
-- Schedule create/list/delete/pause/resume maintenance tasks are audited but do
-  not require approval. `schedule.run_now` dynamically requires approval when
-  the target schedule would trigger direct code execution.
+- Code tasks are audited by Tool Gateway and execute once the workspace path is
+  inside `OMNI_ALLOWED_WORKSPACES`; they no longer require an approval token just
+  to start CodeAgent.
+- Schedule create/list/delete/pause/resume/run-now maintenance tasks are audited
+  but do not require approval. Code schedules rely on the same allowed-workspace
+  boundary before execution.
 - Dispatcher lease metadata prevents duplicate dispatch while a poller is
-  working on a task.
-- Task type registry defines 21 granular task types: `code.claude_code_task`,
+  working on a task. Unsupported target agents and handler placeholders that are
+  not executable are transitioned to runtime `failed` with a visible reason
+  instead of remaining indefinitely `pending`/queued.
+- Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails.
+- AI Dev E2E workflow currently runs in dry-run/shadow mode. It builds a
+  Context Pack and returns the full intake → context → clarify → plan → approval
+  → PR Pool ingest → execute → verify → review → reconcile → memory writeback
+  → follow-up lane as step output. `shadow` skips PR Pool mutation, RuntimeTask
+  creation, executor runs, commits, pushes, external sends, and memory writes.
+  `dry_run` creates one RuntimeTask binding per lane, transitions each binding to
+  the lane's deterministic dry-run result, and returns task ids/status/result refs
+  without dispatching executor work or mutating PR Pool state. Workflow output
+  also includes normalized verification evidence requirements for test,
+  typecheck, change-sync, GitNexus, and review checks, plus a structured
+  reconcile plan for PR Pool, Req, GoalRun, and memory candidate writeback. In
+  `dry_run`, the reconcile plan points at the durable reconcile RuntimeTask
+  binding so downstream workflow recovery can resume from one auditable step.
+- Task type registry defines 25 granular task types and exposes capability
+  metadata for each one. Capability metadata keeps the existing `taskType` and
+  default target mapping intact while adding category, examples, tools,
+  dependencies, outputs, and safety level for semantic orchestration.
+- Capability Registry groups those task types into coarse routeable capabilities
+  (for example `repository_analysis`, `architecture_modeling`,
+  `report_generation`, `schedule_management`, `goal_management`, and
+  `pr_management`). Every existing task type maps to at least one capability;
+  agents, tools, and workflows remain execution bindings rather than routing
+  identities. Capabilities may now also record optional Mastra executable bindings
+  so migrated handlers can be traced back to concrete tools/workflows without
+  making those executable IDs the router's source of truth.
+- Capability retriever and routers provide lightweight message → top-k capability
+  matches over runtime task capability metadata. They use task IDs, names,
+  categories, descriptions, examples, tools, deterministic patterns, and simple
+  bilingual synonym boosts; they do not require embeddings or a vector database.
+  `OMNI_CAPABILITY_RETRIEVER=embedding_evaluation` enables an evaluation-only
+  path that still falls back to text retrieval and tags match reasons, so default
+  routing remains deterministic without external vector storage.
+- Capability Planner converts selected capability ids into a `CapabilityPlan` with
+  ordered `PlanStep`s, dependencies, execution mode, and taskType bindings. Single
+  capability requests become one-step plans; known chains such as repository
+  analysis → architecture modeling → document/report generation are serialized.
+- Task Dispatcher exposes a plan dispatch path that creates one RuntimeTask per
+  plan step and dispatches each step through the existing direct task dispatcher.
+  The old `dispatchRuntimeTask(taskId)` path remains unchanged; plan dispatch stops
+  at the first failed, skipped, or approval-waiting step and returns step-level
+  task/dispatch metadata.
+- Gateway dispatches executable capability plans through `dispatchCapabilityPlan()`.
+  Replies include selected capabilities, concrete planned steps, and per-step
+  RuntimeTask/dispatch status. Migrated business semantics such as repository
+  architecture reports and PR report summaries now route directly through
+  Capability Routing + Planner + RuntimeTask dispatch before legacy LLM fallback.
+  This makes Gateway semantic routing a minimal Planner → RuntimeTask execution
+  loop while preserving approval gating for high-risk steps.
+- Embedding Router is an optional adapter over the Capability Registry. It accepts
+  a pluggable `EmbeddingProvider`, caches capability description/example vectors,
+  ranks Top-K candidates by cosine similarity, and falls back to lightweight routing
+  when no provider is configured or provider calls fail.
+- LLM Router is a schema-validated arbitration layer for ambiguous capability
+  routing. It triggers only after deterministic/lightweight candidates are low
+  confidence, close-scored, multi-capability, or context-dependent; it receives
+  Top-K candidates, registered capability definitions, sender-scoped session
+  summary, and compressed recent-turn history. History may resolve references or
+  continue prior objectives but cannot override safety, approval, permission, or
+  Registry constraints. Missing, ambiguous, or conflicting context returns a
+  clarification request. Invalid JSON, unregistered capabilities, or LLM failures
+  fall back to the previous router result and then legacy OmniRouter behavior;
+  Agents and task types remain execution bindings, not LLM-selected route
+  subjects.
+- Execution Engine is the unified workflow orchestration entry point for PRS-13.
+  `executeRuntimeTask` preserves single-step dispatcher behavior by calling
+  `dispatchRuntimeTask`, while `executeExecutionPlan` and `executeCapabilityPlan`
+  persist workflow run state under `${OMNI_HOME}/runs/workflow` and reuse the
+  existing composite task workflow for multi-step plans. Workflow run statuses are
+  `pending`, `running`, `succeeded`, `failed`, `paused`, and `canceled`; `paused`
+  represents approval/user-confirmation waits for both direct RuntimeTask dispatch
+  and multi-step composite Workflow execution, with explicit pause/resume/cancel
+  controls reserved for later work.
+- Debug-only capability management is available through the HTTP gateway when
+  `OMNI_ROUTER_ADMIN=1`: list/upsert/delete capabilities and evaluate a query against
+  the lightweight router. The flag is off by default and these endpoints should remain
+  protected from production traffic.
+- Supported runtime task types: `code.task` (`code.claude_code_task` remains a
+  legacy alias),
   `knowledge.task`, `knowledge.memory_index`, `knowledge.episode`,
   `knowledge.doc_update_proposal`, `channel.message`, `schedule.create`,
   `schedule.list`, `schedule.delete`, `schedule.pause`, `schedule.resume`,
   `schedule.run_now`, `research.ai_daily_digest`,
   `notify.send_channel_message`, `pr_pool.create`, `pr_pool.list`,
   `pr_pool.confirm`, `pr_pool.develop`, `pr_pool.archive`,
-  `pr_pool.cron_scan`, `goal.run`.
+  `pr_pool.ingest_proposal`, `pr_pool.cron_scan`, `goal.create`, `goal.list`,
+  `goal.status`, `goal.run`, `goal.feedback`.
+- PR Pool proposal ingest now treats `confirmation: required` as `draft` and
+  `confirmation: confirmed` as `ready`; Goal-origin and unknown proposals default
+  to `required`. Ingest preserves non-goals, constraints, and references, writes
+  `~/.omni/pr-pool/active/{prItemId}/brief.md`, and never creates CodeAgent tasks.
+  PR Pool cron scan consumes only `ready` items.
+- `pr_pool.develop` now creates and immediately dispatches the child
+  `code.task` RuntimeTask through Task Dispatcher and CodeAgent. The child
+  payload carries structured PR context, including `prItemId`, parent
+  `runtimeTaskId`, acceptance criteria, test command, impact, constraints,
+  non-goals, `codeAgentBriefPath`, and retry context. It can select
+  `executor: claude_code | opencode | codex | custom`, plus command override
+  metadata. Confirmed PR Pool items are already reviewed, so develop dispatch
+  does not require an additional approval token; execution is bounded by the
+  assigned allowed workspace and audited Tool Gateway records. Develop dispatch
+  defaults the child CodeAgent task to direct execution so confirmed PR slices
+  actually start the selected local executor; callers may still request
+  `executionMode: patch_proposal` for review-only handoff. If child dispatch
+  fails synchronously, the PR Pool item is moved to `failed` with a runtime
+  blocking reason. Repeated develop calls for an already developing item with an
+  existing CodeTask return the existing `codeTaskId` instead of creating a
+  duplicate child task.
+- PR Pool cron scans reconcile active development runs before and after
+  scheduling: completed CodeTasks mark items `completed` with `lastRunId` and
+  `lastCompletedAt`, failed/cancelled CodeTasks mark items `failed` with
+  `lastFailureReason`, and queued approval waits remain visible on the PR item.
+  Retrying a failed PR Pool item moves the active `codeTaskId` into
+  `previousCodeTaskId`, increments `retryCount`, keeps the failure context, and
+  returns the item to `ready` for a fresh develop dispatch.
+- `notify.send_channel_message` Runtime Tasks preserve dispatcher lifecycle/result semantics while queueing Gateway deliveries through the Mastra Tool `queue-channel-notification`.
+- PR Pool proposal ingest accepts a normalized `PRPoolProposal` through
+  `pr_pool.ingest_proposal`, validates required title/objective/source/origin/
+  impact/acceptance/prompt fields, and creates either a `draft` item
+  (`confirmation: required` or omitted) or a `ready` item (`confirmation:
+  confirmed`) through `ingestPrPoolProposal`. The ingest route is the shared
+  Skill/CLI/Goal entrypoint. CodeAgent must include `confirmation: confirmed`
+  when recording a user-confirmed requirement into PR Pool; generated or
+  ambiguous requirements should remain draft until reviewed. Canonical
+  item fields store impact, acceptance, test, non-goal, constraint, reference,
+  tags, and CodeAgent handoff prompt data directly; `metadata` is intentionally
+  compact and only keeps non-duplicated auxiliary fields such as confirmation,
+  origin, and idempotency key. Active PR Pool item timestamps are human-facing
+  CST strings formatted as `YYYY-MM-DD HH:mm`. The route does not confirm,
+  develop, or create a CodeAgent task. Re-ingesting the same explicit
+  `idempotencyKey` returns the existing PR item and records a deduplication
+  event.
+- PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
+  under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
+  The CodeAgent payload includes `codeAgentBriefPath`, and the context brief
+  points to that file so CodeAgent can read the PR slice objective, impact,
+  4+1 design summary, acceptance criteria, verification command, and stop
+  conditions before implementation.
+- PR Pool item contracts include verification plan, docs sync requirements,
+  test sync requirements, and workspace policy. These fields are persisted on
+  each item, rendered into PR briefs, and passed through CodeAgent handoff
+  payloads so execution has an explicit acceptance, verification, and workspace
+  boundary.
+- PR Pool archive entries include `code-agent-pr-brief.md` alongside item,
+  objective, context, 4+1 design, code-run summary, and final summary artifacts
+  so the exact implementation contract remains traceable after the active item
+  is removed.
+- Natural long-running Goal requests create `goal.create` Runtime Tasks with inferred scope/tags and `autoRun: true`; successful channel creation stores the active Goal ID in ConversationSemanticState so continuation prompts can reference it. ConversationSemanticState is keyed by channel/conversation/sender and stores bounded compressed turn summaries, inferred entities, selected capability ids, and active goal/module metadata rather than full raw prior messages.
 - `goal.run` Runtime Tasks target `goal-runtime`. The dispatcher reserves a
   run ID, executes the routed goal workflow, writes standard Goal artifacts,
   and marks the RuntimeTask succeeded only after execution completes.
 - `research-agent` and `notify-agent` target agents are referenced in the
   registry but are pending implementation; their handlers exist in the
   dispatcher.
-- `pr-pool-runtime` target is referenced for PR pool task types; handler
-  exists in the dispatcher.
+- `goal-runtime` target is referenced for Goal task types; dispatcher handles create/list/status/run/feedback via GoalService and records a Team Run result.
+- Schedule list RuntimeTask results include each schedule's `updatedAt` timestamp so channel responses can render local display time without exposing raw UTC ISO strings.
 
 ## Known Pitfalls
 

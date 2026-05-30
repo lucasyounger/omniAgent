@@ -1,17 +1,13 @@
 import { z } from 'zod';
 import { runtimeTaskTypes, defaultTargetAgentIdForTaskType, isRuntimeTaskType, type RuntimeTaskType } from './task-types';
-import type { ChannelMessage, ChannelTarget } from '../../gateway/types';
+import { createCapabilityPlan, type CapabilityPlan } from './capability-planner';
+import { routeDeterministicCapability, routeLightweightCapability, type RouterResult } from './capabilities';
+import type { RouterTrace } from './decision-trace';
+import type { ChannelMessage, ChannelTarget, RouteCapabilitySelection, UnifiedRequest } from '../../gateway/types';
+import { toUnifiedRequest } from '../../gateway/types';
+import { formatCstTime } from '../../lib/time';
 
-const orchestratorTaskTypes = [
-  runtimeTaskTypes.scheduleCreate,
-  runtimeTaskTypes.scheduleList,
-  runtimeTaskTypes.scheduleDelete,
-  runtimeTaskTypes.schedulePause,
-  runtimeTaskTypes.scheduleResume,
-  runtimeTaskTypes.scheduleRunNow,
-  runtimeTaskTypes.researchAiDailyDigest,
-  runtimeTaskTypes.notifySendChannelMessage,
-] as const;
+const orchestratorTaskTypes = Object.values(runtimeTaskTypes) as [RuntimeTaskType, ...RuntimeTaskType[]];
 
 const channelTargetSchema = z.object({
   channel: z.string().min(1),
@@ -22,24 +18,17 @@ const channelTargetSchema = z.object({
 });
 
 export const orchestratorModelSchema = z.object({
-  intent: z.enum([
-    'schedule.create',
-    'schedule.list',
-    'schedule.delete',
-    'schedule.pause',
-    'schedule.resume',
-    'schedule.run_now',
-    'research.ai_daily_digest',
-    'notify.send_channel_message',
-    'status.query',
-    'unknown',
-  ]),
+  intent: z.string().min(1),
   confidence: z.number().min(0).max(1),
   taskType: z.enum(orchestratorTaskTypes).optional(),
   targetAgentId: z.string().min(1).optional(),
   objective: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
   notifyTarget: channelTargetSchema.optional(),
+  requiredCapabilities: z.array(z.string().min(1)).optional(),
+  executionMode: z.enum(['single_step', 'composite', 'long_running_goal', 'passthrough']).optional(),
+  shouldCreateGoal: z.boolean().optional(),
+  shouldPersistMemory: z.boolean().optional(),
   clarifyingQuestion: z.string().min(1).optional(),
   reason: z.string().optional(),
 });
@@ -58,6 +47,18 @@ export type OrchestratorDecision =
       source: Record<string, unknown>;
     }
   | {
+      kind: 'capability_plan';
+      confidence: number;
+      requiredCapabilities: string[];
+      executionMode: 'composite' | 'long_running_goal' | 'passthrough';
+      shouldCreateGoal: boolean;
+      shouldPersistMemory: boolean;
+      objective: string;
+      reason: string;
+      source: Record<string, unknown>;
+      plan?: CapabilityPlan;
+    }
+  | {
       kind: 'status';
       confidence: number;
       message: string;
@@ -74,6 +75,51 @@ export type OrchestratorDecision =
       reason: string;
     };
 
+export type RuntimeCapabilityRoutingResult = {
+  request: UnifiedRequest;
+  deterministic: RouterResult;
+  lightweight: RouterResult;
+  candidates: RouteCapabilitySelection[];
+  previous: RouterResult;
+  routeTrace: RouterTrace[];
+};
+
+export function routeRuntimeCapabilities(
+  messageOrRequest: ChannelMessage | UnifiedRequest,
+  previousReason = 'No deterministic runtime intent matched.',
+): RuntimeCapabilityRoutingResult {
+  const request = isUnifiedRequest(messageOrRequest) ? messageOrRequest : toUnifiedRequest(messageOrRequest);
+  const deterministic = routeDeterministicCapability(request);
+  const lightweight = routeLightweightCapability(request, 5);
+  const candidates = mergeCapabilitySelections(deterministic.capabilities, lightweight.capabilities);
+  return {
+    request,
+    deterministic,
+    lightweight,
+    candidates,
+    previous: {
+      capabilities: candidates,
+      confidence: candidates[0]?.score ?? 0,
+      source: 'lightweight',
+      reason: previousReason,
+    },
+    routeTrace: [
+      {
+        layer: 'deterministic',
+        candidates: deterministic.capabilities,
+        confidence: deterministic.confidence,
+        reason: deterministic.reason,
+      },
+      {
+        layer: 'lightweight',
+        candidates: lightweight.capabilities,
+        confidence: lightweight.confidence,
+        reason: lightweight.reason,
+      },
+    ],
+  };
+}
+
 export function orchestrateChannelMessage(message: ChannelMessage): OrchestratorDecision {
   const text = message.text.trim();
   const notifyTarget = targetFromMessage(message);
@@ -85,6 +131,26 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
       confidence: 0.94,
       message: 'Omni Gateway 在线。可以创建定时任务、AI 日报任务，或使用 /task <workspace> :: <objective> 创建异步代码任务。',
     };
+  }
+
+  const req = parseReqIntent(text);
+  if (req) {
+    return {
+      kind: 'runtime_task',
+      confidence: req.confidence,
+      taskType: req.taskType,
+      targetAgentId: defaultTargetAgentIdForTaskType(req.taskType) || 'req-runtime',
+      objective: req.objective,
+      notifyTarget,
+      source,
+      payload: req.payload,
+    };
+  }
+
+  const goal = parseGoalIntent(text, source);
+  if (goal) {
+    if ('kind' in goal) return goal;
+    return goalIntentToRuntimeDecision(goal, message, notifyTarget, source);
   }
 
   const scheduleMaintenance = parseScheduleMaintenance(text);
@@ -190,6 +256,15 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
     };
   }
 
+  const capabilityRouting = routeRuntimeCapabilities({
+    source: message.channel,
+    userId: message.senderId,
+    sessionId: [message.channel, message.accountId, message.conversationId, message.senderId].join(':'),
+    content: message.text,
+    metadata: channelSourceFromMessage(message),
+  });
+  const candidateCapabilities = capabilityRouting.candidates;
+
   if (looksLikeScheduleRequest(text)) {
     return {
       kind: 'clarify',
@@ -202,7 +277,9 @@ export function orchestrateChannelMessage(message: ChannelMessage): Orchestrator
   return {
     kind: 'passthrough',
     confidence: 0.2,
-    reason: 'No deterministic runtime intent matched.',
+    reason: candidateCapabilities.length
+      ? `No deterministic runtime intent matched. Candidate capabilities: ${candidateCapabilities.map(match => `${match.capabilityId}:${match.score}`).join(', ')}`
+      : 'No deterministic runtime intent matched.',
   };
 }
 
@@ -215,11 +292,89 @@ export function parseOrchestratorModelOutput(raw: string): OrchestratorModelOutp
     throw new Error(`Unsupported taskType from orchestrator model: ${output.taskType}`);
   }
 
-  if (output.intent === 'unknown' && !output.clarifyingQuestion) {
+  if (output.intent === 'unknown' && !output.clarifyingQuestion && !output.requiredCapabilities?.length) {
     throw new Error('Low-confidence orchestrator output must include clarifyingQuestion.');
   }
 
   return output;
+}
+
+export function orchestratorModelOutputToDecision(output: OrchestratorModelOutput, message: ChannelMessage): OrchestratorDecision {
+  if (output.intent === 'status.query') {
+    return {
+      kind: 'status',
+      confidence: output.confidence,
+      message: output.reason || 'Omni Gateway 在线。',
+    };
+  }
+
+  if (output.intent === 'unknown' || output.clarifyingQuestion) {
+    return {
+      kind: 'clarify',
+      confidence: output.confidence,
+      question: output.clarifyingQuestion || '我需要更多信息才能继续。',
+      reason: output.reason || 'LLM orchestrator requested clarification.',
+    };
+  }
+
+  if (output.requiredCapabilities?.length) {
+    const requiredCapabilities = Array.from(new Set(output.requiredCapabilities));
+    const objective = output.objective || message.text.trim().slice(0, 120);
+    return {
+      kind: 'capability_plan',
+      confidence: output.confidence,
+      requiredCapabilities,
+      executionMode: output.executionMode === 'long_running_goal' ? 'long_running_goal' : output.executionMode === 'passthrough' ? 'passthrough' : 'composite',
+      shouldCreateGoal: output.shouldCreateGoal ?? output.executionMode === 'long_running_goal',
+      shouldPersistMemory: output.shouldPersistMemory ?? false,
+      objective,
+      reason: output.reason || 'LLM orchestrator returned a multi-capability plan.',
+      source: channelSourceFromMessage(message),
+      plan: createCapabilityPlan({ goal: objective, capabilities: requiredCapabilities, params: output.payload }),
+    };
+  }
+
+  if (!output.taskType) {
+    return {
+      kind: 'passthrough',
+      confidence: output.confidence,
+      reason: output.reason || 'LLM orchestrator did not return a runtime task type.',
+    };
+  }
+
+  const notifyTarget = output.notifyTarget || targetFromMessage(message);
+  const source = channelSourceFromMessage(message);
+
+  if (output.taskType === runtimeTaskTypes.scheduleCreate && !isValidScheduleCreateOutput(output, message)) {
+    const goal = parseGoalIntent(message.text.trim(), source);
+    if (goal && !('kind' in goal)) {
+      return goalIntentToRuntimeDecision(goal, message, notifyTarget, source);
+    }
+
+    return {
+      kind: 'clarify',
+      confidence: Math.min(output.confidence, 0.6),
+      question: '你是想创建长期 Goal，还是创建定时任务？如需创建 Goal，请回复：创建目标：<目标内容>；如需定时任务，请补充明确时间。',
+      reason: 'LLM returned schedule.create without explicit schedule evidence.',
+    };
+  }
+
+  return {
+    kind: 'runtime_task',
+    confidence: output.confidence,
+    taskType: output.taskType,
+    targetAgentId: output.targetAgentId || defaultTargetAgentIdForTaskType(output.taskType) || 'omni-router-agent',
+    objective: output.objective || message.text.trim().slice(0, 120),
+    notifyTarget,
+    source,
+    payload: {
+      ...(output.payload || {}),
+      notifyTarget,
+      source,
+      actorId: message.senderId,
+      channelId: `${message.channel}:${message.conversationId}`,
+    },
+  };
 }
 
 export function targetFromMessage(message: ChannelMessage): ChannelTarget {
@@ -244,12 +399,246 @@ export function channelSourceFromMessage(message: ChannelMessage) {
   };
 }
 
+function isUnifiedRequest(value: ChannelMessage | UnifiedRequest): value is UnifiedRequest {
+  return 'source' in value && 'userId' in value && 'sessionId' in value && 'content' in value;
+}
+
+function mergeCapabilitySelections(
+  first: Array<{ capabilityId: string; score: number; reason?: string }>,
+  second: Array<{ capabilityId: string; score: number; reason?: string }>,
+) {
+  return [...first, ...second]
+    .reduce<Array<{ capabilityId: string; score: number; reason?: string }>>((items, selection) => {
+      const existing = items.find(item => item.capabilityId === selection.capabilityId);
+      if (!existing) return [...items, selection];
+      if (selection.score > existing.score) Object.assign(existing, selection);
+      return items;
+    }, [])
+    .sort((left, right) => right.score - left.score || left.capabilityId.localeCompare(right.capabilityId));
+}
+
+function goalIntentToRuntimeDecision(
+  goal: Exclude<ReturnType<typeof parseGoalIntent>, Extract<OrchestratorDecision, { kind: 'clarify' }> | undefined>,
+  message: ChannelMessage,
+  notifyTarget: ChannelTarget,
+  source: Record<string, unknown>,
+): Extract<OrchestratorDecision, { kind: 'runtime_task' }> {
+  return {
+    kind: 'runtime_task',
+    confidence: goal.confidence,
+    taskType: goal.taskType,
+    targetAgentId: defaultTargetAgentIdForTaskType(goal.taskType) || 'goal-runtime',
+    objective: goal.objective,
+    notifyTarget,
+    source,
+    payload: {
+      ...goal.payload,
+      notifyTarget,
+      source,
+      actorId: message.senderId,
+      channelId: `${message.channel}:${message.conversationId}`,
+      idempotencyKey: goal.taskType === runtimeTaskTypes.goalCreate ? `goal:${message.messageId}` : undefined,
+    },
+  };
+}
+
+function isValidScheduleCreateOutput(output: OrchestratorModelOutput, message: ChannelMessage) {
+  const schedule = typeof output.payload?.schedule === 'string' ? output.payload.schedule.trim() : '';
+  return Boolean(schedule && (looksLikeScheduleRequest(message.text) || parseSchedule(message.text, message.receivedAt)));
+}
+
+function parseGoalIntent(text: string, source: Record<string, unknown>):
+  | {
+      taskType:
+        | typeof runtimeTaskTypes.goalCreate
+        | typeof runtimeTaskTypes.goalList
+        | typeof runtimeTaskTypes.goalStatus
+        | typeof runtimeTaskTypes.goalRun
+        | typeof runtimeTaskTypes.goalFeedback;
+      confidence: number;
+      objective: string;
+      payload: Record<string, unknown>;
+    }
+  | Extract<OrchestratorDecision, { kind: 'clarify' }>
+  | undefined {
+  const longRunningGoal = text.match(/^(?:我想|我要|帮我|请帮我)?(?:长期|持续|逐步|分阶段|接下来长期)(?:优化|改进|研究|推进|跟进|维护)\s*(.+)$/);
+  if (longRunningGoal) {
+    const objective = cleanText(longRunningGoal[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.88,
+      objective: `Create long-running goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: cleanGoalTitle(objective),
+        objective,
+        type: inferGoalType(objective),
+        scope: inferGoalScope(objective),
+        tags: inferGoalScope(objective),
+        autoRun: true,
+      },
+    };
+  }
+
+  const create = text.match(/^(?:创建一个?目标|创建目标|新建目标|帮我创建目标)[:：]?\s*(.+)$/);
+  if (create) {
+    const objective = cleanText(create[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.9,
+      objective: `Create goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: objective.slice(0, 80),
+        objective,
+        type: inferGoalType(objective),
+      },
+    };
+  }
+
+  const goalLikeCreate = text.match(/^(?:我想|我要|帮我|请帮我)?(?:定个|定一个|创建|新建|建立|设一个)?(?:长期目标|持续目标|长期任务|长期计划|目标)[:：]?\s*(.+)$/);
+  if (goalLikeCreate && !looksLikeScheduleRequest(text)) {
+    const objective = cleanText(goalLikeCreate[1]);
+    return {
+      taskType: runtimeTaskTypes.goalCreate,
+      confidence: 0.86,
+      objective: `Create goal: ${objective.slice(0, 40)}`,
+      payload: {
+        title: cleanGoalTitle(objective),
+        objective,
+        type: inferGoalType(objective),
+        scope: inferGoalScope(objective),
+        tags: inferGoalScope(objective),
+        autoRun: /(?:长期|持续|逐步|分阶段|接下来长期)/.test(text) || undefined,
+      },
+    };
+  }
+
+  if (/^(确认创建|确认创建目标|确定创建)$/.test(text)) {
+    return {
+      kind: 'clarify',
+      confidence: 0.62,
+      question: '请把要创建的目标内容一起发来，例如：创建目标：研究 AI Agent 长期记忆。',
+      reason: 'No durable pending confirmation store is available for this message.',
+    };
+  }
+
+  const ambiguous = text.match(/^(?:帮我分析|分析一下|研究一下)\s*(.+)$/);
+  if (ambiguous && !/^(?:一下|这个|它|上面那个|刚才|之前|前面|this one|that one|it)$/i.test(cleanText(ambiguous[1]))) {
+    const objective = cleanText(ambiguous[1]);
+    return {
+      kind: 'clarify',
+      confidence: 0.66,
+      question: `要把“${objective}”创建为长期 Goal 吗？如需创建，请回复：创建目标：${objective}`,
+      reason: 'Analysis-like goal request requires explicit creation confirmation.',
+    };
+  }
+
+  if (/^(?:列出|查看|查询).*目标/.test(text)) {
+    return { taskType: runtimeTaskTypes.goalList, confidence: 0.84, objective: 'List goals', payload: {} };
+  }
+
+  const status = text.match(/^(?:目标状态|查看目标|查询目标)\s+(.+)$/);
+  if (status) {
+    return { taskType: runtimeTaskTypes.goalStatus, confidence: 0.84, objective: 'Get goal status', payload: { goalId: cleanText(status[1]) } };
+  }
+
+  const run = text.match(/^(?:运行目标|执行目标|启动目标)\s+(.+)$/);
+  if (run) {
+    return { taskType: runtimeTaskTypes.goalRun, confidence: 0.84, objective: 'Run goal', payload: { goalId: cleanText(run[1]) } };
+  }
+
+  const feedback = text.match(/^(?:反馈目标|给目标反馈)\s+(\S+)\s+(.+)$/);
+  if (feedback) {
+    return {
+      taskType: runtimeTaskTypes.goalFeedback,
+      confidence: 0.84,
+      objective: 'Apply goal feedback',
+      payload: { goalId: feedback[1], text: cleanText(feedback[2]), channel: source.channel === 'qq' ? 'qq' : 'web' },
+    };
+  }
+
+  return undefined;
+}
+
+function inferGoalType(raw: string) {
+  if (/(module|模块|改进|重构)/i.test(raw)) return 'module_improvement';
+  if (/(assistant|助理|提醒|个人)/i.test(raw)) return 'personal_assistant';
+  if (/(workflow|自动化|流程)/i.test(raw)) return 'workflow_automation';
+  return 'topic_research';
+}
+
+function inferGoalScope(raw: string): string[] {
+  const matches = raw.toLowerCase().matchAll(/\b[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\b/g);
+  return Array.from(new Set(Array.from(matches, match => match[0]).filter(token => !isGoalScopeStopWord(token)))).slice(0, 6);
+}
+
+function cleanGoalTitle(raw: string): string {
+  return raw
+    .replace(/^(?:优化|改进|研究|推进|跟进|维护)\s*/, '')
+    .replace(/[\u4e00-\u9fff]+/g, '')
+    .trim()
+    .slice(0, 80) || raw.replace(/[\u4e00-\u9fff]+/g, '').trim().slice(0, 80) || raw.slice(0, 80);
+}
+
+function isGoalScopeStopWord(value: string): boolean {
+  return new Set(['the', 'and', 'for', 'with', 'this', 'that', 'module', 'repo', 'runtime']).has(value);
+}
+function parseReqIntent(text: string):
+  | {
+      taskType:
+        | typeof runtimeTaskTypes.reqList
+        | typeof runtimeTaskTypes.reqStatus
+        | typeof runtimeTaskTypes.reqConfirmDocument
+        | typeof runtimeTaskTypes.reqRejectDocument
+        | typeof runtimeTaskTypes.reqConfirmItem
+        | typeof runtimeTaskTypes.reqRejectItem
+        | typeof runtimeTaskTypes.reqImport;
+      confidence: number;
+      objective: string;
+      payload: Record<string, unknown>;
+    }
+  | undefined {
+  if (/^\/req\s+list$/i.test(text) || /查看待确认需求/.test(text)) {
+    return { taskType: runtimeTaskTypes.reqList, confidence: 0.9, objective: 'List req documents', payload: /待确认/.test(text) ? { status: 'pending_user_confirmation' } : {} };
+  }
+
+  const status = text.match(/^\/req\s+status\s+(REQ-\d{8}-\d{3})$/i);
+  if (status) return { taskType: runtimeTaskTypes.reqStatus, confidence: 0.9, objective: 'Get req status', payload: { reqId: status[1] } };
+
+  const confirm = text.match(/^(?:\/req\s+confirm|确认需求)\s+(REQ-\d{8}-\d{3})/i);
+  if (confirm) return { taskType: runtimeTaskTypes.reqConfirmDocument, confidence: 0.9, objective: 'Confirm req document', payload: { reqId: confirm[1] } };
+
+  const reject = text.match(/^(?:\/req\s+reject|拒绝需求)\s+(REQ-\d{8}-\d{3})\s*(?:因为|because)?\s*(.*)$/i);
+  if (reject) return { taskType: runtimeTaskTypes.reqRejectDocument, confidence: 0.88, objective: 'Reject req document', payload: { reqId: reject[1], reason: cleanText(reject[2]) || 'Rejected by user.' } };
+
+  const confirmItem = text.match(/^(?:\/req\s+confirm-item\s+|确认\s*)(REQ-\d{8}-\d{3})(?:\s+里的|\s+)?\s*(R\d+)/i);
+  if (confirmItem) return { taskType: runtimeTaskTypes.reqConfirmItem, confidence: 0.88, objective: 'Confirm req item', payload: { reqId: confirmItem[1], itemId: confirmItem[2] } };
+
+  const rejectItem = text.match(/^(?:\/req\s+reject-item\s+|拒绝\s*)(REQ-\d{8}-\d{3})(?:\s+里的|\s+)?\s*(R\d+)\s*(?:因为|because)?\s*(.*)$/i);
+  if (rejectItem) return { taskType: runtimeTaskTypes.reqRejectItem, confidence: 0.86, objective: 'Reject req item', payload: { reqId: rejectItem[1], itemId: rejectItem[2], reason: cleanText(rejectItem[3]) || 'Rejected by user.' } };
+
+  const importReq = text.match(/^\/req\s+import\s+([\s\S]+)$/i);
+  if (importReq || /把这份.*(?:claudecode|opencode).*需求文档导入需求库|确认并归档这份需求/.test(text)) {
+    return {
+      taskType: runtimeTaskTypes.reqImport,
+      confidence: 0.82,
+      objective: 'Import req markdown',
+      payload: {
+        markdown: importReq ? importReq[1] : text,
+        sourceType: /opencode/i.test(text) ? 'opencode_conversation' : /claudecode/i.test(text) ? 'claudecode_conversation' : 'manual_import',
+        confirmAndArchive: /确认并归档/.test(text),
+      },
+    };
+  }
+
+  return undefined;
+}
+
 function parseSchedule(text: string, receivedAt: string): { value: string; kind: 'once' | 'daily' } | undefined {
   const daily = text.match(/(?:每天|每日|天天|daily|every day).*?(\d{1,2})\s*(?:点|:|：)\s*(\d{1,2})?\s*(?:分)?/i);
   if (daily) {
     return {
       kind: 'daily',
-      value: `daily ${formatTime(Number(daily[1]), Number(daily[2] || 0))}`,
+      value: `daily ${formatCstTime(Number(daily[1]), Number(daily[2] || 0))}`,
     };
   }
 
@@ -333,7 +722,7 @@ function parseScheduleMaintenance(text: string):
       payload: Record<string, unknown>;
     }
   | undefined {
-  if (/(列出|查看|查询|list|show).*(定时任务|计划任务|schedule|cron)/i.test(text)) {
+  if (/(列出|查看|查询|有哪些|有什么|多少|list|show).*(定时任务|计划任务|schedule|cron)/i.test(text)) {
     return {
       taskType: runtimeTaskTypes.scheduleList,
       confidence: 0.9,
@@ -457,11 +846,7 @@ function formatLocalSchedule(date: Date, hours: number, minutes: number) {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${formatTime(hours, minutes)}`;
-}
-
-function formatTime(hours: number, minutes: number) {
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `${yyyy}-${mm}-${dd} ${formatCstTime(hours, minutes)}`;
 }
 
 function cleanText(text: string) {

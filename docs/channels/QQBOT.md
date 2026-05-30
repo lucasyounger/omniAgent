@@ -7,7 +7,9 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 ## Responsibilities
 
 - Connect to QQ Bot websocket events. Webhook support is not implemented yet and is a future adapter option.
-- Normalize QQ events into `ChannelMessage`.
+- Normalize QQ events into `ChannelMessage`; Channel protocol v2 converters can map
+  the same data into inbound envelopes with bot identity, conversation, sender
+  actor, raw event metadata, and text when the adapter is migrated.
 - Send outgoing `OutboundMessage` replies through QQ Bot APIs.
 - Keep credentials outside docs and git.
 - Respect group mention-only behavior and allowlists.
@@ -20,14 +22,21 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 - `GROUP_AT_MESSAGE_CREATE` is normalized as a `group` channel message.
   - Use `group_openid` as `conversationId`.
   - Strip the bot mention from inbound text before routing.
-- Immediate replies from `handleChannelMessage` are sent through
-  `sendOutbound`.
+- Immediate replies from the shared `processRequest(UnifiedRequest, config, context)` gateway pipeline are sent through
+  `sendOutbound`. The adapter still normalizes QQ events to `ChannelMessage`, then
+  converts them to `UnifiedRequest` at the Gateway boundary so QQBot, HTTP, and
+  OneBot follow the same command/capability/legacy routing path. Outbound protocol
+  v2 envelopes model the same QQ target as channel/account identity plus a
+  conversation and optional recipient actor, but `sendOutbound` continues to accept
+  the existing `OutboundMessage` contract until the later adapter-registry slice.
 - Deferred replies and scheduled channel messages flow through Team Runtime
   inbox messages addressed to `channel-gateway`, then the delivery worker sends
   them to QQ Bot.
-- Gateway exposes `GET /qqbot/status` for local diagnostics. The status output
-  intentionally reports only safe fields such as configured state, websocket
-  state, token presence, session activity, reconnect attempts, and timestamps.
+- Gateway exposes `GET /qqbot/status` for local diagnostics. The same safe status
+  data is also represented in `GET /adapters/status` under adapter id `qqbot`,
+  alongside HTTP, OneBot, Feishu, CLI, and Desktop registry entries. The registry
+  starts QQBot when credentials are configured but leaves the HTTP server lifecycle
+  on the existing gateway startup path.
 
 ## Sending
 

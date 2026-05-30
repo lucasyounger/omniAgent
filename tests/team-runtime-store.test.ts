@@ -24,6 +24,21 @@ afterEach(async () => {
 });
 
 describe('Team Runtime store', () => {
+  it('exposes LibSQL runtime storage metadata while keeping Team Runtime file-backed', async () => {
+    const store = await loadStore();
+    const { runtimeStorageBackend } = await import('../src/mastra/runtime/storage-backend');
+
+    expect(runtimeStorageBackend).toMatchObject({
+      kind: 'libsql',
+      id: 'omni-storage',
+      legacyFileRoots: expect.arrayContaining(['runs', 'memory', 'reqs', 'pr-pool', 'gateway']),
+    });
+    expect(store.teamRuntimeStoreBackend).toMatchObject({
+      kind: 'file',
+      root: expect.stringContaining(path.join('.omni', 'runs', 'team')),
+    });
+  });
+
   it('creates, starts, completes, writes result, and notifies inbox', async () => {
     const store = await loadStore();
     const task = await store.createTeamTask({

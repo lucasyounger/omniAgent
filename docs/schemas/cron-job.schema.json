@@ -6,9 +6,15 @@
   "properties": {
     "id": { "type": "string" },
     "name": { "type": "string" },
-    "schedule": { "type": "string" },
+    "schedule": {
+      "type": "string",
+      "description": "Execution schedule. User-entered one-time and daily schedules are interpreted as CST (UTC+8) at creation and stored in UTC as YYYY-MM-DD HH:mm or daily HH:mm; cron expressions are stored unchanged."
+    },
     "task": { "type": "string" },
-    "taskType": { "type": "string" },
+    "taskType": {
+      "type": "string",
+      "description": "Runtime task type created by the schedule. Code schedules default to code.task; legacy code.claude_code_task records remain accepted."
+    },
     "targetAgent": { "type": "string" },
     "targetAgentId": { "type": "string" },
     "workspacePath": { "type": "string" },
@@ -18,6 +24,7 @@
     },
     "notifyTarget": {
       "type": "object",
+      "description": "Optional channel notification target copied onto scheduled RuntimeTasks and used for schedule failure notifications.",
       "required": ["channel", "accountId", "conversationId", "messageType"],
       "properties": {
         "channel": { "type": "string" },
@@ -40,6 +47,16 @@
       "type": "string",
       "enum": ["dispatched", "waiting_user_confirm", "skipped", "failed"]
     },
-    "lastDispatchError": { "type": "string" }
+    "lastDispatchError": { "type": "string" },
+    "goalDailyScan": {
+      "type": "object",
+      "description": "Optional goal.cron_scan payload shape used by the daily Goal scan helper.",
+      "properties": {
+        "goalType": { "type": "string" },
+        "action": { "type": "string" },
+        "timezone": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
   }
 }

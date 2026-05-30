@@ -1,18 +1,22 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { listCodeTasks } from '../../lib/code-task-store';
 import { listEvalRuns } from '../eval-harness';
 import { goalsRoot, readGoal } from '../goal';
 import type { Goal, GoalRun } from '../goal';
 import { listRuntimeTaskRecords } from '../runtime-task-store';
+import { prPoolRuntime } from '../pr-pool/pr-pool-runtime';
 import type { RuntimeDashboardData, ReadRuntimeDashboardInput, RuntimeDashboardStatusCount } from './runtime-dashboard.schema';
 
 export async function readRuntimeDashboardData(input: ReadRuntimeDashboardInput = {}): Promise<RuntimeDashboardData> {
   const limit = input.limit ?? 10;
-  const [tasks, goals, goalRuns, evalRuns] = await Promise.all([
+  const [tasks, goals, goalRuns, evalRuns, prItems, codeTasks] = await Promise.all([
     listRuntimeTaskRecords(),
     listGoals(),
     listGoalRuns(),
     listEvalRuns(),
+    prPoolRuntime.list(),
+    listCodeTasks(),
   ]);
 
   return {
@@ -36,6 +40,22 @@ export async function readRuntimeDashboardData(input: ReadRuntimeDashboardInput 
       total: evalRuns.length,
       latest: evalRuns[0],
       recent: evalRuns.slice(0, limit),
+    },
+    prPool: {
+      total: prItems.length,
+      byStatus: countByStatus(prItems),
+      recent: sortRecent(prItems).slice(0, limit),
+      activeDevelopment: sortRecent(prItems.filter(item => item.status === 'developing' || item.status === 'waiting_user_confirm')).slice(0, limit).map(item => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        source: item.source,
+        run: item.run,
+        workspace: item.workspace,
+        blocking: item.blocking,
+        codeTask: codeTasks.find(codeTask => codeTask.teamTaskId === item.run.codeTaskId || codeTask.taskId === item.run.codeTaskId),
+      })),
     },
   };
 }

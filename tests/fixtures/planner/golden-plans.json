@@ -1,0 +1,30 @@
+[
+  {
+    "name": "composite_goal_memory_pr",
+    "messageId": "fixture-msg-1",
+    "message": "长期优化 memory 模块并生成 PR",
+    "decision": {
+      "kind": "capability_plan",
+      "confidence": 0.82,
+      "requiredCapabilities": ["goal.create", "knowledge.memory_index", "pr_pool.create"],
+      "executionMode": "long_running_goal",
+      "shouldCreateGoal": true,
+      "shouldPersistMemory": true,
+      "objective": "Long-running memory improvement",
+      "reason": "Needs durable tracking and PR planning",
+      "source": {}
+    },
+    "expectedTrace": {
+      "mode": "long_running_goal",
+      "stepCount": 3,
+      "capabilities": ["goal.create", "knowledge.memory_index", "pr_pool.create"],
+      "dependencyCount": 2
+    }
+  },
+  {
+    "name": "retrieved_repo_pr_plan",
+    "messageId": "fixture-msg-2",
+    "message": "研究 repo 并生成 PR 改进方案",
+    "expectedIncludes": ["pr_pool.create"]
+  }
+]

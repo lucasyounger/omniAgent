@@ -43,6 +43,17 @@ export async function updateGoalStatus(goalId: string, status: Goal['status']): 
   return updated;
 }
 
+export async function updateGoal(goalId: string, patch: Partial<Omit<Goal, 'id' | 'createdAt'>>): Promise<Goal> {
+  const workspace = await ensureGoalWorkspace(goalId);
+  const goal = await readGoal(goalId);
+  if (!goal) throw new Error(`Goal not found: ${goalId}`);
+
+  const updated = { ...goal, ...patch, updatedAt: new Date().toISOString() };
+  await fs.writeFile(workspace.goalPath, `${JSON.stringify(updated, null, 2)}\n`, 'utf8');
+  await appendGoalEvent(goalId, 'goal.updated', { patch });
+  return updated;
+}
+
 export async function appendGoalEvent(goalId: string, type: string, payload: unknown): Promise<void> {
   const workspace = await ensureGoalWorkspace(goalId);
   const event = {

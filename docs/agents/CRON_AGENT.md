@@ -15,14 +15,24 @@ TaskRuntime.
 ## Key Behavior
 
 - Stores cron jobs in `~/.omni/runs/cron-runs/jobs.json`.
-- Starts an in-process scheduler on Mastra startup.
-- Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms.
+- Starts an in-process scheduler on Mastra startup by default.
+- Can use Mastra Scheduler as the due-job scan driver when
+  `OMNI_CRON_SCHEDULER_DRIVER=mastra`; in that mode the legacy poller is not
+  started, and `cron-maintenance-workflow` is registered with a declarative
+  Mastra schedule.
+- Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms for the
+  legacy poller. Mastra-driver scans use `OMNI_MASTRA_CRON_SCAN_CRON` or
+  `* * * * *` plus optional `OMNI_MASTRA_CRON_SCAN_TIMEZONE`.
+- Misfire policy is skip-missed-runs: the next scan dispatches jobs that are due
+  at scan time, but does not enqueue one RuntimeTask per missed tick.
+- Duplicate-trigger protection relies on Mastra Scheduler row claiming in
+  Mastra-driver mode plus cron-store `lastRunAt` checks for due jobs.
 - Supports one-time schedules containing `YYYY-MM-DD HH:mm`.
 - Supports daily schedules containing `daily HH:mm`, `every day HH:mm`,
   `每天 HH:mm`, or `每日 HH:mm`.
 - Creates a Runtime Task when a schedule fires.
 - Invokes Task Dispatcher after creating the Runtime Task.
-- Does not directly start Claude Code or any specialist agent implementation.
+- Does not directly start code executor CLIs or any specialist agent implementation.
 - Supports `channel-gateway` scheduled messages through `taskType:
   channel.message` and payload source metadata.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
@@ -35,13 +45,16 @@ TaskRuntime.
   synchronously.
 - Records `lastDispatchStatus` and optional `lastDispatchError` for the
   immediate dispatch attempt.
-- Ordinary create/list/delete/pause/resume schedule maintenance is audited but
-  does not require Tool Gateway approval. Manual `schedule.run_now` dynamically
-  requires approval only when it would trigger direct code execution.
+- Ordinary create/list/delete/pause/resume/run-now schedule maintenance is audited
+  but does not require Tool Gateway approval. Direct code schedules rely on
+  CodeAgent's allowed-workspace boundary before the local executor starts; the
+  default code task type is `code.task`, with legacy `code.claude_code_task`
+  records still accepted.
 
 ## Tools
 
-- `create-cron-job`: create a new scheduled job record.
+- `create-schedule-task`: public schedule-creation facade; creates schedule records through `schedule.create` RuntimeTask dispatch.
+- `create-cron-job`: low-level compatibility tool for direct schedule-store writes.
 - `list-cron-jobs`: list all scheduled job records.
 - `update-cron-job-status`: update job status (active/paused).
 - `delete-cron-job`: delete a scheduled job record.

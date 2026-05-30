@@ -2,6 +2,8 @@
 
 Goal Runtime turns long-running work into durable goals with isolated workspaces.
 
+Goal feedback can explicitly carry a confirmed `PRPoolProposal`. In that path, Goal Runtime rewrites the proposal source to `goal_driven`, stamps `origin.type=goal` plus `goalId/runId`, calls PR Pool Runtime ingest, and stores the returned `prItemId` on the GoalRun for backlink tracing. This creates a draft PR item only; confirm/develop remain separate user actions.
+
 ## Goal model
 
 A goal records:
@@ -31,7 +33,13 @@ Set `OMNI_HOME` to override the `~/.omni` runtime asset root.
 
 The workspace manager rejects invalid goal IDs and rejects relative paths that escape the goal root.
 
-## Goal runs and proof of work
+## Req drafts and daily scanning
+
+`module_improvement` runs now create `req-list.md` and `reqs.json` alongside the existing repo/gap/design artifacts, then create a pending Req document in `.omni/reqs`. The Req source records the Goal ID, run ID, and artifact paths so the requirement can be confirmed before implementation.
+
+Repository research is provider-backed. `OMNI_REPO_PROVIDER=github` uses the GitHub API and requires `GITHUB_TOKEN`; `mock` remains available for tests and local dry runs. GitHub reads repository metadata and text contents only.
+
+Daily scans are opt-in: set `OMNI_GOAL_DAILY_SCAN_ENABLED=true`, optionally override `OMNI_GOAL_DAILY_SCAN_CRON` (default `0 0 * * *`) and `OMNI_GOAL_DAILY_SCAN_TIMEZONE` (default `local`). The `goal.cron_scan` task enqueues due active `module_improvement` goals and skips goals that already have a running or succeeded run that day.
 
 Each execution attempt is a GoalRun under `~/.omni/goals/{goalId}/runs/{runId}/`:
 
@@ -74,7 +82,9 @@ Use `src/mastra/runtime/goal` or the aggregate runtime export:
 - `updateGoalRunStatus(goalId, runId, status)` records status transitions.
 - `completeGoalRun(input)` marks a run succeeded, writes `proof-of-work.md`, and requires non-empty work evidence.
 - `failGoalRun(input)` marks a run failed and records the failure reason.
-- `executeGoalRun(input)` routes `goal.run` to the workflow for the persisted goal type, writes `output.json`, updates `artifacts/run-summary.md`, and writes `error.json` if execution fails.
+- `executeGoalRun(input)` routes `goal.run` to the workflow for the persisted goal type, writes `output.json`, updates `artifacts/run-summary.md`, and writes `error.json` if execution fails. If the workflow produces PR Pool drafts, `output.json` and `run-summary.md` include `prCandidates` with `/pr show`, `/pr confirm`, `/pr delete`, `/pr revise`, and `/pr confirm-all` next commands.
+- `getGoalStatus(goalId)` aggregates draft/ready PR Pool items linked by `goalId` or GoalRun `prItemIds` and returns next commands for review/develop/delete/revise.
+- `topic_research` runs that generate `wiki-diff.md` create a `knowledge.doc_update_proposal`-equivalent doc proposal in docs memory and notify the caller when a channel target is available; the workflow never writes approved wiki/docs content directly.
 - `mergeProofOfWork(base, patch)` combines proof sections without duplicates.
 
 PR-16 adds retry/reconcile helpers:
@@ -127,6 +137,16 @@ PR-20 adds executable GoalRun routing:
 - `adaptQQMessageToFeedback(message)` maps mock QQ messages into FeedbackEvent.
 - `pushGoalDigestToQQ(message)` provides a mock delivered push result.
 
-## PR-14 / PR-19 scope
+## Goal channel integration
+
+Goal Runtime now has a service boundary for channel, dispatcher, and agent-tool entry points:
+
+- `createGoalService(input)` creates goals with optional `idempotencyKey`; repeated keys return the existing goal instead of creating duplicates.
+- `listGoals({ status, type, tag })` scans `~/.omni/goals` and filters persisted goals.
+- `getGoalStatus(goalId)` returns the goal, latest run summary, and feedback count.
+- `enqueueGoalRun(goalId)` creates a pending GoalRun without blocking on workflow execution.
+- `applyGoalFeedback(input)` records raw feedback and applies pause/resume/cancel/priority changes.
+
+The Task Dispatcher supports `goal.create`, `goal.list`, `goal.status`, `goal.run`, and `goal.feedback` through a narrow `goal-handler` branch. Gateway `/goal` commands and deterministic natural-language goal intents create Runtime Tasks instead of calling storage directly. Ambiguous analysis requests ask for confirmation and do not create goals.
 
 PR-14 provides the durable Goal model, workspace creation, pause/resume state changes, and path-safety tests. PR-15 adds GoalRun state, per-run event logs, success Proof of Work, failure reasons, and resume-friendly run reads. PR-16 adds timeout interruption, failed-run retry, and artifact-aware reconcile. PR-17 adds mock-provider topic research with evidence persistence, ranking, daily digest, wiki diff, memory proposal, and Proof of Work. PR-18 adds mock module improvement with local module context, candidate repo analysis, gap analysis, 4+1 design draft, and implementation plan. PR-19 adds structured feedback events, pause/resume feedback state changes, and mock QQ push/message adapters. Real external research providers and production push channels are handled by later slices.

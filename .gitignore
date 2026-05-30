@@ -2,6 +2,7 @@ node_modules
 dist
 .mastra
 .omc
+.prs
 .local-backups/
 .env
 .env.development

@@ -13,13 +13,54 @@ through Team Runtime.
 - Official QQ Bot websocket adapter when `OMNI_QQBOT_APPID` and
   `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
-- `/task <workspacePath> :: <objective>` for async CodeAgent execution
-- Natural language first passes through the Runtime Orchestrator. Supported
-  intents create RuntimeTasks with `taskType + payload + notifyTarget`; unknown
-  general chat still forwards to OmniRouterAgent.
+- `/task <workspacePath> :: <objective>` for async `code.task` CodeAgent execution through the shared RuntimeTask facade helper after the
+  workspace passes `OMNI_ALLOWED_WORKSPACES`; execution is audited but does not
+  require a second Tool Gateway approval.
+- `/goal create/list/status/run/feedback` for durable Goal Runtime management
+  from paired or allowlisted channels. Create/run/feedback commands call Goal native
+  facades, so channel commands share Tool Gateway audit and RuntimeTask-backed
+  dispatch with Agent tool calls.
+- Adapters still emit `ChannelMessage`, but Gateway converts each message into a
+  `UnifiedRequest` with stable `source`, `userId`, `sessionId`, `content`, and
+  metadata before invoking the shared request pipeline. Channel protocol v2 is now
+  available as an additive contract in `src/gateway/types.ts`: inbound envelopes
+  separate channel/account identity, conversation metadata, sender actor metadata,
+  attachments, raw adapter payload, and message text; outbound envelopes mirror the
+  same identity/conversation/recipient model. Current adapters remain on the v1
+  runtime path and use v1/v2 converters for future migration compatibility.
+- Rule Router only handles deterministic slash commands, mention/wake control,
+  `/reset` sender-scoped semantic context clearing, and safety boundaries;
+  business natural language continues to capability routing or legacy fallback.
+- Natural language first passes through deterministic/lightweight capability routing before legacy orchestrator fallback. High-confidence capability decisions can produce executable `CapabilityPlan` steps, and Gateway dispatches those steps as RuntimeTasks instead of returning a preview-only response. Low-confidence, close-score, multi-capability, or context-dependent candidates can enter the LLM Router arbitration layer, which receives Top-K candidates, registered capability definitions, sender-scoped session summary, and compressed recent-turn history. History is only used to resolve references or continue prior objectives; missing, ambiguous, or conflicting context returns a clarification request. Invalid JSON, unregistered capability ids, LLM failure, or disabled semantic routing fall back to the prior router result and then OmniRouterAgent. The gateway logs a privacy-preserving orchestrator trace with input hash, decision metadata, per-layer route trace, candidate capabilities, and fallback reason, without storing raw channel message text in the trace. Normal replies hide the trace; HTTP `/message` exposes it only when explicitly requested with `?trace=1`, `x-omni-route-trace: 1`, or `routeTraceDebug: true`. `OMNI_ROUTER_ADMIN=1` additionally enables debug-only `/router/traces`, `/router/eval`, and capability registry endpoints for local router tuning. The LLM orchestrator can return either one executable runtime task or a capability-id plan that Gateway dispatches through RuntimeTask steps. It may only return
+  `schedule.create` when the message has explicit time or recurrence evidence and
+  the JSON includes `payload.schedule`; durable goal-like requests must route to
+  `goal.create` or a capability plan instead. Set `OMNI_GATEWAY_LLM_ORCHESTRATOR=0`
+  to disable the semantic decision pass.
+- Semantic conversation state is short-lived and sender-isolated by
+  `channel:accountId:conversationId:senderId`. It stores bounded compressed turn
+  summaries, inferred entities, selected capability ids, and active goal/module
+  metadata, not full raw prior conversation text. Referent phrases such as “帮我分析一下”
+  or “this one” require usable prior context; otherwise Gateway clarifies before
+  LLM arbitration or execution.
+- Deterministic Goal intents support explicit creation (`创建目标：...`),
+  natural long-running creation with auto-run (`我想长期优化 memory 模块`),
+  list/status/run/feedback phrases, and confirmation prompts for ambiguous
+  analysis requests before any Goal is persisted. Goal list/status replies render
+  timestamps as local `YYYY-MM-DD HH:mm` strings instead of raw UTC ISO values.
 - Structured parsing for simple channel reminders such as "today HH:mm reply
   ...", daily AI digest schedules, immediate channel notifications, natural
-  status queries, and low-confidence clarification.
+  status queries, and low-confidence clarification. Schedule times supplied by
+  channel users are interpreted as CST (UTC+8), normalized to UTC for cron
+  storage/execution, and converted back to CST in schedule-list replies.
+- PR Pool requests route through capability/tool selection and native PR Pool facades. Explicit PR commands keep compatibility, including `/pr delete <id>` through the runtime/tool facade and `/pr revise <id> <comment>` for CodeAgent revision scheduling. Natural-language execution no longer depends on a dedicated Gateway regex fast path.
+- `/status approvals` and `/inbox` provide a unified review queue for PR Pool draft/ready items, docs-memory update proposals, Tool Gateway approvals, and unread gateway inbox messages.
+- Adapter Registry exposes the current and planned channel surfaces through one
+  safe status/start/send facade. Built-ins are `http`, `onebot`, `qqbot`,
+  `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior while
+  Feishu IM, CLI, and Desktop are explicit channel-adapter placeholders until
+  their transports are implemented. Feishu docs, calendar, and approval remain
+  integration tools rather than channel transports. Registry status responses never
+  include credentials, access tokens, or raw session ids.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
 - Delivery idempotency, retry attempts, and dead-letter status
 - `notify.send_channel_message` RuntimeTasks can enqueue Delivery records
@@ -32,6 +73,9 @@ through Team Runtime.
   for NapCat-style local QQ bridges.
 - Official QQ Bot channel: websocket event adapter plus official HTTP send APIs
   when `OMNI_QQBOT_APPID` and `OMNI_QQBOT_CLIENTSECRET` are configured.
+- Feishu IM channel: reserved adapter id `feishu` for future message receive/send
+  transport. Feishu docs, calendar, and approval are integration-tool surfaces and
+  must not be modeled as chat channels.
 - Goal Runtime QQ feedback helpers: mock adapters used by Goal Runtime tests and
   MVP feedback loops; they are not a real QQ delivery channel.
 

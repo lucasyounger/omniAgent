@@ -15,7 +15,9 @@ export function bootstrapRuntimeCompatibility() {
   void markTimedOutTeamRuns();
   void dispatchPendingRuntimeTasks();
   void ensurePrPoolCronJob();
-  startCronScheduler();
+  if (process.env.OMNI_CRON_SCHEDULER_DRIVER !== 'mastra') {
+    startCronScheduler();
+  }
 
   setInterval(() => {
     void markTimedOutTeamRuns();

@@ -15,13 +15,43 @@ describe('tool policy center', () => {
     expect(center.policies.length).toBeGreaterThan(20);
     expect(center.summary).toMatchObject({
       total: center.policies.length,
-      dangerous: 5,
-      approvalRequired: 5,
+      dangerous: 4,
+      approvalRequired: 4,
     });
-    expect(getToolPolicy('start-claude-code-task')).toMatchObject({
-      risk: 'dangerous',
-      capability: 'code.execute_claude_code_task',
-      requireApproval: true,
+    expect(getToolPolicy('start-code-task')).toMatchObject({
+      risk: 'medium',
+      capability: 'code.execute_task',
+      audit: true,
+    });
+    expect(getToolPolicy('queue-channel-notification')).toMatchObject({
+      risk: 'medium',
+      capability: 'gateway_delivery.write',
+      audit: true,
+    });
+    expect(getToolPolicy('send-channel-notification')).toMatchObject({
+      risk: 'medium',
+      capability: 'notify.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-schedule-task')).toMatchObject({
+      risk: 'medium',
+      capability: 'schedule.write',
+      audit: true,
+    });
+    expect(getToolPolicy('append-knowledge-episode')).toMatchObject({
+      risk: 'safe',
+      capability: 'knowledge.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-goal')).toMatchObject({
+      risk: 'medium',
+      capability: 'goal.write',
+      audit: true,
+    });
+    expect(getToolPolicy('create-req-draft')).toMatchObject({
+      risk: 'medium',
+      capability: 'req.write',
+      audit: true,
     });
   });
 

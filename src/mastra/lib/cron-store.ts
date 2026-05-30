@@ -3,9 +3,11 @@ import path from 'node:path';
 import { Cron } from 'croner';
 import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
-import { dispatchRuntimeTask, type DispatchResult } from '../runtime/task-dispatcher';
 import { defaultTargetAgentIdForTaskType, runtimeTaskTypes } from '../runtime/task-types';
+import { queueRuntimeNotification } from '../runtime/notification-dispatch';
+import type { DispatchResult } from '../runtime/task-dispatcher';
 import type { ChannelTarget } from '../../gateway/types';
+import { nowUtc, parseCstDateTime, parseCstDailyTime, cstDailyToUtc, formatCstTime } from '../../lib/time';
 
 export type CronJobStatus = 'active' | 'paused';
 
@@ -73,11 +75,11 @@ export async function createCronJob(input: {
   notifyTarget?: ChannelTarget;
 }) {
   const jobs = await readJobs();
-  const now = new Date().toISOString();
+  const now = nowUtc();
   const job: CronJob = {
     id: `cron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: input.name,
-    schedule: input.schedule,
+    schedule: normalizeScheduleToUtc(input.schedule),
     task: input.task,
     taskType: input.taskType || inferTaskType(input.targetAgentId || input.targetAgent),
     targetAgent: input.targetAgent,
@@ -105,7 +107,7 @@ export async function updateCronJobStatus(id: string, status: CronJobStatus) {
     throw new Error(`Cron job not found: ${id}`);
   }
   job.status = status;
-  job.updatedAt = new Date().toISOString();
+  job.updatedAt = nowUtc();
   await writeJobs(jobs);
   return job;
 }
@@ -127,7 +129,7 @@ export async function runCronJobNow(id: string) {
     throw new Error(`Cron job not found: ${id}`);
   }
 
-  const now = new Date().toISOString();
+  const now = nowUtc();
   job.lastRunAt = now;
   job.updatedAt = now;
 
@@ -151,12 +153,30 @@ export async function runCronJobNow(id: string) {
   } catch (error) {
     job.lastRunStatus = 'failed';
     job.lastRunError = error instanceof Error ? error.message : String(error);
+    await notifyCronFailure(job, job.lastRunError);
     await writeJobs(jobs);
     throw error;
   }
 
   await writeJobs(jobs);
   return job;
+}
+
+export async function ensureGoalDailyScanCronJob() {
+  if (process.env.OMNI_GOAL_DAILY_SCAN_ENABLED !== 'true') return undefined;
+  const schedule = process.env.OMNI_GOAL_DAILY_SCAN_CRON || '0 0 * * *';
+  const timezone = process.env.OMNI_GOAL_DAILY_SCAN_TIMEZONE || 'local';
+  const jobs = await readJobs();
+  const existing = jobs.find(job => job.taskType === runtimeTaskTypes.goalCronScan && job.name === 'Daily Goal scan');
+  if (existing) return existing;
+  return createCronJob({
+    name: 'Daily Goal scan',
+    schedule,
+    task: 'Scan due module improvement Goals',
+    taskType: runtimeTaskTypes.goalCronScan,
+    targetAgentId: 'goal-runtime',
+    payload: { goalType: 'module_improvement', action: 'scan_due_goals', timezone },
+  });
 }
 
 export function startCronScheduler() {
@@ -210,6 +230,7 @@ export async function runDueCronJobs(now = new Date()) {
     } catch (error) {
       job.lastRunStatus = 'failed';
       job.lastRunError = error instanceof Error ? error.message : String(error);
+      await notifyCronFailure(job, job.lastRunError);
     }
   }
 
@@ -229,15 +250,14 @@ function isCronJobDue(job: CronJob, now: Date) {
 
   const scheduleTime = parseOneTimeSchedule(job.schedule);
   if (scheduleTime) {
-    return now >= scheduleTime && !job.lastRunAt;
+    return now.getTime() >= scheduleTime.getTime() && !job.lastRunAt;
   }
 
   const dailyTime = parseDailySchedule(job.schedule);
   if (dailyTime) {
-    const dueAt = new Date(now);
-    dueAt.setHours(dailyTime.hours, dailyTime.minutes, 0, 0);
+    const dueAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), dailyTime.hours, dailyTime.minutes, 0, 0));
     const lastRunAt = job.lastRunAt ? new Date(job.lastRunAt) : undefined;
-    return now >= dueAt && (!lastRunAt || lastRunAt < dueAt);
+    return now.getTime() >= dueAt.getTime() && (!lastRunAt || lastRunAt.getTime() < dueAt.getTime());
   }
 
   return false;
@@ -251,20 +271,38 @@ export function getCronJobNextRunAt(job: CronJob, now = new Date()) {
 
   const scheduleTime = parseOneTimeSchedule(job.schedule);
   if (scheduleTime && !job.lastRunAt) {
-    return scheduleTime.toISOString();
+    return formatUtcSchedule(scheduleTime);
   }
 
   const dailyTime = parseDailySchedule(job.schedule);
   if (dailyTime) {
-    const dueAt = new Date(now);
-    dueAt.setHours(dailyTime.hours, dailyTime.minutes, 0, 0);
-    if (dueAt <= now) {
-      dueAt.setDate(dueAt.getDate() + 1);
+    let dueAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), dailyTime.hours, dailyTime.minutes, 0, 0));
+    if (dueAt.getTime() <= now.getTime()) {
+      dueAt = new Date(dueAt.getTime() + 24 * 60 * 60 * 1000);
     }
-    return dueAt.toISOString();
+    return formatUtcSchedule(dueAt);
   }
 
   return undefined;
+}
+
+function normalizeScheduleToUtc(schedule: string) {
+  const once = parseCstDateTime(schedule);
+  if (once) {
+    return formatUtcSchedule(once);
+  }
+
+  const daily = parseCstDailyTime(schedule);
+  if (daily) {
+    const utc = cstDailyToUtc(daily.hours, daily.minutes);
+    return `daily ${formatCstTime(utc.hours, utc.minutes)}`;
+  }
+
+  return schedule;
+}
+
+function formatUtcSchedule(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')} ${formatCstTime(date.getUTCHours(), date.getUTCMinutes())}`;
 }
 
 function parseCronSchedule(schedule: string) {
@@ -297,7 +335,7 @@ function parseOneTimeSchedule(schedule: string) {
   }
 
   const [, year, month, day, hours, minutes] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), 0, 0);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes), 0, 0));
 }
 
 function parseDailySchedule(schedule: string) {
@@ -324,7 +362,7 @@ async function executeCronJob(job: CronJob): Promise<{
 }> {
   const taskType = job.taskType || inferTaskType(job.targetAgentId || job.targetAgent);
   const targetAgentId = job.targetAgentId || normalizeAgentId(job.targetAgent) || defaultTargetAgentIdForTaskType(taskType) || 'code-agent';
-  const payload = job.payload || buildLegacyPayload(job);
+  const payload: Record<string, unknown> = job.payload || buildLegacyPayload(job);
   const notifyTarget = job.notifyTarget || readPayloadNotifyTarget(payload);
   const runtimeTask = await taskRuntime.createTask({
     sourceAgentId: 'scheduler-runtime',
@@ -338,11 +376,26 @@ async function executeCronJob(job: CronJob): Promise<{
       taskType,
       payload,
       notifyTarget,
+      notifyOnRuntimeStatus: payload.notifyOnRuntimeStatus,
+      notifyOnTerminal: payload.notifyOnTerminal,
       source: readPayloadSource(payload),
     },
   });
 
+  const { dispatchRuntimeTask } = await import('../runtime/task-dispatcher');
   const dispatch = await dispatchRuntimeTask(runtimeTask.id);
+
+  if (payload.notifyOnScheduleFired === true) {
+    await queueRuntimeNotification({
+      event: 'schedule.fired',
+      target: notifyTarget,
+      text: [`定时任务已触发`, `Schedule: ${job.name}`, `Task: ${runtimeTask.id}`].join('\n'),
+      sourceAgentId: 'scheduler-runtime',
+      parentTaskId: runtimeTask.id,
+      relatedTaskId: runtimeTask.id,
+      entityId: job.id,
+    });
+  }
 
   return {
     taskId: runtimeTask.id,
@@ -370,7 +423,7 @@ function inferTaskType(targetAgent?: string) {
   if (agentId === 'channel-gateway') {
     return runtimeTaskTypes.channelMessage;
   }
-  return runtimeTaskTypes.codeClaudeCodeTask;
+  return runtimeTaskTypes.codeTask;
 }
 
 function normalizeAgentId(agentId?: string) {
@@ -402,6 +455,18 @@ function buildLegacyPayload(input: { task: string; workspacePath?: string; paylo
 function readPayloadSource(payload: Record<string, unknown>) {
   const source = payload.source;
   return source && typeof source === 'object' && !Array.isArray(source) ? source : undefined;
+}
+
+async function notifyCronFailure(job: CronJob, reason: string) {
+  const target = job.notifyTarget || readPayloadNotifyTarget(job.payload);
+  await queueRuntimeNotification({
+    event: 'schedule.failed',
+    target,
+    text: [`定时任务执行失败`, `Schedule: ${job.name}`, `Reason: ${reason}`].join('\n'),
+    sourceAgentId: 'scheduler-runtime',
+    entityId: job.id,
+    idempotencyKey: target ? ['schedule.failed', job.id, job.lastRunAt || job.updatedAt, target.channel, target.accountId, target.conversationId].join(':') : undefined,
+  });
 }
 
 function readPayloadNotifyTarget(payload?: Record<string, unknown>) {

@@ -1,7 +1,15 @@
+export { aiDevE2EWorkflow, runAiDevE2EWorkflow } from './ai-dev-e2e-workflow';
+export type { AiDevE2EInput, AiDevE2EOutput } from './ai-dev-e2e-workflow';
+export { cronMaintenanceWorkflow, runCronMaintenanceWorkflow } from './cron-maintenance-workflow';
+export type { CronMaintenanceInput, CronMaintenanceOutput } from './cron-maintenance-workflow';
 export { getRegistryCatalog, getRegistryEntry, listRegistryEntries, searchRegistryEntries } from '../registry';
 export type { RegistryCatalog, RegistryEntry, RegistryEntryKind } from '../registry';
+export { compositeTaskWorkflow, executeCompositePlan } from './composite-task-workflow';
+export type { CompositeTaskStepResult, CompositeTaskWorkflowResult } from './composite-task-workflow';
 export { runCodeTaskWorkflow } from './code-task-workflow';
 export { memoryMaintenanceWorkflow } from './memory-maintenance-workflow';
+export { researchDailyDigestWorkflow, runResearchDailyDigestWorkflow } from './research-daily-digest-workflow';
+export type { ResearchDailyDigestInput, ResearchDailyDigestOutput } from './research-daily-digest-workflow';
 export { taskOrchestrationWorkflow } from './task-orchestration-workflow';
 export { runModuleImprovementGoalWorkflow } from './module-improvement-goal-workflow';
 export type { ModuleImprovementGoalWorkflowInput, ModuleImprovementGoalWorkflowResult } from './module-improvement-goal-workflow';

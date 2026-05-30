@@ -1,12 +1,11 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { startClaudeCodeTask } from '../lib/code-task-store';
+import { startCodeTask } from '../lib/code-task-store';
 import { executeWithToolGateway } from '../runtime/tool-gateway';
 
-const startClaudeCodeTaskWorkflowPolicy = {
-  risk: 'dangerous',
-  capability: 'code.execute_claude_code_task',
-  requireApproval: true,
+const startCodeTaskWorkflowPolicy = {
+  risk: 'medium',
+  capability: 'code.execute_task',
   audit: true,
 } as const;
 
@@ -43,12 +42,12 @@ const codeTaskOutputSchema = z.object({
 
 const startCodeTaskStep = createStep({
   id: 'start-code-task',
-  description: 'Start a Claude Code task and persist progress events.',
+  description: 'Start a code executor task and persist progress events.',
   inputSchema: codeTaskInputSchema,
   outputSchema: codeTaskOutputSchema,
   execute: async ({ inputData }) =>
-    executeWithToolGateway('workflow.start-claude-code-task', startClaudeCodeTaskWorkflowPolicy, inputData, () =>
-      startClaudeCodeTask(inputData),
+    executeWithToolGateway('workflow.start-code-task', startCodeTaskWorkflowPolicy, inputData, () =>
+      startCodeTask(inputData),
     ),
 });
 

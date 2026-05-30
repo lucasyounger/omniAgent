@@ -10,6 +10,17 @@ vi.mock('node:child_process', () => ({
     }
     callback(null, '', '');
   }),
+  spawn: vi.fn(() => {
+    const stream = {
+      setEncoding: vi.fn(),
+      on: vi.fn(),
+    };
+    return {
+      stdout: stream,
+      stderr: stream,
+      on: vi.fn(),
+    };
+  }),
 }));
 import type { GatewayConfig } from '../src/gateway/config';
 import type { ChannelMessage } from '../src/gateway/types';
@@ -21,6 +32,13 @@ async function loadHandler() {
   process.env.OMNI_PROJECT_ROOT = tempRoot;
   process.env.OMNI_HOME = path.join(tempRoot, '.omni');
   return import('../src/gateway/message-handler');
+}
+
+async function loadGateway() {
+  vi.resetModules();
+  process.env.OMNI_PROJECT_ROOT = tempRoot;
+  process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+  return import('../src/gateway/gateway');
 }
 
 function baseConfig(): GatewayConfig {
@@ -55,11 +73,37 @@ afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
   delete process.env.OMNI_ALLOWED_WORKSPACES;
+  delete process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
 
 describe('Gateway message handler', () => {
+  it('processes UnifiedRequest through the unified gateway entrypoint', async () => {
+    const { processRequest } = await loadGateway();
+    const msg = message('/status', 'trusted');
+    const replies = await processRequest({
+      source: msg.channel,
+      userId: msg.senderId,
+      sessionId: 'http:local:conv-1:trusted',
+      content: msg.text,
+      metadata: {
+        accountId: msg.accountId,
+        conversationId: msg.conversationId,
+        senderDisplayName: msg.senderDisplayName,
+        messageId: msg.messageId,
+        messageType: msg.messageType,
+        receivedAt: msg.receivedAt,
+      },
+      attachments: [],
+    }, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    }, { message: msg });
+
+    expect(replies[0].text).toContain('Omni Gateway 在线');
+  });
+
   it('rejects unpaired senders', async () => {
     const { handleChannelMessage } = await loadHandler();
     const replies = await handleChannelMessage(message('/status'), baseConfig());
@@ -86,6 +130,32 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('/task');
   });
 
+  it('resets sender-scoped semantic context with /reset', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { updateConversationSemanticState, getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('/reset', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('已重置当前会话上下文');
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'trusted' })).resolves.toBeUndefined();
+  });
+
   it('validates task command format before execution', async () => {
     const { handleChannelMessage } = await loadHandler();
     const replies = await handleChannelMessage(message('/task missing delimiter', 'trusted'), {
@@ -95,7 +165,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u683c\u5f0f\u9519\u8bef');
   });
 
-  it('creates task commands as approval-gated RuntimeTasks', async () => {
+  it('creates task commands as directly dispatched RuntimeTasks in allowed workspaces', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { listApprovalRequests } = await import('../src/mastra/runtime/approval-store');
@@ -111,16 +181,16 @@ describe('Gateway message handler', () => {
     const task = taskId ? await taskRuntime.getTask(taskId) : undefined;
 
     expect(replyText).toContain('Runtime Task:');
-    expect(replyText).toContain('Dispatch: waiting_user_confirm');
-    expect(replyText).toContain('Tool Gateway');
+    expect(replyText).toContain('Dispatch: dispatched');
+    expect(replyText).not.toContain('Tool Gateway');
     expect(taskId).toBeDefined();
     expect(task).toMatchObject({
       sourceAgentId: 'channel-gateway',
       targetAgentId: 'code-agent',
       objective: 'change files',
-      status: 'waiting_user_confirm',
+      status: 'running',
       metadata: {
-        taskType: 'code.claude_code_task',
+        taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'change files',
@@ -128,17 +198,7 @@ describe('Gateway message handler', () => {
         },
       },
     });
-    expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({
-      toolId: 'dispatcher.start-claude-code-task',
-      capability: 'code.execute_claude_code_task',
-      status: 'pending',
-      taskId,
-      inputPreview: {
-        workspacePath: tempRoot,
-        objective: 'change files',
-      },
-    });
+    expect(requests).toHaveLength(0);
   });
   it('creates channel reminder cron jobs directly from natural language', async () => {
     const { handleChannelMessage } = await loadHandler();
@@ -175,7 +235,7 @@ describe('Gateway message handler', () => {
       },
     });
     expect(jobs[0]).toMatchObject({
-      schedule: '2026-05-12 21:08',
+      schedule: '2026-05-12 13:08',
       task: '\u4f60\u597d',
       taskType: 'channel.message',
       targetAgentId: 'channel-gateway',
@@ -207,7 +267,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toBe('已设置，状态：已启用，执行时间：daily 09:00。');
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      schedule: 'daily 09:00',
+      schedule: 'daily 01:00',
       taskType: 'research.ai_daily_digest',
       targetAgentId: 'research-agent',
       payload: {
@@ -220,6 +280,33 @@ describe('Gateway message handler', () => {
     });
   });
 
+  it('lists stored UTC schedules as CST for channel users', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { createCronJob } = await import('../src/mastra/lib/cron-store');
+    await createCronJob({
+      name: 'reply hello',
+      schedule: '2026-05-12 21:08',
+      task: '你好',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    });
+    await createCronJob({
+      name: 'daily report',
+      schedule: 'daily 09:00',
+      task: 'AI Agents daily digest',
+      taskType: 'research.ai_daily_digest',
+    });
+
+    const replies = await handleChannelMessage(message('列出我的定时任务', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('2026-05-12 13:08');
+    expect(replies[0].text).toContain('daily 09:00');
+    expect(replies[0].text).not.toContain('daily 01:00');
+  });
+
   it('asks a clarifying question for incomplete natural language schedules', async () => {
     const { handleChannelMessage } = await loadHandler();
     const replies = await handleChannelMessage(message('帮我建个定时任务', 'trusted'), {
@@ -230,7 +317,599 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u6211\u9700\u8981\u660e\u786e\u65f6\u95f4');
   });
 
+  it('routes migrated repository architecture report semantics without LLM arbitration', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('帮我分析仓库并生成架构报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, architecture_modeling, report_generation');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+  });
+
+  it('routes migrated PR report semantics without LLM arbitration', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message("Summarize this week's PRs and generate a report.", 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('Capabilities: pr_management, report_generation');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+  });
+
+  it('uses LLM capability arbitration for ambiguous multi-capability requests', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          capabilities: ['repository_analysis', 'report_generation'],
+          confidence: 0.86,
+          reason: 'Repository analysis and report are both required',
+          params: { objective: 'Analyze repository and report findings' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请检查仓库并生成报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain('You are OmniAgent LLM Capability Router');
+    expect(replies[0].text).toContain('已识别为复合能力请求');
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
+    expect(replies[0].text).toContain('Plan Steps: step-1:repository_analysis→code.task');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+  });
+
+  it('uses compressed history for referent capability arbitration', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            capabilities: ['repository_analysis', 'report_generation'],
+            confidence: 0.86,
+            reason: 'Repository analysis and report are both required',
+            params: { objective: `Analyze memory ${'sensitive raw detail '.repeat(8)}` },
+          }),
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            capabilities: ['repository_analysis'],
+            confidence: 0.82,
+            reason: 'Continue prior repository analysis',
+            params: { objective: 'Analyze memory follow-up' },
+          }),
+        }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const first = message('请检查 memory 仓库并生成报告', 'trusted');
+    first.messageId = 'msg-context-1';
+    const second = message('分析一下这个', 'trusted');
+    second.messageId = 'msg-context-2';
+
+    await handleChannelMessage(first, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await handleChannelMessage(second, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const secondPrompt = String(fetchMock.mock.calls[1][1]?.body);
+    expect(secondPrompt).toContain('History summary:');
+    expect(secondPrompt).toContain('capabilities=repository_analysis,report_generation');
+    expect(secondPrompt).toContain('Use History summary only to resolve references');
+    expect(secondPrompt).not.toContain('sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail sensitive raw detail');
+  });
+
+  it('clarifies referent capability requests without usable context before calling LLM', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('分析一下这个', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('我需要更多上下文');
+  });
+
+  it('clarifies conflicting continuation context before calling LLM', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: '{}' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { updateConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    await updateConversationSemanticState({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      inference: {
+        activeModule: 'memory',
+        recentEntities: ['memory'],
+        continuationRequest: false,
+        referentRequest: false,
+        conflictingContext: false,
+        contextConfidence: 1,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('另外 inspect eventbus', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replies[0].text).toContain('上下文里有多个可能对象');
+  });
+
+  it('merges prior capabilities into continuation capability plans', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          capabilities: ['report_generation'],
+          confidence: 0.83,
+          reason: 'Generate a follow-up report',
+          params: { objective: 'Analyze prior repository context and report findings' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { appendConversationTurnSummary } = await import('../src/gateway/conversation-semantic-state');
+    await appendConversationTurnSummary({
+      channel: 'http',
+      conversationId: 'conv-1',
+      senderId: 'trusted',
+      messageId: 'prior-msg',
+      text: 'Analyze repository',
+      entities: ['repository'],
+      capabilities: ['repository_analysis'],
+    });
+
+    const replies = await handleChannelMessage(message('分析一下这个', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toContain('Capabilities: repository_analysis, report_generation');
+    expect(replies[0].text).toContain('Execution Mode: composite');
+  });
+
+  it('falls back to legacy LLM orchestrator when capability arbitration output is invalid', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: '{"capabilities":["missing"],"confidence":0.9,"reason":"bad"}' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          text: JSON.stringify({
+            intent: 'unknown',
+            confidence: 0.4,
+            clarifyingQuestion: 'Need more detail',
+          }),
+        }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请检查仓库并生成报告', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).toBe('Need more detail');
+  });
+
+  it('routes passthrough messages through LLM orchestrator before OmniRouter fallback', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'notify.send_channel_message',
+          confidence: 0.88,
+          taskType: 'notify.send_channel_message',
+          objective: 'Send model-routed notification',
+          payload: { text: 'LLM routed hello' },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
+
+    const replies = await handleChannelMessage(message('请帮我把这句话通知给当前会话：LLM routed hello', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const tasks = await listTeamTasks();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:4111/api/agents/omni-router-agent/generate');
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain('Active goals:');
+    expect(replies[0].text).toContain('通知任务已创建');
+    expect(tasks[0]).toMatchObject({
+      sourceAgentId: 'channel-gateway',
+      targetAgentId: 'notify-agent',
+      metadata: {
+        taskType: 'notify.send_channel_message',
+        payload: {
+          text: 'LLM routed hello',
+        },
+      },
+    });
+  });
+
+  it('injects active goal and inferred continuation context into LLM orchestrator prompt', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'unknown',
+          confidence: 0.4,
+          clarifyingQuestion: 'Need more detail',
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { createGoal } = await import('../src/mastra/runtime/goal');
+    await createGoal({
+      id: 'memory-improvement',
+      type: 'module_improvement',
+      title: 'Improve memory module',
+      objective: 'Analyze and improve memory runtime behavior',
+      scope: ['memory', 'docs-memory'],
+      tags: ['memory'],
+      priority: 'high',
+    });
+
+    await handleChannelMessage(message('顺便分析 eventbus', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const { getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+    const state = await getConversationSemanticState({ channel: 'http', conversationId: 'conv-1', senderId: 'trusted' });
+    expect(state?.activeModule).toBe('eventbus');
+    expect(state?.continuationRequest).toBe(true);
+    expect(state?.recentEntities.slice(0, 4)).toEqual(['eventbus', 'improve', 'memory', 'module']);
+  });
+
+  it('persists semantic state across continuation prompts', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'unknown',
+          confidence: 0.4,
+          clarifyingQuestion: 'Need more detail',
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    await handleChannelMessage(message('先研究 memory repo', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    await handleChannelMessage(message('继续分析 tests', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const secondBody = String(fetchMock.mock.calls.at(-1)?.[1]?.body);
+    expect(secondBody).toContain('- activeModule: memory');
+    expect(secondBody).toContain('- recentEntities: memory');
+    expect(secondBody).toContain('History summary:');
+  });
+
+  it('does not create schedules from LLM-misrouted goal-like messages without time evidence', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'schedule.create',
+          confidence: 0.91,
+          taskType: 'schedule.create',
+          objective: 'Create schedule for memory improvement',
+          payload: {
+            name: 'memory improvement',
+            task: '持续优化 memory 模块',
+          },
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+    const { listCronJobs } = await import('../src/mastra/lib/cron-store');
+
+    const replies = await handleChannelMessage(message('请给我规划 memory 模块的长期推进', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const jobs = await listCronJobs();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).not.toContain('已设置');
+    expect(replies[0].text).toContain('长期 Goal');
+    expect(jobs).toHaveLength(0);
+  });
+
+  it('dispatches capability plans returned by legacy LLM decisions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: JSON.stringify({
+          intent: 'capability.plan',
+          confidence: 0.8,
+          requiredCapabilities: ['goal_management', 'knowledge_query', 'pr_management'],
+          executionMode: 'composite',
+          objective: 'Analyze memory and create PR plan',
+          shouldCreateGoal: false,
+          shouldPersistMemory: true,
+        }),
+      }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('帮我研究 memory 模块并生成 PR', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).toContain('已识别为复合能力请求');
+    expect(replies[0].text).toContain('Execution Mode: composite');
+    expect(replies[0].text).toContain('Capabilities: goal_management, knowledge_query, pr_management');
+    expect(replies[0].text).toContain('Plan Steps: step-1:goal_management→goal.create');
+    expect(replies[0].text).toContain('Dispatch Steps:');
+    expect(replies[0].text).toContain('step-1:goal_management');
+  });
+
+  it('falls back to OmniRouter when LLM orchestrator returns invalid output', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: 'not json' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: 'not json' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: 'router fallback response' }),
+      } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请处理一个模糊请求', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(replies[0].text).toBeTruthy();
+  });
+
+  it('skips LLM orchestrator when explicitly disabled', async () => {
+    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'router direct response' }),
+    } as Response);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('请走普通路由', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toBe('router direct response');
+  });
+
+  it('writes privacy-preserving orchestrator traces while routing messages', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const { handleChannelMessage } = await loadHandler();
+
+    const replies = await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const traceCall = infoSpy.mock.calls.find(call => call[0] === '[gateway] orchestrator trace');
+    expect(traceCall?.[1]).toMatchObject({
+      inputHash: expect.stringMatching(/^[a-f0-9]{16}$/),
+      routeTrace: [
+        {
+          layer: 'llm',
+          decision: 'runtime_task',
+          confidence: expect.any(Number),
+        },
+      ],
+      decision: {
+        kind: 'runtime_task',
+        confidence: expect.any(Number),
+        taskType: 'goal.create',
+      },
+    });
+    expect(JSON.stringify(traceCall?.[1])).not.toContain('我想长期优化 memory 模块');
+    expect(replies[0].text).not.toContain('Route Trace:');
+    expect(replies[0].text).not.toContain('inputHash');
+  });
+
+  it('stores recent sanitized route traces for debug inspection', async () => {
+    const { handleChannelMessage, listRecentRouteTraces } = await loadHandler();
+
+    await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    const traces = listRecentRouteTraces();
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({
+      inputHash: expect.stringMatching(/^[a-f0-9]{16}$/),
+      decision: {
+        kind: 'runtime_task',
+        taskType: 'goal.create',
+      },
+    });
+    expect(JSON.stringify(traces[0])).not.toContain('我想长期优化 memory 模块');
+  });
+
+  it('keeps only the most recent sanitized route traces', async () => {
+    const { listRecentRouteTraces, recordRouteTrace } = await loadHandler();
+
+    for (let index = 0; index < 51; index += 1) {
+      recordRouteTrace({
+        inputHash: index.toString(16).padStart(16, '0'),
+        routeTrace: [{ layer: 'legacy', decision: 'passthrough', confidence: 0.2 }],
+        retrievedCapabilities: [],
+        decision: { kind: 'passthrough', confidence: 0.2 },
+      });
+    }
+
+    const traces = listRecentRouteTraces();
+    expect(traces).toHaveLength(50);
+    expect(traces[0].inputHash).toBe('0000000000000001');
+    expect(traces.at(-1)?.inputHash).toBe('0000000000000032');
+  });
+
+  it('returns route trace only when debug metadata is enabled', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const debugMessage = {
+      ...message('我想长期优化 memory 模块', 'trusted'),
+      routeTraceDebug: true,
+    };
+
+    const replies = await handleChannelMessage(debugMessage, {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+
+    expect(replies[0].text).toContain('Route Trace:');
+    expect(replies[0].text).toContain('"inputHash"');
+    expect(replies[0].text).toContain('"routeTrace"');
+    expect(replies[0].text).not.toContain('我想长期优化 memory 模块');
+  });
+
+  it('creates and auto-runs long-running goals from natural language', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    const { getConversationSemanticState } = await import('../src/gateway/conversation-semantic-state');
+
+    const replies = await handleChannelMessage(message('我想长期优化 memory 模块', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const goalId = replies[0].text.match(/Goal 已创建：([^\n]+)/)?.[1];
+
+    expect(goalId).toBeDefined();
+    expect(replies[0].text).toContain('已启动首轮运行：');
+    await expect(getConversationSemanticState({ channel: 'http', conversationId: 'conv-1' })).resolves.toMatchObject({
+      activeGoalId: goalId,
+      activeModule: 'memory',
+      recentEntities: ['memory'],
+    });
+  });
+
+  it('handles /goal commands through Goal runtime tasks', async () => {
+    const { handleChannelMessage } = await loadHandler();
+
+    const create = await handleChannelMessage(message('/goal create Gateway Goal', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const goalId = create[0].text.match(/Goal 已创建：([^\n]+)/)?.[1];
+    expect(goalId).toBeDefined();
+
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const facadeTasks = await taskRuntime.listTasks();
+    expect(facadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }) }),
+    ]));
+
+    const list = await handleChannelMessage(message('/goal list', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(list[0].text).toContain(goalId);
+    expect(list[0].text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    expect(list[0].text).not.toMatch(/\.\d{3}Z/);
+
+    const run = await handleChannelMessage(message(`/goal run ${goalId}`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(run[0].text).toContain('Goal Run 已完成');
+
+    const runFacadeTasks = await taskRuntime.listTasks();
+    expect(runFacadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.run', toolFacade: true }) }),
+    ]));
+
+    const feedback = await handleChannelMessage(message(`/goal feedback ${goalId} 暂停`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    expect(feedback[0].text).toContain('Goal 反馈已记录');
+
+    const feedbackFacadeTasks = await taskRuntime.listTasks();
+    expect(feedbackFacadeTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.feedback', toolFacade: true }) }),
+    ]));
+  });
+
+  it('handles /task commands through the shared RuntimeTask facade helper', async () => {
+    const { handleChannelMessage } = await loadHandler();
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    const replies = await handleChannelMessage(message(`/task ${tempRoot} :: Implement gateway task facade`, 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const tasks = await taskRuntime.listTasks();
+
+    expect(replies[0].text).toContain('Runtime Task:');
+    expect(tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'code.task', toolFacade: true }) }),
+    ]));
+  });
+
   it('handles explicit PR pool commands', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
@@ -272,5 +951,80 @@ describe('Gateway message handler', () => {
     expect(confirm[0].text).toContain('已确认');
     expect(develop[0].text).toContain('已开始开发');
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
+  });
+
+  it('shows approval inbox and handles PR delete and revise commands', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    const { handleChannelMessage } = await loadHandler();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const draft = await prPoolRuntime.create({
+      title: 'Inbox draft',
+      objective: 'Review inbox draft',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['visible in inbox'],
+      codeAgentPrompt: 'Implement inbox draft',
+    });
+    const completed = await prPoolRuntime.create({
+      title: 'Revision candidate',
+      objective: 'Revise through gateway',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['revision scheduled'],
+      codeAgentPrompt: 'Implement revision candidate',
+    });
+    await prPoolRuntime.confirm(completed.id);
+    await prPoolRuntime.transition(completed.id, 'scheduled');
+    await prPoolRuntime.transition(completed.id, 'developing');
+    await prPoolRuntime.transition(completed.id, 'completed');
+
+    const inbox = await handleChannelMessage(message('/inbox', 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+    const deleteReply = await handleChannelMessage(message(`/pr delete ${draft.id}`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+    const reviseReply = await handleChannelMessage(message(`/pr revise ${completed.id} add focused tests`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
+
+    expect(inbox[0].text).toContain('待确认 Inbox');
+    expect(inbox[0].text).toContain(draft.id);
+    expect(deleteReply[0].text).toContain('已删除');
+    expect(reviseReply[0].text).toContain('已创建修订任务');
+    await expect(prPoolRuntime.get(draft.id)).resolves.toMatchObject({ status: 'deleted' });
+  });
+
+  it('does not fast-path natural language PR pool execution through gateway regex', async () => {
+    process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
+    process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';
+    const { handleChannelMessage } = await loadHandler();
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Natural language PR execution',
+      objective: 'Route PR pool execution through native tool selection',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['gateway'], risk: 'low' },
+      acceptanceCriteria: ['gateway does not regex-dispatch cron scan'],
+      codeAgentPrompt: 'Implement natural language routing',
+    });
+    await prPoolRuntime.update(item.id, {
+      status: 'ready',
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
+    const replies = await handleChannelMessage(message('将 PR pool 中的需求执行一下', 'trusted'), {
+      ...baseConfig(),
+      allowSenders: ['trusted'],
+    });
+    const tasks = await taskRuntime.listTasks();
+
+    expect(replies[0].text).not.toContain('PR Pool ready 需求扫描已触发');
+    expect(replies[0].text).not.toContain('Dispatch: dispatched');
+    expect(tasks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        targetAgentId: 'pr-pool-runtime',
+        metadata: expect.objectContaining({ taskType: 'pr_pool.cron_scan' }),
+      }),
+    ]));
   });
 });

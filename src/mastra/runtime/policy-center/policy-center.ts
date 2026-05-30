@@ -2,10 +2,11 @@ import type { ToolGatewayPolicy } from '../types';
 import type { ToolPolicyCenter, ToolPolicyRecord, ToolPolicySummary } from './policy-center.schema';
 
 const staticPolicies: ToolPolicyRecord[] = [
-  policy('start-claude-code-task', { risk: 'dangerous', capability: 'code.execute_claude_code_task', requireApproval: true, audit: true }, 'Start direct Claude Code execution.'),
-  policy('get-claude-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read Claude Code task status.'),
-  policy('list-claude-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List Claude Code tasks.'),
+  policy('start-code-task', { risk: 'medium', capability: 'code.execute_task', audit: true }, 'Start code execution inside an allowed workspace.'),
+  policy('get-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read code task status.'),
+  policy('list-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List code tasks.'),
   policy('create-cron-job', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Create scheduled job records.'),
+  policy('create-schedule-task', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Create scheduled job records through RuntimeTask dispatch.'),
   policy('list-cron-jobs', { risk: 'safe', capability: 'schedule.read', audit: true }, 'List scheduled job records.'),
   policy('update-cron-job-status', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Pause or resume scheduled jobs.'),
   policy('delete-cron-job', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Delete scheduled job records.'),
@@ -31,6 +32,26 @@ const staticPolicies: ToolPolicyRecord[] = [
   policy('retry-team-task', { risk: 'medium', capability: 'team_runtime.write', audit: true }, 'Retry team tasks.'),
   policy('recover-interrupted-team-runs', { risk: 'dangerous', capability: 'team_runtime.control', requireApproval: true, audit: true }, 'Recover interrupted team runs.'),
   policy('mark-timed-out-team-runs', { risk: 'dangerous', capability: 'team_runtime.control', requireApproval: true, audit: true }, 'Mark timed out team runs.'),
+  policy('create-req-draft', { risk: 'medium', capability: 'req.write', audit: true }, 'Create Req draft documents.'),
+  policy('list-reqs', { risk: 'safe', capability: 'req.read', audit: true }, 'List Req documents.'),
+  policy('get-req-status', { risk: 'safe', capability: 'req.read', audit: true }, 'Read Req document status.'),
+  policy('confirm-req-document', { risk: 'medium', capability: 'req.write', audit: true }, 'Confirm Req documents.'),
+  policy('reject-req-document', { risk: 'medium', capability: 'req.write', audit: true }, 'Reject Req documents.'),
+  policy('confirm-req-item', { risk: 'medium', capability: 'req.write', audit: true }, 'Confirm Req items.'),
+  policy('reject-req-item', { risk: 'medium', capability: 'req.write', audit: true }, 'Reject Req items.'),
+  policy('update-req-item-status', { risk: 'medium', capability: 'req.write', audit: true }, 'Update Req item implementation status.'),
+  policy('import-req-markdown', { risk: 'medium', capability: 'req.write', audit: true }, 'Import Req Markdown documents.'),
+  policy('import-req-file', { risk: 'medium', capability: 'req.write', audit: true }, 'Import Req files.'),
+  policy('queue-channel-notification', { risk: 'medium', capability: 'gateway_delivery.write', audit: true }, 'Queue outbound Gateway deliveries.'),
+  policy('send-channel-notification', { risk: 'medium', capability: 'notify.write', audit: true }, 'Send channel notifications through RuntimeTask dispatch.'),
+  policy('refresh-knowledge-memory-index', { risk: 'safe', capability: 'knowledge.write', audit: true }, 'Refresh memory index through Knowledge RuntimeTask.'),
+  policy('append-knowledge-episode', { risk: 'safe', capability: 'knowledge.write', audit: true }, 'Append episodic memory through Knowledge RuntimeTask.'),
+  policy('propose-knowledge-doc-update', { risk: 'safe', capability: 'knowledge.write', audit: true }, 'Create knowledge doc update proposal through RuntimeTask.'),
+  policy('create-goal', { risk: 'medium', capability: 'goal.write', audit: true }, 'Create durable Goals.'),
+  policy('list-goals', { risk: 'safe', capability: 'goal.read', audit: true }, 'List durable Goals.'),
+  policy('get-goal-status', { risk: 'safe', capability: 'goal.read', audit: true }, 'Read Goal status.'),
+  policy('run-goal', { risk: 'medium', capability: 'goal.run', audit: true }, 'Queue Goal runs.'),
+  policy('apply-goal-feedback', { risk: 'medium', capability: 'goal.feedback', audit: true }, 'Apply Goal feedback and lifecycle updates.'),
 ];
 
 const registeredPolicies = new Map<string, ToolPolicyRecord>();

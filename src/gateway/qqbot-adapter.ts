@@ -1,7 +1,7 @@
 import type { GatewayConfig } from './config';
 import { sendOutbound } from './delivery';
-import { handleChannelMessage } from './message-handler';
-import type { ChannelMessage } from './types';
+import { processRequest } from './gateway';
+import { toUnifiedRequest, type ChannelMessage } from './types';
 
 const CONNECT_READY_TIMEOUT_MS = 20_000;
 
@@ -401,7 +401,7 @@ export function normalizeQQBotGroupAtMessage(d: Record<string, unknown>, receive
 
 function processIncomingMessage(message: ChannelMessage): void {
   if (!cfg) return;
-  handleChannelMessage(message, cfg)
+  processRequest(toUnifiedRequest(message), cfg, { message })
     .then(async (outbound) => {
       for (const item of outbound) {
         try {

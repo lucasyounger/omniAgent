@@ -3,6 +3,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn((command, args, options, callback) => {
+    if (typeof options === 'function') {
+      options(null, '', '');
+      return;
+    }
+    callback(null, '', '');
+  }),
+}));
+
+vi.mock('../src/mastra/lib/code-task-store', () => ({
+  getCodeTask: vi.fn(),
+}));
+
 let tempRoot: string;
 
 async function loadRuntime() {
@@ -68,6 +82,7 @@ describe('PR pool runtime', () => {
     await prPoolRuntime.transition(item.id, 'scheduled');
     await prPoolRuntime.transition(item.id, 'developing');
     await prPoolRuntime.update(item.id, {
+      run: { ...item.run, codeTaskId: 'code-old' },
       blocking: { reason: 'Tests failed', category: 'test_failed', detectedAt: new Date().toISOString() },
     });
     await prPoolRuntime.transition(item.id, 'failed');
@@ -75,13 +90,233 @@ describe('PR pool runtime', () => {
     const retried = await prPoolRuntime.retry(item.id);
 
     expect(retried.status).toBe('ready');
+    expect(retried.run).toMatchObject({ previousCodeTaskId: 'code-old', retryCount: 1 });
+    expect(retried.run.codeTaskId).toBeUndefined();
     expect(retried.blocking).toMatchObject({ reason: 'Tests failed', category: 'test_failed' });
   });
 
-  it('throws PrPoolStatusError for invalid transitions', async () => {
-    const { PrPoolStatusError, prPoolRuntime } = await loadRuntime();
-    const item = await prPoolRuntime.create(input('Invalid transition'));
+  it('rejects retries after maxRetries is reached', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Retry limit'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, {
+      run: { ...item.run, retryCount: 3, maxRetries: 3 },
+    });
+    await prPoolRuntime.transition(item.id, 'failed');
 
-    await expect(prPoolRuntime.transition(item.id, 'developing')).rejects.toBeInstanceOf(PrPoolStatusError);
+    await expect(prPoolRuntime.retry(item.id)).rejects.toThrow('exceeded max retries');
+  });
+
+  it('deduplicates proposal ingest by idempotencyKey and returns actual item status', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const proposal = {
+      title: 'Deduplicate me',
+      objective: 'Avoid duplicate PR items',
+      source: 'exploration' as const,
+      origin: { type: 'claudecode' as const, artifactPath: '.omc/proposals/deduplicate.json' },
+      impact: { modules: ['PR Pool'], risk: 'medium' as const },
+      acceptanceCriteria: ['single item created'],
+      codeAgentPrompt: 'Implement once',
+      idempotencyKey: 'file:.omc/proposals/deduplicate.json:abc',
+    };
+
+    const first = await prPoolRuntime.ingestProposal(proposal, tempRoot);
+    await prPoolRuntime.confirm(first.id);
+    const second = await prPoolRuntime.ingestPrPoolProposal(proposal, tempRoot);
+
+    expect(second).toMatchObject({ prItemId: first.id, status: 'ready' });
+    await expect(prPoolRuntime.list()).resolves.toHaveLength(1);
+    const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
+    expect(events).toContain('proposal_ingest_deduplicated');
+  });
+
+  it('ingests confirmed proposals as ready items and goal proposals as draft by default', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+
+    const confirmed = await prPoolRuntime.ingestPrPoolProposal(
+      {
+        title: 'Confirmed ingest',
+        objective: 'Create ready item',
+        source: 'manual',
+        origin: { type: 'manual' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['ready item created'],
+        codeAgentPrompt: 'Implement confirmed proposal',
+        confirmation: 'confirmed',
+        nonGoals: ['Do not create a CodeAgent task during ingest'],
+        constraints: ['Cron scan must remain the develop trigger'],
+        references: [{ type: 'conversation', id: 'conv-1', summary: 'User confirmed this slice' }],
+      },
+      tempRoot,
+    );
+    const goal = await prPoolRuntime.ingestPrPoolProposal(
+      {
+        title: 'Goal ingest',
+        objective: 'Create draft item',
+        source: 'goal_driven',
+        origin: { type: 'goal', goalId: 'goal-1' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['draft item created'],
+        codeAgentPrompt: 'Implement after confirmation',
+      },
+      tempRoot,
+    );
+
+    expect(confirmed.status).toBe('ready');
+    expect(goal.status).toBe('draft');
+    await expect(prPoolRuntime.get(confirmed.prItemId)).resolves.toMatchObject({
+      status: 'ready',
+      metadata: { confirmation: 'confirmed' },
+      nonGoals: ['Do not create a CodeAgent task during ingest'],
+      constraints: ['Cron scan must remain the develop trigger'],
+      references: [{ type: 'conversation', id: 'conv-1', summary: 'User confirmed this slice' }],
+    });
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', confirmed.prItemId, 'brief.md'), 'utf8')).resolves.toContain('User confirmed this slice');
+    const tasksFile = path.join(tempRoot, '.omni', 'runs', 'runtime-tasks', 'tasks.json');
+    await expect(fs.readFile(tasksFile, 'utf8')).rejects.toThrow();
+  });
+
+  it('exposes ingestPrPoolProposal API result shape', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+
+    const result = await prPoolRuntime.ingestPrPoolProposal(
+      {
+        title: 'API ingest me',
+        objective: 'Return the minimal ingest response',
+        source: 'exploration',
+        origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' },
+        impact: { modules: ['PR Pool'], risk: 'medium' },
+        acceptanceCriteria: ['draft item created'],
+        codeAgentPrompt: 'Implement the proposal',
+      },
+      tempRoot,
+    );
+
+    expect(result).toMatchObject({
+      prItemId: expect.stringMatching(/^pr-/),
+      status: 'draft',
+      origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' },
+    });
+    await expect(prPoolRuntime.get(result.prItemId)).resolves.toMatchObject({
+      status: 'draft',
+      metadata: { origin: { type: 'claudecode', artifactPath: '.omc/proposals/api-ingest.json' } },
+    });
+    const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');
+    expect(events).toContain('proposal_ingested');
+  });
+
+
+  it('archives items and applies prepared workspace cleanup policy', async () => {
+    const { execFile } = await import('node:child_process');
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create({
+      ...input('Archive cleanup'),
+      workspacePolicy: { cleanup: 'delete_on_archive' },
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.transition(item.id, 'completed');
+    const worktreePath = path.join(tempRoot, 'archive-cleanup-worktree');
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
+    await prPoolRuntime.archive(item.id, 'completed');
+
+    expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: path.resolve(tempRoot) }, expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('git', ['branch', '-d', `omni/${item.id}`], { cwd: path.resolve(tempRoot) }, expect.any(Function));
+  });
+
+
+  it('notifies review-facing status transitions when notify target is configured', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const item = await prPoolRuntime.create({
+      ...input('Notify review'),
+      metadata: {
+        notifyTarget: {
+          channel: 'http',
+          accountId: 'local',
+          conversationId: 'conv-1',
+          senderId: 'user-1',
+          messageType: 'dm',
+        },
+      },
+    });
+
+    await prPoolRuntime.confirm(item.id);
+    const deliveries = await listDeliveries();
+
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('PR Pool 条目待评审'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
+  });
+
+
+  it('safely deletes only draft or ready items and blocks active deletion', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+    const draft = await prPoolRuntime.create(input('Delete draft'));
+    const active = await prPoolRuntime.create(input('Do not delete active'));
+    await prPoolRuntime.confirm(active.id);
+    await prPoolRuntime.transition(active.id, 'scheduled');
+
+    await expect(prPoolRuntime.delete(draft.id)).resolves.toMatchObject({ status: 'deleted' });
+    await expect(prPoolRuntime.delete(active.id)).rejects.toThrow('Cannot delete PR pool item in status scheduled');
+  });
+
+  it('schedules revision tasks with user comments and reconciles completed revisions', async () => {
+    vi.doMock('../src/mastra/runtime/task-dispatcher', () => ({
+      dispatchRuntimeTask: vi.fn(async () => ({ taskId: 'revision-task', status: 'dispatched', targetAgentId: 'code-agent' })),
+    }));
+    const { getCodeTask } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'revise',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [],
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Revise me'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.transition(item.id, 'completed');
+
+    const revised = await prPoolRuntime.revise(item.id, 'Please add tests before archive');
+    const reconciled = await prPoolRuntime.reconcileRevisedItem(item.id);
+
+    expect(revised).toMatchObject({
+      status: 'developing',
+      run: {
+        reviseTaskId: expect.stringMatching(/^task-/),
+        revisionCount: 1,
+        lastRevisionComment: 'Please add tests before archive',
+      },
+    });
+    expect(reconciled).toMatchObject({ status: 'completed', run: { lastRunId: expect.stringMatching(/^run-task-/) } });
   });
 });
+

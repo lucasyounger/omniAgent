@@ -4,8 +4,11 @@ Use these packs to assemble focused context with fewer tokens.
 
 ## Context Pack Runtime
 
-`src/mastra/runtime/context-pack/**` builds and validates structured context packs.
-The first supported task type is `requirement_e2e`.
+`src/mastra/runtime/context-pack/**` builds and validates structured context
+packs. Supported pack types are `conversation_answer`, `goal_intake`,
+`requirement_e2e`, `pr_pool_slice_design`, `code_execution`,
+`verification_review`, `reconcile`, `incident_debug`, and
+`scheduled_followup`.
 
 A generated pack includes:
 
@@ -13,10 +16,24 @@ A generated pack includes:
 - user preferences and profile facts from `memory/USER.md`
 - project goal and memory/knowledge boundaries from `docs/knowledge/PROJECTS.md`
 - relevant document refs for downstream agents
+- task, memory, code impact, verification, and output contract blocks
+- a `ContextSnapshot` with source ids, included refs, excluded summary, token
+  budget, and estimated token use
 - token budget with reserved response capacity
 
 Use `buildContextPack` for in-process generation and `writeContextPack` /
-`loadContextPack` when a long-running task needs a persisted artifact.
+`loadContextPack` when a long-running task needs a persisted artifact. Use
+`writeContextSnapshot` / `loadContextSnapshot` when workflow recovery needs the
+exact context selection without rebuilding from changing docs or code.
+
+`code_execution` packs must include:
+
+- CodeAgent, TaskAgent, Claude Code, Team Runtime, and change gate documents.
+- `codeImpactContext` with GitNexus-required, docs-sync-required, and
+  tests-sync-required flags.
+- `verificationContract` commands and required checks.
+- output contract expectations for changed files, verification evidence, risk
+  notes, RuntimeTask/PR Pool writeback, and memory writeback candidates.
 
 ## ContextJuice Runtime
 

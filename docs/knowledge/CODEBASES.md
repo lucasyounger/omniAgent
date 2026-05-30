@@ -3,9 +3,12 @@
 ## OmniAgent
 
 - Mastra entrypoint: `src/mastra/index.ts`
+- Mastra runtime storage boundary: `src/mastra/runtime/store.ts` (`runtimeStorageBackend`, `omniStorage`)
 - Agents: `src/mastra/agents`
 - Tools: `src/mastra/tools`
 - Internal libraries: `src/mastra/lib`
+- Planner schema/helpers and workflows: `src/mastra/runtime/planner`, `src/mastra/workflows/ai-dev-e2e-workflow.ts`, `src/mastra/workflows/composite-task-workflow.ts`, `src/mastra/workflows/research-daily-digest-workflow.ts`, `src/mastra/workflows/cron-maintenance-workflow.ts`
+- Gateway semantic state: `~/.omni/runs/gateway/semantic-state`
 - Long-term memory: `~/.omni/memory`
 - Project docs and implementation knowledge: `docs`
 

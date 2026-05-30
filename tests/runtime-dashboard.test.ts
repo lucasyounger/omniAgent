@@ -16,6 +16,7 @@ async function loadDashboardRuntime() {
     ...(await import('../src/mastra/runtime/eval-harness')),
     ...(await import('../src/mastra/runtime/goal')),
     taskRuntime: (await import('../src/mastra/runtime/task-runtime')).taskRuntime,
+    prPoolRuntime: (await import('../src/mastra/runtime/pr-pool/pr-pool-runtime')).prPoolRuntime,
   };
 }
 
@@ -53,6 +54,7 @@ describe('runtime dashboard data API', () => {
       completeGoalRun,
       createGoal,
       createGoalRun,
+      prPoolRuntime,
       readRuntimeDashboardData,
       runEvalHarness,
       taskRuntime,
@@ -80,6 +82,18 @@ describe('runtime dashboard data API', () => {
         nextActions: [],
       },
     });
+    const prItem = await prPoolRuntime.create({
+      title: 'Dashboard PR item',
+      objective: 'Expose PR pool status',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['dashboard'], risk: 'low' },
+      acceptanceCriteria: ['visible in dashboard'],
+      codeAgentPrompt: 'Implement dashboard visibility',
+      initialStatus: 'ready',
+    });
+    await prPoolRuntime.transition(prItem.id, 'scheduled');
+    await prPoolRuntime.transition(prItem.id, 'developing');
+    await prPoolRuntime.update(prItem.id, { run: { ...prItem.run, codeTaskId: 'code-dashboard' } });
     await runEvalHarness({
       suiteName: 'Dashboard Eval',
       scenarios: [{ id: 'dashboard', title: 'Dashboard', prompt: 'status', expectedKeywords: ['ok'] }],
@@ -93,6 +107,11 @@ describe('runtime dashboard data API', () => {
     expect(dashboard.goalRuns).toMatchObject({ total: 1, byStatus: [{ status: 'succeeded', count: 1 }] });
     expect(dashboard.evals.total).toBe(1);
     expect(dashboard.evals.latest?.summary.passRate).toBe(1);
+    expect(dashboard.prPool).toMatchObject({
+      total: 1,
+      byStatus: [{ status: 'developing', count: 1 }],
+      activeDevelopment: [{ id: prItem.id, title: 'Dashboard PR item', status: 'developing', run: { codeTaskId: 'code-dashboard' } }],
+    });
   });
 
   it('serves runtime dashboard data over HTTP', async () => {

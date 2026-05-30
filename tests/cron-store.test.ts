@@ -48,7 +48,43 @@ describe('Cron store', () => {
 
     const nextRunAt = getCronJobNextRunAt(job, new Date('2026-05-12T10:35:30.000Z'));
 
-    expect(nextRunAt).toBe('2026-05-13T01:30:00.000Z');
+    expect(nextRunAt).toBe('2026-05-13 01:30');
+  });
+
+
+  it('normalizes CST one-time schedules to UTC storage and execution', async () => {
+    const { createCronJob, getCronJobNextRunAt, runDueCronJobs } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'cst reminder',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+    });
+
+    expect(job.schedule).toBe('2026-05-12 13:08');
+    expect(getCronJobNextRunAt(job, new Date('2026-05-12T12:00:00.000Z'))).toBe('2026-05-12 13:08');
+
+    const beforeDue = await runDueCronJobs(new Date('2026-05-12T13:07:59.000Z'));
+    expect(beforeDue[0].lastRunStatus).toBeUndefined();
+
+    const due = await runDueCronJobs(new Date('2026-05-12T13:08:00.000Z'));
+    expect(due[0]).toMatchObject({
+      status: 'paused',
+      lastRunStatus: 'started',
+    });
+  });
+
+  it('normalizes CST daily schedules to UTC time of day', async () => {
+    const { createCronJob, getCronJobNextRunAt } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'daily report',
+      schedule: 'daily 09:30',
+      task: 'report',
+    });
+
+    expect(job.schedule).toBe('daily 01:30');
+    expect(getCronJobNextRunAt(job, new Date('2026-05-12T10:35:30.000Z'))).toBe('2026-05-13 01:30');
   });
 
   it('creates a runtime task instead of starting a code run', async () => {
@@ -101,8 +137,22 @@ describe('Cron store', () => {
     });
   });
 
-  it('queues channel messages when channel-gateway schedules fire', async () => {
-    const { createCronJob, runDueCronJobs } = await loadCronStore();
+  it('defaults code-agent schedules to generic code.task records', async () => {
+    const { createCronJob } = await loadCronStore();
+    const job = await createCronJob({
+      name: 'code work',
+      schedule: 'daily 09:00',
+      task: 'change files',
+      targetAgentId: 'code-agent',
+    });
+
+    expect(job).toMatchObject({
+      taskType: 'code.task',
+      targetAgentId: 'code-agent',
+    });
+  });
+
+  it('queues channel messages when channel-gateway schedules fire', async () => {    const { createCronJob, runDueCronJobs } = await loadCronStore();
     const { listAgentInbox, listTeamTasks } = await import('../src/mastra/lib/team-runtime-store');
     await createCronJob({
       name: 'reply hello',
@@ -219,6 +269,93 @@ describe('Cron store', () => {
       target: {
         channel: 'http',
         conversationId: 'conv-1',
+      },
+    });
+  });
+
+
+  it('queues optional schedule-fired notifications', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    await createCronJob({
+      name: 'fire notify',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      notifyTarget: {
+        channel: 'http',
+        accountId: 'local',
+        conversationId: 'conv-1',
+        senderId: 'user-1',
+        messageType: 'dm',
+      },
+      payload: { notifyOnScheduleFired: true },
+    });
+
+    await runDueCronJobs(new Date('2026-05-12T13:08:00.000Z'));
+    const deliveries = await listDeliveries();
+
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('定时任务已触发'),
+        target: expect.objectContaining({ conversationId: 'conv-1' }),
+      }),
+    ]);
+  });
+
+  it('creates daily goal scan job only once when enabled', async () => {
+    process.env.OMNI_GOAL_DAILY_SCAN_ENABLED = 'true';
+    process.env.OMNI_GOAL_DAILY_SCAN_CRON = '0 0 * * *';
+    process.env.OMNI_GOAL_DAILY_SCAN_TIMEZONE = 'UTC';
+    const { ensureGoalDailyScanCronJob, listCronJobs } = await loadCronStore();
+
+    const first = await ensureGoalDailyScanCronJob();
+    const second = await ensureGoalDailyScanCronJob();
+    const jobs = await listCronJobs();
+
+    expect(first?.id).toBe(second?.id);
+    expect(jobs.filter(job => job.taskType === 'goal.cron_scan')).toHaveLength(1);
+    expect(first?.payload).toMatchObject({ goalType: 'module_improvement', action: 'scan_due_goals', timezone: 'UTC' });
+  });
+
+  it('exposes due-job scans as an optional Mastra scheduled workflow driver', async () => {
+    const { createCronJob } = await loadCronStore();
+    await createCronJob({
+      name: 'workflow scan',
+      schedule: '2026-05-12 21:08',
+      task: 'dry task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      payload: { scope: 'repo' },
+    });
+
+    const { cronMaintenanceWorkflow, runCronMaintenanceWorkflow } = await import('../src/mastra/workflows/cron-maintenance-workflow');
+    const result = await runCronMaintenanceWorkflow({ now: '2026-05-12T13:08:00.000Z' });
+
+    expect(cronMaintenanceWorkflow.id).toBe('cron-maintenance-workflow');
+    expect(result).toMatchObject({
+      checkedAt: '2026-05-12T13:08:00.000Z',
+      dueJobCount: 1,
+      startedJobIds: [expect.stringContaining('cron-')],
+    });
+  });
+
+  it('adds a declarative Mastra schedule only when the Mastra scheduler driver is enabled', async () => {
+    await loadCronStore();
+    const defaultWorkflow = await import('../src/mastra/workflows/cron-maintenance-workflow');
+    expect(defaultWorkflow.cronMaintenanceScheduleConfig).toEqual({});
+
+    vi.resetModules();
+    process.env.OMNI_PROJECT_ROOT = tempRoot;
+    process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+    process.env.OMNI_CRON_SCHEDULER_DRIVER = 'mastra';
+    process.env.OMNI_MASTRA_CRON_SCAN_CRON = '*/5 * * * *';
+    const mastraWorkflow = await import('../src/mastra/workflows/cron-maintenance-workflow');
+
+    expect(mastraWorkflow.cronMaintenanceScheduleConfig).toMatchObject({
+      schedule: {
+        cron: '*/5 * * * *',
       },
     });
   });

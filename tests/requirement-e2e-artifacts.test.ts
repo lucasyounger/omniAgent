@@ -24,6 +24,58 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
+function minimalContextPack(input: {
+  objective: string;
+  projectGoal: string;
+  documents?: Array<{ path: string; title: string; purpose: string }>;
+}) {
+  const documents = input.documents || [];
+  return {
+    schemaVersion: 1 as const,
+    generatedAt: '2026-05-20T00:00:00.000Z',
+    task: { type: 'requirement_e2e' as const, objective: input.objective },
+    user: { preferences: [], profileFacts: [] },
+    project: { goal: input.projectGoal, knowledgeBoundaries: [] },
+    documents,
+    blocks: {
+      taskContract: { objective: input.objective, acceptanceCriteria: [], nonGoals: [] },
+      memoryContext: {
+        included: [],
+        excludedSummary: 'No memory fixtures.',
+        conflicts: [],
+        confidenceNotes: [],
+        tokenCost: 0,
+      },
+      codeImpactContext: {
+        affectedSymbols: [],
+        directCallers: [],
+        riskLevel: 'unknown' as const,
+        gitnexusRequired: false,
+        docsSyncRequired: false,
+        testsSyncRequired: false,
+        notes: [],
+      },
+      verificationContract: { commands: [], requiredChecks: [] },
+      outputContract: {
+        expectedArtifacts: ['context-pack.json'],
+        statusWriteback: [],
+        memoryWritebackCandidate: false,
+      },
+    },
+    snapshot: {
+      schemaVersion: 1 as const,
+      id: `ctx-${input.objective.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      packType: 'requirement_e2e' as const,
+      includedRefs: documents.map(document => ({ kind: 'document' as const, path: document.path, summary: document.purpose })),
+      excludedRefsSummary: 'No excluded fixture refs.',
+      tokenBudget: 800,
+      tokenUsed: 0,
+      createdAt: '2026-05-20T00:00:00.000Z',
+    },
+    tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
+  };
+}
+
 describe('requirement e2e artifacts', () => {
   it('creates the full artifact skeleton for a task input', async () => {
     const { createRequirementE2ERun, requirementE2EArtifactNames } = await loadRequirementE2ERuntime();
@@ -31,15 +83,7 @@ describe('requirement e2e artifacts', () => {
     const run = await createRequirementE2ERun({
       taskId: 'task-123',
       input: 'Build a requirement artifact chain',
-      contextPack: {
-        schemaVersion: 1,
-        generatedAt: '2026-05-20T00:00:00.000Z',
-        task: { type: 'requirement_e2e', objective: 'Build artifacts' },
-        user: { preferences: [], profileFacts: [] },
-        project: { goal: 'test', knowledgeBoundaries: [] },
-        documents: [],
-        tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
-      },
+      contextPack: minimalContextPack({ objective: 'Build artifacts', projectGoal: 'test' }),
     });
 
     expect(run.runDir).toBe(path.join(tempRoot, '.omni', 'runs', 'requirement-e2e', 'task-123'));
@@ -78,13 +122,11 @@ describe('requirement e2e artifacts', () => {
       requirement: 'Add approval-aware requirement planning',
       assumptions: ['Planner output must be deterministic.'],
       contextPack: {
-        schemaVersion: 1,
-        generatedAt: '2026-05-20T00:00:00.000Z',
-        task: { type: 'requirement_e2e', objective: 'Plan requirement artifacts' },
-        user: { preferences: [], profileFacts: [] },
-        project: { goal: 'Build a local AI application engineering assistant.', knowledgeBoundaries: [] },
-        documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
-        tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
+        ...minimalContextPack({
+          objective: 'Plan requirement artifacts',
+          projectGoal: 'Build a local AI application engineering assistant.',
+          documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
+        }),
       },
     });
 
@@ -104,13 +146,11 @@ describe('requirement e2e artifacts', () => {
       taskId: 'design-task',
       requirement: 'Design requirement e2e architecture output',
       contextPack: {
-        schemaVersion: 1,
-        generatedAt: '2026-05-20T00:00:00.000Z',
-        task: { type: 'requirement_e2e', objective: 'Produce 4+1 design' },
-        user: { preferences: [], profileFacts: [] },
-        project: { goal: 'Build dependable local artifacts.', knowledgeBoundaries: [] },
-        documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
-        tokenBudget: { maxTokens: 1000, reservedForResponse: 200, availableForContext: 800 },
+        ...minimalContextPack({
+          objective: 'Produce 4+1 design',
+          projectGoal: 'Build dependable local artifacts.',
+          documents: [{ path: 'docs/CONTEXT_PACKS.md', title: 'Context Packs', purpose: 'artifact contract' }],
+        }),
       },
     });
 

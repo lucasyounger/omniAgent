@@ -13,7 +13,13 @@ async function loadTools() {
   return {
     ...(await import('../src/mastra/tools/cron-tools')),
     ...(await import('../src/mastra/tools/memory-tools')),
+    ...(await import('../src/mastra/tools/knowledge-task-tools')),
+    ...(await import('../src/mastra/tools/notify-tools')),
     ...(await import('../src/mastra/tools/team-runtime-tools')),
+    ...(await import('../src/mastra/tools/runtime-task-tools')),
+    ...(await import('../src/mastra/tools/goal-tools')),
+    ...(await import('../src/mastra/tools/req-tools')),
+    ...(await import('../src/mastra/tools/pr-pool-tools')),
     ...(await import('../src/mastra/runtime/tool-gateway')),
     ...(await import('../src/mastra/runtime/approval-store')),
   };
@@ -135,25 +141,125 @@ describe('tool approval policy', () => {
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
 
-  it('requires approval for immediate direct code scheduled execution', async () => {
-    const { createCronJobTool, runCronJobNowTool, ToolGatewayApprovalRequiredError } = await loadTools();
-    const job = await executeTool<
-      { name: string; schedule: string; task: string; taskType: string; targetAgentId: string; payload: Record<string, unknown> },
-      { id: string }
-    >(createCronJobTool, {
-      name: 'manual direct code run',
-      schedule: 'daily 09:30',
-      task: 'change files',
-      taskType: 'code.claude_code_task',
-      targetAgentId: 'code-agent',
-      payload: {
-        workspacePath: tempRoot,
-        objective: 'change files',
-        executionMode: 'direct',
-      },
+
+  it('allows RuntimeTask and PR Pool read/write facades without dangerous approval', async () => {
+    const { createRuntimeTaskTool, listRuntimeTasksTool, createPrPoolItemTool, listPrPoolItemsTool } = await loadTools();
+
+    await expect(
+      executeTool(createRuntimeTaskTool, {
+        objective: 'record durable work',
+        taskType: 'goal.create',
+      }),
+    ).resolves.toMatchObject({
+      sourceAgentId: 'omni-router-agent',
+      metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }),
     });
 
-    await expect(executeTool(runCronJobNowTool, { id: job.id })).rejects.toBeInstanceOf(ToolGatewayApprovalRequiredError);
-    expect(await readPendingApprovalRequests()).toHaveLength(1);
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toHaveLength(1);
+    await expect(
+      executeTool(createPrPoolItemTool, {
+        title: 'Native PR facade',
+        objective: 'Create PR Pool item through tool facade',
+        workspaceRepoPath: tempRoot,
+        impact: { modules: ['tests'], risk: 'low' },
+        acceptanceCriteria: ['item exists'],
+        codeAgentPrompt: 'Implement test fixture',
+      }),
+    ).resolves.toMatchObject({ title: 'Native PR facade' });
+    await expect(executeTool(listPrPoolItemsTool, {})).resolves.toHaveLength(1);
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+
+  it('routes Goal and Req write facades through RuntimeTask dispatch without dangerous approval', async () => {
+    const { createGoalTool, runGoalTool, createReqDraftTool, confirmReqDocumentTool, listRuntimeTasksTool } = await loadTools();
+
+    const createdGoal = await executeTool<Record<string, unknown>, { dispatch: { status: string; result?: Record<string, unknown> } }>(createGoalTool, {
+      title: 'Native Goal facade',
+      objective: 'Create a goal through RuntimeTask facade',
+    });
+    const goalId = createdGoal.dispatch.result?.goalId as string;
+
+    expect(createdGoal.dispatch.status).toBe('dispatched');
+    await expect(executeTool(runGoalTool, { goalId })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    const createdReq = await executeTool<Record<string, unknown>, { dispatch: { status: string; result?: Record<string, unknown> } }>(createReqDraftTool, {
+      title: 'Native Req facade',
+      reqMarkdown: '- [ ] Capture requirement',
+    });
+    const reqId = createdReq.dispatch.result?.reqId as string;
+
+    expect(createdReq.dispatch.status).toBe('dispatched');
+    await expect(executeTool(confirmReqDocumentTool, { reqId })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'goal.run', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'req.confirm_document', toolFacade: true }) }),
+    ]));
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+  it('routes Schedule, Notify, and Knowledge public facades through RuntimeTask dispatch', async () => {
+    const { createScheduleTaskTool, sendChannelNotificationTool, appendKnowledgeEpisodeTool, listRuntimeTasksTool } = await loadTools();
+
+    await expect(executeTool(createScheduleTaskTool, {
+      name: 'facade reminder',
+      schedule: 'daily 09:30',
+      task: 'remember facade',
+      taskType: 'channel.message',
+      targetAgentId: 'channel-gateway',
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(sendChannelNotificationTool, {
+      target: { channel: 'http', accountId: 'local', conversationId: 'conv-1', messageType: 'dm' },
+      text: 'hello through notify facade',
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(appendKnowledgeEpisodeTool, {
+      title: 'Facade episode',
+      summary: 'Knowledge facade should dispatch through RuntimeTask.',
+      tags: ['facade'],
+    })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'schedule.create', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'notify.send_channel_message', toolFacade: true }) }),
+      expect.objectContaining({ metadata: expect.objectContaining({ taskType: 'knowledge.episode', toolFacade: true }) }),
+    ]));
+    expect(await readPendingApprovalRequests()).toHaveLength(0);
+  });
+
+  it('requires approval for dangerous RuntimeTask and PR Pool facades', async () => {
+    const { cancelRuntimeTaskTool, developPrPoolItemTool, scanPrPoolReadyItemsTool, deletePrPoolItemTool, createRuntimeTaskTool, createPrPoolItemTool } = await loadTools();
+    const task = await executeTool<{ objective: string; taskType: string }, { id: string }>(createRuntimeTaskTool, {
+      objective: 'cancel me',
+      taskType: 'goal.create',
+    });
+    const item = await executeTool<Record<string, unknown>, { id: string }>(createPrPoolItemTool, {
+      title: 'Dangerous PR facade',
+      objective: 'Check dangerous PR Pool tools',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['tests'], risk: 'low' },
+      acceptanceCriteria: ['approval required'],
+      codeAgentPrompt: 'Implement approval fixture',
+      initialStatus: 'ready',
+    });
+
+    await expect(executeTool(cancelRuntimeTaskTool, { taskId: task.id })).rejects.toThrow('Approval required');
+    await expect(executeTool(developPrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
+    await expect(executeTool(scanPrPoolReadyItemsTool, {})).rejects.toThrow('Approval required');
+    await expect(executeTool(deletePrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
+    expect(await readPendingApprovalRequests()).toHaveLength(4);
   });
 });

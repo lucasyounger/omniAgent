@@ -4,14 +4,15 @@ Purpose: load the smallest useful context before changing OmniAgent.
 
 ## Default Reading Order
 
-1. `~/.omni/memory/OMNI.md`
-2. `docs/agents/README.md`
-3. `docs/ARCHITECTURE.md` when changing runtime behavior
-4. `docs/CODE_SEARCH.md` when changing source code
-5. `docs/CHANGE_GATES.md` before behavior-changing edits
-6. The one relevant `docs/agents/*.md` card
-7. One context pack from `docs/CONTEXT_PACKS.md`
-8. Only then read linked source files
+1. `docs/PROJECT_VISION.md`
+2. `~/.omni/memory/OMNI.md`
+3. `docs/agents/README.md`
+4. `docs/ARCHITECTURE.md` when changing runtime behavior
+5. `docs/CODE_SEARCH.md` when changing source code
+6. `docs/CHANGE_GATES.md` before behavior-changing edits
+7. The one relevant `docs/agents/*.md` card
+8. One context pack from `docs/CONTEXT_PACKS.md`
+9. Only then read linked source files
 
 ## Do Not Start With
 
@@ -26,6 +27,7 @@ Purpose: load the smallest useful context before changing OmniAgent.
 - Modify scheduling: read `docs/agents/CRON_AGENT.md`.
 - Modify routing or user-facing delegation: read `docs/agents/OMNI_ROUTER_AGENT.md`.
 - Modify docs memory: read `docs/agents/KNOWLEDGE_AGENT.md`.
+- Reflection / self-evolution roadmap: read `docs/roadmap/SELF_EVOLUTION.md`.
 
 ## Update Rule
 

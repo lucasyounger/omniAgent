@@ -279,8 +279,10 @@ export {
 } from './approval-store';
 export type { ApprovalRequest, ApprovalRequestStatus } from './approval-store';
 export { createAgentMemory } from './memory';
-export { memoryRuntime } from './memory-runtime';
-export { omniStorage } from './store';
+export { memoryRuntime, memoryRuntimeBoundary } from './memory-runtime';
+export type { MemoryRuntimeBoundary } from './memory-runtime';
+export { omniStorage, runtimeStorageBackend } from './store';
+export type { RuntimeStorageBackend, RuntimeStorageBackendKind } from './store';
 export { schedulerRuntime } from './scheduler-runtime';
 export { assertTransitionAllowed, taskRuntime, toRuntimeTask } from './task-runtime';
 export { dispatchPendingRuntimeTasks, dispatchRuntimeTask } from './task-dispatcher';
@@ -309,4 +311,62 @@ export {
   ToolGatewayBlockedError,
 } from './tool-gateway';
 export { runtimeEvents } from './events';
+export { appendDomainEvent, listDomainEvents, readDomainEvents } from './domain-event-store';
+export type { AppendDomainEventInput, DomainEvent, DomainEventSeverity, ListDomainEventsFilter } from './domain-event-store';
+export { readDomainEventStream, streamDomainEvents } from './domain-event-stream';
+export type { DomainEventStreamBatch, DomainEventStreamCursor, ReadDomainEventStreamInput } from './domain-event-stream';
+export {
+  buildApprovalInboxProjection,
+  buildGoalTimelineProjection,
+  buildPrPoolBoardProjection,
+  buildRuntimeTaskTimelineProjection,
+} from './domain-projections';
+export type {
+  ApprovalInboxProjection,
+  GoalTimelineProjection,
+  PrPoolBoardProjection,
+  RuntimeTaskTimelineProjection,
+  TimelineEntry,
+} from './domain-projections';
+export {
+  defaultExecutorRuntimeCandidates,
+  detectExecutorRuntimes,
+  heartbeatExecutorRuntime,
+  listExecutorRuntimes,
+  readExecutorRuntimeRegistry,
+  upsertExecutorRuntime,
+  writeExecutorRuntimeRegistry,
+} from './executor-runtime-registry';
+export type {
+  ExecutorCommandResult,
+  ExecutorCommandRunner,
+  ExecutorRuntime,
+  ExecutorRuntimeCandidate,
+  ExecutorRuntimeKind,
+  ExecutorRuntimeRegistry,
+  ExecutorRuntimeStatus,
+} from './executor-runtime-registry';
+export {
+  appendExecutorRunTranscript,
+  claimNextExecutorRun,
+  createExecutorRun,
+  garbageCollectExecutorRuns,
+  getExecutorRun,
+  heartbeatExecutorRunLease,
+  listExecutorRuns,
+  readExecutorRunTranscript,
+  updateExecutorRunStatus,
+} from './executor-run-store';
+export type {
+  ClaimExecutorRunInput,
+  ClaimExecutorRunResult,
+  CreateExecutorRunInput,
+  ExecutorRun,
+  ExecutorRunLease,
+  ExecutorRunStatus,
+  ExecutorTranscriptEvent,
+  ExecutorTranscriptEventType,
+  GarbageCollectExecutorRunsResult,
+  HeartbeatExecutorRunLeaseInput,
+} from './executor-run-store';
 export type { RuntimeRiskLevel, RuntimeTask, RuntimeTaskStatus, ToolExecutionContext, ToolGatewayPolicy } from './types';

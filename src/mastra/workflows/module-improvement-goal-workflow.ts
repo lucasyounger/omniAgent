@@ -8,10 +8,13 @@ import {
   createGoalRun,
   getGoalRunDir,
   readGoal,
+  readGoalRun,
+  updateGoalRunStatus,
   type Goal,
   type ProofOfWork,
 } from '../runtime/goal';
 import { compareReposToModule, readCandidateRepo, searchGitHubReposForModule, type CandidateRepo } from '../skills/repo';
+import { createReqDraft, type ReqItem } from '../runtime/req';
 
 export type ModuleImprovementGoalWorkflowInput = {
   goalId: string;
@@ -29,8 +32,11 @@ export type ModuleImprovementGoalWorkflowResult = {
     design4Plus1: string;
     implementationPlan: string;
     proofOfWork: string;
+    reqList: string;
+    reqsJson: string;
     prItems?: string[];
   };
+  reqDocumentId?: string;
 };
 
 export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementGoalWorkflowInput): Promise<ModuleImprovementGoalWorkflowResult> {
@@ -38,8 +44,14 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   if (!goal) throw new Error(`Goal not found: ${input.goalId}`);
   if (goal.type !== 'module_improvement') throw new Error(`Goal is not module_improvement: ${input.goalId}`);
 
-  const moduleName = input.moduleName ?? goal.title;
-  await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { moduleName, scope: goal.scope } });
+  const existingRun = await readGoalRun(goal.id, input.runId);
+  const moduleName = input.moduleName ?? (isModulePlan(existingRun?.plan) ? existingRun.plan.moduleName : undefined) ?? goal.title;
+  if (existingRun) {
+    if (existingRun.status !== 'pending') throw new Error(`Goal run already exists: ${input.runId}`);
+    await updateGoalRunStatus(goal.id, input.runId, 'running');
+  } else {
+    await createGoalRun({ goalId: goal.id, id: input.runId, status: 'running', plan: { moduleName, scope: goal.scope } });
+  }
 
   const moduleContext = await buildModuleContext({ scope: goal.scope });
   const candidateRepos = await searchGitHubReposForModule({ goalId: goal.id, moduleName });
@@ -56,6 +68,8 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
     design4Plus1: path.join(runDir, 'design-4plus1.md'),
     implementationPlan: path.join(runDir, 'implementation-plan.md'),
     proofOfWork: path.join(runDir, 'proof-of-work.md'),
+    reqList: path.join(runDir, 'req-list.md'),
+    reqsJson: path.join(runDir, 'reqs.json'),
   };
 
   await fs.writeFile(artifacts.candidateRepos, `${JSON.stringify(candidateRepos, null, 2)}\n`, 'utf8');
@@ -63,6 +77,35 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   await fs.writeFile(artifacts.gapAnalysis, gapAnalysis, 'utf8');
   await fs.writeFile(artifacts.design4Plus1, renderDesign4Plus1(goal, gapAnalysis), 'utf8');
   await fs.writeFile(artifacts.implementationPlan, renderImplementationPlan(goal, comparison.recommendations), 'utf8');
+
+  const reqItems = comparison.recommendations.map((recommendation, index): ReqItem => ({
+    id: `R${index + 1}`,
+    title: recommendation,
+    rationale: 'Derived from module gap analysis and external repository evidence.',
+    scope: goal.scope.join(', '),
+    acceptanceCriteria: [recommendation],
+    risk: 'medium',
+    priority: 'normal',
+    status: 'pending_user_confirmation',
+    evidenceRefs: candidateRepos.map(repo => repo.url),
+  }));
+  const reqListMarkdown = renderReqList(goal, input.runId, gapAnalysis, reqItems);
+  await fs.writeFile(artifacts.reqList, reqListMarkdown, 'utf8');
+  await fs.writeFile(artifacts.reqsJson, `${JSON.stringify(reqItems, null, 2)}\n`, 'utf8');
+  const reqDocument = await createReqDraft({
+    title: `${goal.title} requirements`,
+    summary: `Pending requirements generated from goal run ${input.runId}.`,
+    reqMarkdown: reqListMarkdown,
+    designMarkdown: await fs.readFile(artifacts.design4Plus1, 'utf8'),
+    source: {
+      type: 'goal_run',
+      goalId: goal.id,
+      goalRunId: input.runId,
+      artifactPaths: [artifacts.design4Plus1, artifacts.reqList, artifacts.gapAnalysis, artifacts.repoAnalysis],
+    },
+    items: reqItems,
+    status: 'pending_user_confirmation',
+  });
 
   const prItems = [];
   for (const recommendation of comparison.recommendations) {
@@ -94,17 +137,21 @@ export async function runModuleImprovementGoalWorkflow(input: ModuleImprovementG
   artifacts.prItems = prItems;
 
   const proofOfWork: ProofOfWork = {
-    did: ['Loaded module context', 'Generated candidate repo list', 'Compared repos to local module', 'Generated gap analysis and implementation artifacts'],
+    did: ['Loaded module context', 'Generated candidate repo list', 'Compared repos to local module', 'Generated gap analysis and implementation artifacts', 'Created pending Req draft'],
     sourcesRead: [...moduleContext.files.map(file => file.path), ...candidateRepos.map(repo => repo.url)],
-    artifactsCreated: ['candidate-repos.json', 'repo-analysis.md', 'gap-analysis.md', 'design-4plus1.md', 'implementation-plan.md'],
+    artifactsCreated: ['candidate-repos.json', 'repo-analysis.md', 'gap-analysis.md', 'design-4plus1.md', 'implementation-plan.md', 'req-list.md', 'reqs.json'],
     memoryProposals: [],
     testsRun: [],
-    risks: ['Repository reads are mocked in PR-18 MVP.'],
-    nextActions: ['Review module improvement plan before development.'],
+    risks: [process.env.OMNI_REPO_PROVIDER === 'github' ? 'GitHub API availability and rate limits can affect repo research.' : 'Repo provider is mock unless OMNI_REPO_PROVIDER=github is configured.'],
+    nextActions: [`Review and confirm Req document ${reqDocument.id} before implementation.`],
   };
   await completeGoalRun({ goalId: goal.id, runId: input.runId, summary: `Generated module improvement artifacts for ${moduleName}.`, proofOfWork });
 
-  return { goal, candidateRepos, artifacts };
+  return { goal, candidateRepos, artifacts, reqDocumentId: reqDocument.id };
+}
+
+function isModulePlan(plan: unknown): plan is { moduleName: string } {
+  return Boolean(plan && typeof plan === 'object' && !Array.isArray(plan) && typeof (plan as { moduleName?: unknown }).moduleName === 'string');
 }
 
 function renderRepoAnalysis(repos: Awaited<ReturnType<typeof readCandidateRepo>>[]): string {
@@ -139,6 +186,7 @@ function renderDesign4Plus1(goal: Goal, gapAnalysis: string): string {
   ].join('\n');
 }
 
+
 function renderImplementationPlan(goal: Goal, recommendations: string[]): string {
   return [
     '# Implementation Plan',
@@ -149,5 +197,38 @@ function renderImplementationPlan(goal: Goal, recommendations: string[]): string
     ...recommendations.map(item => `- ${item}`),
     '- Convert approved recommendations into requirement-e2e tasks.',
     '',
+  ].join('\n');
+}
+
+function renderReqList(goal: Goal, runId: string, gapAnalysis: string, items: ReqItem[]): string {
+  return [
+    '# Req List',
+    '',
+    '## Source Goal',
+    `- Goal ID: ${goal.id}`,
+    `- Goal Run ID: ${runId}`,
+    `- Objective: ${goal.objective}`,
+    `- Scope: ${goal.scope.join(', ') || 'not specified'}`,
+    '',
+    '## Document Status',
+    'pending_user_confirmation',
+    '',
+    '## Req Items',
+    '',
+    ...items.flatMap(item => [
+      `### ${item.id}: ${item.title}`,
+      `- Status: ${item.status}`,
+      `- Problem: ${item.rationale || 'Gap identified during module improvement research.'}`,
+      `- Proposed Capability: ${item.title}`,
+      '- Acceptance Criteria:',
+      ...item.acceptanceCriteria.map(criterion => `  - ${criterion}`),
+      `- Priority: ${item.priority || 'normal'}`,
+      `- Risk: ${item.risk || 'medium'}`,
+      `- Related Files: ${item.scope || 'not specified'}`,
+      `- External Evidence: ${item.evidenceRefs.join(', ') || 'none'}`,
+      '',
+    ]),
+    '## Gap Analysis',
+    gapAnalysis,
   ].join('\n');
 }

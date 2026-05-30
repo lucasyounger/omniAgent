@@ -68,10 +68,10 @@ stable contract.
 - `tests/task-dispatcher.test.ts`
   - `schedule.create` persists cron jobs
   - schedule list/delete/pause/resume RuntimeTasks dispatch without approval
-  - direct-code `schedule.run_now` moves to `waiting_user_confirm`
+  - direct-code `schedule.run_now` dispatches in allowed workspaces without extra approval
   - `channel.message` dispatches channel responses
   - research daily digest queues notify delivery
-  - code tasks without approval move to `waiting_user_confirm`
+  - code tasks in allowed workspaces dispatch without extra approval
   - approved dry-run code tasks dispatch and become `succeeded`
 - `tests/approval-store.test.ts`
   - approved requests inject approval tokens and resume linked Runtime Tasks
@@ -83,8 +83,7 @@ stable contract.
   - schedule maintenance parsing for list/delete/pause/resume
 - `tests/tool-approval-policy.test.ts`
   - memory writes, schedule writes, and schedule deletes do not require approval
-  - non-code `run_now` does not require approval
-  - direct-code `run_now` requires Tool Gateway approval
+  - non-code and direct-code `run_now` do not require approval after the CodeAgent workspace boundary passes
 - `tests/requirement-e2e-artifacts.test.ts`
   - Requirement E2E artifact generation and manifest shape
 - `tests/evidence-store.test.ts`

@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildQQBotMessageRequest } from '../src/gateway/delivery';
+import { buildQQBotMessageRequest, sendOutbound } from '../src/gateway/delivery';
+import type { GatewayConfig } from '../src/gateway/config';
 import type { OutboundMessage } from '../src/gateway/types';
+
+function baseConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfig {
+  return {
+    port: 4120,
+    omniApiBaseUrl: 'http://localhost:4111/api',
+    deliveryPollMs: 2_000,
+    allowSenders: [],
+    ...overrides,
+  };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -63,5 +74,38 @@ describe('Gateway delivery', () => {
       msg_seq: 1,
     });
     expect(body).not.toHaveProperty('msg_id');
+  });
+
+  it('sends OneBot outbound messages when configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const message: OutboundMessage = {
+      target: {
+        channel: 'onebot',
+        accountId: 'default',
+        conversationId: '123',
+        senderId: '456',
+        messageType: 'group',
+      },
+      text: 'hello onebot',
+    };
+
+    await sendOutbound(message, baseConfig({ oneBotHttpUrl: 'http://127.0.0.1:5700' }));
+
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:5700/send_group_msg', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ group_id: 123, message: 'hello onebot' }),
+    }));
+  });
+
+  it('logs unsupported outbound channels through the existing fallback', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await sendOutbound({
+      target: { channel: 'desktop', accountId: 'local', conversationId: 'conv-1', messageType: 'dm' },
+      text: 'hello desktop',
+    }, baseConfig());
+
+    expect(log).toHaveBeenCalledWith('[gateway:desktop] -> conv-1: hello desktop');
   });
 });

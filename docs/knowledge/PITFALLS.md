@@ -27,7 +27,7 @@ debugging OmniAgent behavior.
 - Direct Node `spawn('claude')` can fail with `spawn claude ENOENT`.
 - `cmd.exe` shell invocation can truncate prompts containing spaces.
 - Current fix: call `powershell.exe`, read prompt from a temporary file, then run
-  `claude -p`.
+  the selected executor such as `cc --dangerously-skip-permissions -p`.
 
 ## Cron
 

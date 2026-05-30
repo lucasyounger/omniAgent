@@ -96,18 +96,83 @@ describe('PR pool worktree manager', () => {
     expect(execFile).not.toHaveBeenCalled();
   });
 
-  it('removes worktrees and deletes branches by default', async () => {
-    const { prPoolRuntime, cleanupWorktree } = await loadRuntime();
-    const { execFile } = await import('node:child_process');
+  it('prepares workspace metadata with policy scope and rollback hints', async () => {
+    const { prPoolRuntime, prepareWorkspaceForPrItem, getWorktreeBasePath } = await loadRuntime();
     const item = await prPoolRuntime.create({
-      title: 'Cleanup worktree item',
-      objective: 'Cleanup worktree',
+      title: 'Prepare workspace item',
+      objective: 'Prepare workspace metadata',
       workspaceRepoPath: tempRoot,
       impact: { modules: ['runtime'], risk: 'low' },
-      acceptanceCriteria: ['worktree removed'],
-      codeAgentPrompt: 'Implement cleanup item',
+      acceptanceCriteria: ['workspace prepared'],
+      codeAgentPrompt: 'Implement prepared workspace item',
+      workspacePolicy: {
+        editablePaths: ['src/**', 'tests/*.test.ts'],
+        forbiddenPaths: ['.env', 'secrets/**'],
+        allowCommit: true,
+        cleanup: 'delete_on_archive',
+      },
     });
-    const worktreePath = path.join(tempRoot, 'cleanup-worktree');
+
+    const prepared = await prepareWorkspaceForPrItem(item);
+
+    expect(prepared).toMatchObject({
+      prItemId: item.id,
+      repoPath: path.resolve(tempRoot),
+      workspacePath: path.join(getWorktreeBasePath(tempRoot), item.id),
+      branchName: `omni/${item.id}`,
+      editablePaths: ['src/**', 'tests/*.test.ts'],
+      forbiddenPaths: ['.env', 'secrets/**'],
+      cleanup: 'delete_on_archive',
+    });
+    expect(prepared.rollbackHints).toEqual(expect.arrayContaining([
+      expect.stringContaining(`Review changes in ${prepared.workspacePath}`),
+      expect.stringContaining(`Rollback by removing worktree ${prepared.workspacePath}`),
+      'Commits are allowed by policy; prefer a focused commit after verification passes.',
+      'Push is not allowed by this workspace policy.',
+    ]));
+  });
+
+  it('enforces prepared workspace editable and forbidden path policy', async () => {
+    const { prPoolRuntime, assertWorkspacePathAllowed } = await loadRuntime();
+    const item = await prPoolRuntime.create({
+      title: 'Path policy item',
+      objective: 'Enforce path policy',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['path policy enforced'],
+      codeAgentPrompt: 'Implement path policy item',
+      workspacePolicy: {
+        useWorktree: false,
+        editablePaths: ['src/**', 'tests/*.test.ts'],
+        forbiddenPaths: ['src/secrets/**', '.env'],
+      },
+    });
+
+    expect(assertWorkspacePathAllowed(item, 'src/mastra/runtime/pr-pool/worktree-manager.ts')).toBe(
+      path.join(tempRoot, 'src/mastra/runtime/pr-pool/worktree-manager.ts'),
+    );
+    expect(assertWorkspacePathAllowed(item, 'tests/pr-pool-worktree-manager.test.ts')).toBe(
+      path.join(tempRoot, 'tests/pr-pool-worktree-manager.test.ts'),
+    );
+    expect(() => assertWorkspacePathAllowed(item, '../outside.ts')).toThrow(/escapes prepared workspace/);
+    expect(() => assertWorkspacePathAllowed(item, 'src/secrets/token.ts')).toThrow(/forbidden/);
+    expect(() => assertWorkspacePathAllowed(item, 'docs/README.md')).toThrow(/outside editable policy scope/);
+  });
+
+  it('cleans prepared workspaces only when policy allows delete on archive', async () => {
+    const { prPoolRuntime, cleanupPreparedWorkspace } = await loadRuntime();
+    const { execFile } = await import('node:child_process');
+    vi.clearAllMocks();
+    const item = await prPoolRuntime.create({
+      title: 'Prepared cleanup item',
+      objective: 'Cleanup prepared workspace',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['cleanup guarded'],
+      codeAgentPrompt: 'Implement prepared cleanup item',
+      workspacePolicy: { cleanup: 'delete_on_archive' },
+    });
+    const worktreePath = path.join(tempRoot, 'prepared-cleanup-worktree');
     const updated = await prPoolRuntime.update(item.id, {
       workspace: {
         repoPath: tempRoot,
@@ -116,9 +181,10 @@ describe('PR pool worktree manager', () => {
       },
     });
 
-    await cleanupWorktree(updated);
-
+    await expect(cleanupPreparedWorkspace(updated)).resolves.toEqual({
+      cleaned: true,
+      reason: 'Managed worktree removed according to cleanup policy.',
+    });
     expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: path.resolve(tempRoot) }, expect.any(Function));
-    expect(execFile).toHaveBeenCalledWith('git', ['branch', '-d', `omni/${item.id}`], { cwd: path.resolve(tempRoot) }, expect.any(Function));
   });
 });

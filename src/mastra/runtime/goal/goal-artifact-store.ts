@@ -3,10 +3,17 @@ import path from 'node:path';
 import { getGoalRunDir } from './goal-run-store';
 import { resolveGoalWorkspacePath } from './goal-workspace';
 
+export type GoalRunPrCandidate = {
+  id: string;
+  status?: string;
+  title?: string;
+  commands: string[];
+};
+
 export type GoalRunOutput = {
   summary: string;
   artifacts: string[];
-  prCandidates?: string[];
+  prCandidates?: GoalRunPrCandidate[];
   nextActions: string[];
 };
 
@@ -41,7 +48,7 @@ function renderRunSummary(output: GoalRunOutput): string {
     ...output.artifacts.map(item => `- ${item}`),
     '',
     '## PR Candidates',
-    ...(output.prCandidates?.length ? output.prCandidates.map(item => `- ${item}`) : ['- None.']),
+    ...(output.prCandidates?.length ? output.prCandidates.map(item => `- ${item.id}${item.status ? ` (${item.status})` : ''}${item.title ? ` — ${item.title}` : ''}\n  - ${item.commands.join('\n  - ')}`) : ['- None.']),
     '',
     '## Next Actions',
     ...output.nextActions.map(item => `- ${item}`),

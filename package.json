@@ -11,6 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify:change-sync": "node scripts/verify-change-sync.mjs",
+    "prpool:ingest": "tsx scripts/pr-pool-ingest.ts",
     "index:code": "npx gitnexus analyze",
     "verify": "npm run typecheck && npm test && npm run verify:change-sync"
   },

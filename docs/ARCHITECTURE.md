@@ -21,7 +21,8 @@ OmniAgent is a local Mastra Agent Team with a durable coordination layer.
   `taskType`, with `targetAgentId` kept as the executor hint and compatibility
   field. It uses a short lease, a max-concurrency guard, and the same Tool
   Gateway approval boundary used by tools and workflows. The schedule handler
-  covers create/list/delete/pause/resume/run-now maintenance tasks.
+  covers create/list/delete/pause/resume/run-now maintenance tasks. Goal and Req
+  handlers cover durable goals plus pending requirement confirmation workflows.
 - **Runtime Orchestrator** (`src/mastra/runtime/orchestrator.ts`): converts
   channel natural language into structured runtime intents. The current
   deterministic parser covers one-time reminders, daily AI digests, immediate
@@ -58,7 +59,32 @@ used only by unregistered workflows:
   `topic-research-goal-workflow.ts` (both currently unregistered).
 - **PR Pool** (`src/mastra/runtime/pr-pool/`): patch-proposal pool management
   with `pr-pool-runtime.ts` and `pr-pool-store.ts`. Has registered task types
-  (`pr_pool.create/list/confirm/develop/archive/cron_scan`) but no agent card.
+  (`pr_pool.create/list/confirm/develop/archive/cron_scan/ingest_proposal`) but
+  no agent card. `pr_pool.ingest_proposal` is the unified confirmed-proposal
+  entrypoint for future Skill, CLI, and Goal flows: callers submit a normalized
+  `PRPoolProposal` to the Runtime ingest API rather than writing PR Pool storage
+  directly. The ingest path validates required fields, resolves confirmation
+  semantics (`required` -> `draft`, `confirmed` -> `ready`), stores canonical
+  proposal data on top-level PR item fields, keeps item `metadata` compact for
+  non-duplicated auxiliary fields, writes active item timestamps as human-facing
+  CST `YYYY-MM-DD HH:mm` strings, writes a concise active `brief.md` for AI
+  codegen, and never develops or creates a CodeAgent task. Goal-origin or unknown
+  proposals default to `required` so generated work waits for user confirmation.
+  Re-ingesting
+  an explicit `idempotencyKey` returns the existing item and records
+  `proposal_ingest_deduplicated`. The shared CLI entrypoint is
+  `npm run prpool:ingest -- --file <proposal.json|proposal.md>` and supports
+  `--dry-run` validation. Passing `--confirmed` marks the proposal as confirmed,
+  creates a `ready` item, and lets the PR Pool cron scan pick it up later; without
+  the flag, proposals follow their embedded confirmation/default rule. `pr_pool.develop`
+  creates the child CodeAgent RuntimeTask and dispatches it immediately, carrying
+  `executor` metadata for Claude Code, opencode, or custom CLI backends. Cron scans
+  reconcile active CodeTask results before and after scheduling so completed/failed
+  development runs are reflected back onto PR Pool items.
+- **Req Runtime** (`src/mastra/runtime/req/`): `.omni/reqs` requirement library
+  with path-safe document IDs, `reqs.json` index, per-document markdown/design
+  files, source metadata, and append-only status events for document and item
+  confirmation.
 - **Artifact Store** (`src/mastra/runtime/artifacts/`): generic artifact storage
   with versioning, wiki-diff generation, and markdown import/export.
 - **Connectors** (`src/mastra/runtime/connectors/`): external system connector

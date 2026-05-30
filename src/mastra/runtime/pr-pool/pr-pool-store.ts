@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { prPoolRoot } from '../../lib/paths';
+import { formatCstDateTime } from '../../../lib/time';
+import { prPoolRoot, prPoolRunsRoot } from '../../lib/paths';
 
 export type PRItemStatus =
   | 'draft'
@@ -21,6 +22,13 @@ export type PRItemImpact = {
   risk: 'low' | 'medium' | 'high';
 };
 
+export type PRItemReference = {
+  type: 'file' | 'goal_run' | 'artifact' | 'conversation' | 'external';
+  path?: string;
+  id?: string;
+  summary?: string;
+};
+
 export type PRItemApproval = {
   reviewApprovalId?: string;
   developApprovalId?: string;
@@ -35,9 +43,28 @@ export type PRItemApproval = {
 export type PRItemRun = {
   runtimeTaskId?: string;
   codeTaskId?: string;
+  reviseTaskId?: string;
+  previousCodeTaskId?: string;
   lastRunId?: string;
+  codeAgentBriefPath?: string;
   retryCount: number;
   maxRetries: number;
+  revisionCount?: number;
+  lastRevisionComment?: string;
+  lastFailureReason?: string;
+  lastDispatchedAt?: string;
+  lastCompletedAt?: string;
+};
+
+export type PRItemWorkspacePolicy = {
+  useWorktree: boolean;
+  editablePaths: string[];
+  forbiddenPaths: string[];
+  allowDependencyInstall: boolean;
+  allowNetwork: boolean;
+  allowCommit: boolean;
+  allowPush: boolean;
+  cleanup: 'keep' | 'delete_on_archive';
 };
 
 export type PRItemBlocking = {
@@ -66,7 +93,14 @@ export type PRItem = {
   impact: PRItemImpact;
   acceptanceCriteria: string[];
   testCommand?: string;
+  verificationPlan: string[];
+  docSyncRequirements: string[];
+  testSyncRequirements: string[];
+  workspacePolicy: PRItemWorkspacePolicy;
   codeAgentPrompt: string;
+  nonGoals: string[];
+  constraints: string[];
+  references: PRItemReference[];
   approval: PRItemApproval;
   run: PRItemRun;
   blocking?: PRItemBlocking;
@@ -118,7 +152,15 @@ export type CreatePRItemInput = {
   impact: PRItemImpact;
   acceptanceCriteria: string[];
   testCommand?: string;
+  verificationPlan?: string[];
+  docSyncRequirements?: string[];
+  testSyncRequirements?: string[];
+  workspacePolicy?: Partial<PRItemWorkspacePolicy>;
   codeAgentPrompt: string;
+  initialStatus?: Extract<PRItemStatus, 'draft' | 'ready'>;
+  nonGoals?: string[];
+  constraints?: string[];
+  references?: PRItemReference[];
   design4Plus1?: PRItem['design4Plus1'];
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -175,12 +217,12 @@ function createId(prefix: string): string {
 
 export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem> {
   const items = await readItems();
-  const now = new Date().toISOString();
+  const now = formatCstDateTime(new Date());
   const item: PRItem = {
     id: createId('pr'),
     title: input.title,
     objective: input.objective,
-    status: 'draft',
+    status: input.initialStatus || 'draft',
     priority: input.priority || 'normal',
     source: input.source || 'manual',
     goalId: input.goalId,
@@ -191,7 +233,14 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
     impact: input.impact,
     acceptanceCriteria: input.acceptanceCriteria,
     testCommand: input.testCommand,
+    verificationPlan: input.verificationPlan?.length ? input.verificationPlan : defaultVerificationPlan(input.testCommand),
+    docSyncRequirements: input.docSyncRequirements?.length ? input.docSyncRequirements : ['Update docs when behavior or contracts change.'],
+    testSyncRequirements: input.testSyncRequirements?.length ? input.testSyncRequirements : ['Add or update tests for behavior-changing code edits.'],
+    workspacePolicy: normalizeWorkspacePolicy(input.workspacePolicy),
     codeAgentPrompt: input.codeAgentPrompt,
+    nonGoals: input.nonGoals || [],
+    constraints: input.constraints || [],
+    references: input.references || [],
     approval: {},
     run: {
       retryCount: 0,
@@ -206,7 +255,12 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
   items.push(item);
   await writeItems(items);
   await appendPrPoolEvent({ prItemId: item.id, type: 'created', to: item.status });
+  await writePrItemBrief(item);
   return item;
+}
+
+export async function findPrPoolItemByIdempotencyKey(idempotencyKey: string): Promise<PRItem | undefined> {
+  return (await readItems()).find(item => item.metadata.idempotencyKey === idempotencyKey);
 }
 
 export async function getPrPoolItem(id: string): Promise<PRItem | undefined> {
@@ -238,7 +292,7 @@ export async function updatePrPoolItem(id: string, patch: Partial<PRItem>): Prom
     ...patch,
     id: items[index].id,
     createdAt: items[index].createdAt,
-    updatedAt: new Date().toISOString(),
+    updatedAt: formatCstDateTime(new Date()),
   };
   items[index] = updated;
   await writeItems(items);
@@ -281,14 +335,17 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
     },
     codeTaskId: item.run.codeTaskId || '',
     codeRunSummary: buildCodeRunSummary(item),
-    artifacts: ['item.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-run-summary.md', 'final-summary.md'],
+    artifacts: ['item.json', 'brief.md', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md', 'archive-entry.json', 'references.json'],
     archivedAt,
     archiveReason: reason,
   };
   await fs.writeFile(path.join(archiveDir, 'item.json'), JSON.stringify(item, null, 2), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'brief.md'), buildPrItemBriefMarkdown(item), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'references.json'), JSON.stringify(item.references, null, 2), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'objective.md'), buildObjectiveMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'context-brief.md'), buildContextBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'design-4plus1.md'), buildDesignMarkdown(archiveEntry.design4Plus1), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'code-agent-pr-brief.md'), buildCodeAgentPrBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'code-run-summary.md'), archiveEntry.codeRunSummary, 'utf8');
   await fs.writeFile(path.join(archiveDir, 'final-summary.md'), buildFinalSummaryMarkdown(item, archiveEntry), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'archive-entry.json'), JSON.stringify(archiveEntry, null, 2), 'utf8');
@@ -297,6 +354,153 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
   return archiveEntry;
 }
 
+export async function writeCodeAgentPrBrief(item: PRItem): Promise<string> {
+  const runDir = path.join(prPoolRunsRoot, item.id);
+  await fs.mkdir(runDir, { recursive: true });
+  const briefPath = path.join(runDir, 'code-agent-pr-brief.md');
+  await fs.writeFile(briefPath, buildCodeAgentPrBriefMarkdown(item), 'utf8');
+  return briefPath;
+}
+
+export async function writePrItemBrief(item: PRItem): Promise<string> {
+  const itemDir = path.join(activeRoot, item.id);
+  await fs.mkdir(itemDir, { recursive: true });
+  const briefPath = path.join(itemDir, 'brief.md');
+  await fs.writeFile(briefPath, buildPrItemBriefMarkdown(item), 'utf8');
+  return briefPath;
+}
+
+export function buildPrItemBriefMarkdown(item: PRItem): string {
+  const workspacePath = item.workspace.worktreePath || item.workspace.repoPath;
+  const verificationPlan = prItemVerificationPlan(item);
+  const docSyncRequirements = prItemDocSyncRequirements(item);
+  const testSyncRequirements = prItemTestSyncRequirements(item);
+  const workspacePolicy = prItemWorkspacePolicy(item);
+  return [
+    '# PR Pool Requirement Brief',
+    '',
+    '## PR Identity',
+    '',
+    `- PR Item: ${item.id}`,
+    `- Title: ${item.title}`,
+    `- Status: ${item.status}`,
+    `- Priority: ${item.priority}`,
+    `- Source: ${item.source}`,
+    item.goalId ? `- Goal ID: ${item.goalId}` : undefined,
+    item.proposalId ? `- Proposal ID: ${item.proposalId}` : undefined,
+    item.designArtifactId ? `- Design Artifact ID: ${item.designArtifactId}` : undefined,
+    `- Workspace: ${workspacePath}`,
+    item.workspace.branchName ? `- Branch: ${item.workspace.branchName}` : undefined,
+    '',
+    '## Objective',
+    '',
+    item.objective,
+    '',
+    '## Non-goals',
+    '',
+    ...(item.nonGoals.length ? item.nonGoals.map(nonGoal => `- ${nonGoal}`) : ['- n/a']),
+    '',
+    '## Constraints',
+    '',
+    ...(item.constraints.length ? item.constraints.map(constraint => `- ${constraint}`) : ['- n/a']),
+    '',
+    '## Implementation Prompt',
+    '',
+    item.codeAgentPrompt,
+    '',
+    '## Scope And Impact',
+    '',
+    `- Risk: ${item.impact.risk}`,
+    `- Modules: ${item.impact.modules.join(', ') || 'n/a'}`,
+    item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
+    item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    '',
+    '## Acceptance Criteria',
+    '',
+    ...item.acceptanceCriteria.map(criterion => `- ${criterion}`),
+    '',
+    '## Verification Plan',
+    '',
+    ...verificationPlan.map(step => `- ${step}`),
+    '',
+    '## Docs Sync Requirements',
+    '',
+    ...docSyncRequirements.map(requirement => `- ${requirement}`),
+    '',
+    '## Test Sync Requirements',
+    '',
+    ...testSyncRequirements.map(requirement => `- ${requirement}`),
+    '',
+    '## Workspace Policy',
+    '',
+    `- Use Worktree: ${workspacePolicy.useWorktree ? 'yes' : 'no'}`,
+    `- Editable Paths: ${workspacePolicy.editablePaths.join(', ') || 'repo root'}`,
+    `- Forbidden Paths: ${workspacePolicy.forbiddenPaths.join(', ') || 'n/a'}`,
+    `- Allow Dependency Install: ${workspacePolicy.allowDependencyInstall ? 'yes' : 'no'}`,
+    `- Allow Network: ${workspacePolicy.allowNetwork ? 'yes' : 'no'}`,
+    `- Allow Commit: ${workspacePolicy.allowCommit ? 'yes' : 'no'}`,
+    `- Allow Push: ${workspacePolicy.allowPush ? 'yes' : 'no'}`,
+    `- Cleanup: ${workspacePolicy.cleanup}`,
+    '',
+    '## Verification',
+    '',
+    item.testCommand ? `Run: \`${item.testCommand}\`` : 'No explicit test command was provided. Select the smallest relevant test set and report it.',
+    '',
+    '## Stop Conditions',
+    '',
+    '- Stop if requirements or implementation boundaries are unclear.',
+    '- Stop if impact analysis reveals unapproved high-risk changes.',
+    '- Do not mark the PR item completed unless acceptance criteria and verification evidence are satisfied.',
+    '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
+    '',
+    '## References',
+    '',
+    ...(item.references.length ? item.references.map(formatReference) : ['- n/a']),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
+
+export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
+  const design = item.design4Plus1;
+  return [
+    '# CodeAgent PR Brief',
+    '',
+    buildPrItemBriefMarkdown(item),
+    '',
+    '## Execution Backend',
+    '',
+    '- Executor: resolved at dispatch time (`claude_code`, `opencode`, `codex`, or `custom`)',
+    '- Command: resolved at dispatch time from explicit payload or executor defaults',
+    item.run.codeAgentBriefPath ? `- Brief Path: ${item.run.codeAgentBriefPath}` : undefined,
+    item.run.codeTaskId ? `- Current Code Task: ${item.run.codeTaskId}` : undefined,
+    '',
+    '## Retry Context',
+    '',
+    `- Retry Count: ${item.run.retryCount}/${item.run.maxRetries}`,
+    `- Previous Code Task: ${item.run.previousCodeTaskId || 'n/a'}`,
+    `- Last Failure Reason: ${item.run.lastFailureReason || item.blocking?.reason || 'n/a'}`,
+    '',
+    '## Design Summary',
+    '',
+    '### Logical View',
+    design?.logical || 'n/a',
+    '',
+    '### Process View',
+    design?.process || 'n/a',
+    '',
+    '### Development View',
+    design?.development || 'n/a',
+    '',
+    '### Physical View',
+    design?.physical || 'n/a',
+    '',
+    '### Scenarios',
+    ...(design?.scenarios.length ? design.scenarios.map(scenario => `- ${scenario}`) : ['- n/a']),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
 export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
   await ensureStore();
   const entries = await fs.readdir(archiveRoot, { withFileTypes: true });
@@ -328,6 +532,9 @@ function buildObjectiveMarkdown(item: PRItem): string {
 }
 
 function buildContextBriefMarkdown(item: PRItem): string {
+  const verificationPlan = prItemVerificationPlan(item);
+  const docSyncRequirements = prItemDocSyncRequirements(item);
+  const testSyncRequirements = prItemTestSyncRequirements(item);
   return [
     `# Context Brief`,
     '',
@@ -337,9 +544,60 @@ function buildContextBriefMarkdown(item: PRItem): string {
     `- Modules: ${item.impact.modules.join(', ')}`,
     item.impact.files?.length ? `- Files: ${item.impact.files.join(', ')}` : undefined,
     item.dependencies.length ? `- Dependencies: ${item.dependencies.join(', ')}` : undefined,
+    item.nonGoals.length ? `- Non-goals: ${item.nonGoals.join('; ')}` : undefined,
+    item.constraints.length ? `- Constraints: ${item.constraints.join('; ')}` : undefined,
+    verificationPlan.length ? `- Verification Plan: ${verificationPlan.join('; ')}` : undefined,
+    docSyncRequirements.length ? `- Docs Sync: ${docSyncRequirements.join('; ')}` : undefined,
+    testSyncRequirements.length ? `- Tests Sync: ${testSyncRequirements.join('; ')}` : undefined,
+    item.references.length ? `- References: ${item.references.map(reference => reference.summary || reference.path || reference.id || reference.type).join('; ')}` : undefined,
   ]
     .filter((line): line is string => Boolean(line))
     .join('\n');
+}
+
+function formatReference(reference: PRItemReference): string {
+  const parts = [
+    `type=${reference.type}`,
+    reference.path ? `path=${reference.path}` : undefined,
+    reference.id ? `id=${reference.id}` : undefined,
+    reference.summary ? `summary=${reference.summary}` : undefined,
+  ].filter(Boolean);
+  return `- ${parts.join('; ')}`;
+}
+
+function defaultVerificationPlan(testCommand?: string): string[] {
+  return testCommand
+    ? [`Run \`${testCommand}\` and capture the result.`]
+    : ['Run the smallest relevant scoped verification and capture the result.'];
+}
+
+function prItemVerificationPlan(item: PRItem): string[] {
+  return item.verificationPlan?.length ? item.verificationPlan : defaultVerificationPlan(item.testCommand);
+}
+
+function prItemDocSyncRequirements(item: PRItem): string[] {
+  return item.docSyncRequirements?.length ? item.docSyncRequirements : ['Update docs when behavior or contracts change.'];
+}
+
+function prItemTestSyncRequirements(item: PRItem): string[] {
+  return item.testSyncRequirements?.length ? item.testSyncRequirements : ['Add or update tests for behavior-changing code edits.'];
+}
+
+function prItemWorkspacePolicy(item: PRItem): PRItemWorkspacePolicy {
+  return normalizeWorkspacePolicy(item.workspacePolicy);
+}
+
+function normalizeWorkspacePolicy(policy?: Partial<PRItemWorkspacePolicy>): PRItemWorkspacePolicy {
+  return {
+    useWorktree: policy?.useWorktree ?? true,
+    editablePaths: policy?.editablePaths || [],
+    forbiddenPaths: policy?.forbiddenPaths || ['.git/**', '.env', '.env.*'],
+    allowDependencyInstall: policy?.allowDependencyInstall ?? false,
+    allowNetwork: policy?.allowNetwork ?? false,
+    allowCommit: policy?.allowCommit ?? false,
+    allowPush: policy?.allowPush ?? false,
+    cleanup: policy?.cleanup || 'keep',
+  };
 }
 
 function buildDesignMarkdown(design: NonNullable<PRItem['design4Plus1']>): string {
@@ -381,7 +639,7 @@ export async function appendPrPoolEvent(event: Omit<PRPoolEvent, 'id' | 'timesta
   const saved: PRPoolEvent = {
     ...event,
     id: createId('pr-event'),
-    timestamp: new Date().toISOString(),
+    timestamp: formatCstDateTime(new Date()),
   };
   await fs.appendFile(eventsFile, `${JSON.stringify(saved)}\n`, 'utf8');
   return saved;

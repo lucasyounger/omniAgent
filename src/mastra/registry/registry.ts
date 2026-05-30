@@ -14,7 +14,7 @@ const agentRegistry: RegistryEntry[] = [
     id: 'code-agent',
     kind: 'agent',
     name: 'CodeAgent',
-    description: 'Executes local coding work through the code task workflow.',
+    description: 'Executes local coding work through the code task workflow and records user-confirmed PR Pool proposals as ready items.',
     capabilities: ['code_task', 'repository_editing'],
     entrypoint: 'src/mastra/agents/code-agent.ts#codeAgent',
     tags: ['coding'],
@@ -36,6 +36,54 @@ const agentRegistry: RegistryEntry[] = [
     capabilities: ['memory_read', 'memory_write', 'knowledge_maintenance'],
     entrypoint: 'src/mastra/agents/knowledge-agent.ts#knowledgeAgent',
     tags: ['memory', 'knowledge'],
+  },
+];
+
+const runtimeServiceRegistry: RegistryEntry[] = [
+  {
+    id: 'research-agent',
+    kind: 'runtime_service',
+    name: 'Research Runtime Service',
+    description: 'Executes research RuntimeTasks through registered workflows such as the AI daily digest workflow.',
+    capabilities: ['research_digest', 'report_generation'],
+    entrypoint: 'src/mastra/runtime/task-dispatcher.ts#dispatchResearchAiDailyDigestTask',
+    tags: ['research', 'runtime-task'],
+  },
+  {
+    id: 'notify-agent',
+    kind: 'runtime_service',
+    name: 'Notify Runtime Service',
+    description: 'Queues outbound Gateway notifications through notify RuntimeTask handlers and delivery tools.',
+    capabilities: ['notification_delivery', 'gateway_delivery'],
+    entrypoint: 'src/mastra/runtime/task-dispatcher.ts#dispatchNotifySendChannelMessageTask',
+    tags: ['notify', 'gateway', 'runtime-task'],
+  },
+  {
+    id: 'goal-runtime',
+    kind: 'runtime_service',
+    name: 'Goal Runtime Service',
+    description: 'Handles durable Goal create/list/status/run/feedback RuntimeTasks through GoalService and Goal workflows.',
+    capabilities: ['goal_management', 'goal_execution', 'goal_feedback'],
+    entrypoint: 'src/mastra/runtime/task-dispatcher.ts#dispatchGoalTask',
+    tags: ['goal', 'runtime-task'],
+  },
+  {
+    id: 'req-runtime',
+    kind: 'runtime_service',
+    name: 'Req Runtime Service',
+    description: 'Handles Req library RuntimeTasks through Mastra Req tools while preserving Team Runtime lifecycle records.',
+    capabilities: ['requirement_management', 'req_import'],
+    entrypoint: 'src/mastra/runtime/task-dispatcher.ts#dispatchReqTask',
+    tags: ['req', 'runtime-task'],
+  },
+  {
+    id: 'pr-pool-runtime',
+    kind: 'runtime_service',
+    name: 'PR Pool Runtime Service',
+    description: 'Handles PR Pool proposal, confirmation, develop, archive, and cron-scan RuntimeTasks.',
+    capabilities: ['pr_management', 'code_handoff'],
+    entrypoint: 'src/mastra/runtime/pr-pool/pr-pool-dispatcher.ts#dispatchPrPoolTask',
+    tags: ['pr-pool', 'runtime-task'],
   },
 ];
 
@@ -90,7 +138,8 @@ const workflowRegistry: RegistryEntry[] = [
 export function listRegistryEntries(kind?: RegistryEntryKind): RegistryEntry[] {
   if (kind === 'agent') return [...agentRegistry];
   if (kind === 'workflow') return [...workflowRegistry];
-  return [...agentRegistry, ...workflowRegistry];
+  if (kind === 'runtime_service') return [...runtimeServiceRegistry];
+  return [...agentRegistry, ...workflowRegistry, ...runtimeServiceRegistry];
 }
 
 export function getRegistryEntry(id: string): RegistryEntry | undefined {
@@ -117,5 +166,6 @@ export function getRegistryCatalog(): RegistryCatalog {
   return {
     agents: listRegistryEntries('agent'),
     workflows: listRegistryEntries('workflow'),
+    runtimeServices: listRegistryEntries('runtime_service'),
   };
 }

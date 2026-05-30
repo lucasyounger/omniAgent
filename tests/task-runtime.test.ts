@@ -279,6 +279,54 @@ describe('Task Runtime', () => {
     );
   });
 
+
+  it('sends low-noise runtime notifications and prevents notify recursion', async () => {
+    const { taskRuntime } = await loadTaskRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const notifyTarget = { channel: 'http', accountId: 'local', conversationId: 'conv-1', senderId: 'user-1', messageType: 'dm' as const };
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'notify failures',
+      metadata: { notifyTarget },
+    });
+
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'running' });
+    await expect(listDeliveries()).resolves.toHaveLength(0);
+
+    await taskRuntime.transition({ taskId: task.id, nextStatus: 'failed', reason: 'boom' });
+    const deliveries = await listDeliveries();
+    const tasks = await taskRuntime.listTasks();
+
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({ text: expect.stringContaining('任务失败'), taskId: task.id });
+    expect(tasks.filter(item => item.metadata?.taskType === 'notify.send_channel_message')).toHaveLength(1);
+  });
+
+  it('only sends succeeded runtime notifications when opted in', async () => {
+    const { taskRuntime } = await loadTaskRuntime();
+    const { listDeliveries } = await import('../src/gateway/gateway-store');
+    const notifyTarget = { channel: 'http', accountId: 'local', conversationId: 'conv-1', senderId: 'user-1', messageType: 'dm' as const };
+    const defaultTask = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'default success',
+      metadata: { notifyTarget },
+    });
+    await taskRuntime.transition({ taskId: defaultTask.id, nextStatus: 'running' });
+    await taskRuntime.transition({ taskId: defaultTask.id, nextStatus: 'succeeded' });
+    await expect(listDeliveries()).resolves.toHaveLength(0);
+
+    const optInTask = await taskRuntime.createTask({
+      sourceAgentId: 'omni-router-agent',
+      targetAgentId: 'code-agent',
+      objective: 'opt in success',
+      metadata: { notifyTarget, notifyOnRuntimeStatus: ['succeeded'] },
+    });
+    await taskRuntime.transition({ taskId: optInTask.id, nextStatus: 'running' });
+    await taskRuntime.transition({ taskId: optInTask.id, nextStatus: 'succeeded' });
+    await expect(listDeliveries()).resolves.toEqual([expect.objectContaining({ text: expect.stringContaining('任务完成'), taskId: optInTask.id })]);
+  });
   it('migrates legacy TeamTask runtime metadata on read', async () => {
     const { taskRuntime, getRuntimeTaskRecord } = await loadTaskRuntime();
     const { createTeamTask, setTeamTaskRuntimeStatus } = await import('../src/mastra/lib/team-runtime-store');

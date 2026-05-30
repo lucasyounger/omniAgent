@@ -48,6 +48,19 @@ export async function readGoalRun(goalId: string, runId: string): Promise<GoalRu
   }
 }
 
+export async function listGoalRuns(goalId: string): Promise<GoalRun[]> {
+  const workspace = await ensureGoalWorkspace(goalId);
+
+  try {
+    const entries = await fs.readdir(workspace.runsDir, { withFileTypes: true });
+    const runs = await Promise.all(entries.filter(entry => entry.isDirectory()).map(entry => readGoalRun(goalId, entry.name)));
+    return runs.filter((run): run is GoalRun => Boolean(run)).sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 export async function updateGoalRunStatus(goalId: string, runId: string, status: GoalRunStatus): Promise<GoalRun> {
   const run = await requireGoalRun(goalId, runId);
   const updated: GoalRun = { ...run, status };
@@ -84,6 +97,15 @@ export async function failGoalRun(input: FailGoalRunInput): Promise<GoalRun> {
   };
   await writeGoalRun(updated);
   await appendGoalRunEvent(input.goalId, input.runId, 'goal_run.failed', { failureReason: input.failureReason });
+  return updated;
+}
+
+export async function linkGoalRunPrItem(goalId: string, runId: string, prItemId: string): Promise<GoalRun> {
+  const run = await requireGoalRun(goalId, runId);
+  const prItemIds = Array.from(new Set([...(run.prItemIds || []), prItemId]));
+  const updated: GoalRun = { ...run, prItemIds };
+  await writeGoalRun(updated);
+  await appendGoalRunEvent(goalId, runId, 'goal_run.pr_item_linked', { prItemId });
   return updated;
 }
 

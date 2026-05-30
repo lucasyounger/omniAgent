@@ -1,5 +1,4 @@
-import { taskRuntime } from '../task-runtime';
-import { runtimeTaskTypes } from '../task-types';
+import { queueRuntimeNotification } from '../notification-dispatch';
 import type { PRItem } from './pr-pool-store';
 import type { ChannelTarget } from '../../../gateway/types';
 
@@ -20,17 +19,10 @@ export function buildPrItemBlockedNotification(item: PRItem): string {
 }
 
 export async function sendPrPoolNotification(content: string, target?: ChannelTarget): Promise<void> {
-  if (!target) return;
-  await taskRuntime.createTask({
+  await queueRuntimeNotification({
+    event: 'pr_pool.notification',
+    target,
+    text: content,
     sourceAgentId: 'pr-pool-runtime',
-    targetAgentId: 'notify-agent',
-    objective: content,
-    metadata: {
-      taskType: runtimeTaskTypes.notifySendChannelMessage,
-      payload: {
-        text: content,
-        target,
-      },
-    },
   });
 }

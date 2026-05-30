@@ -1,0 +1,329 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { listFeedbackEvents, recordRawFeedback } from '../feedback';
+import { taskRuntime } from '../task-runtime';
+import { runtimeTaskTypes } from '../task-types';
+import { createGoal, readGoal, updateGoal, updateGoalStatus } from './goal-store';
+import { createGoalRun, linkGoalRunPrItem, listGoalRuns, updateGoalRunStatus } from './goal-run-store';
+import { prPoolRuntime } from '../pr-pool/pr-pool-runtime';
+import type { PRPoolProposal } from '../pr-pool/pr-pool-proposal';
+import { goalsRoot } from './goal-workspace';
+import type { CreateGoalInput, Goal, GoalStatus, GoalType } from './goal.schema';
+import type { GoalRun } from './goal-run.schema';
+
+export type GoalCreateServiceInput = Omit<CreateGoalInput, 'id'> & {
+  id?: string;
+  idempotencyKey?: string;
+  actorId?: string;
+  channelId?: string;
+  autoRun?: boolean;
+};
+
+export type GoalListFilters = {
+  status?: GoalStatus;
+  type?: GoalType;
+  tag?: string;
+};
+
+export type GoalStatusSummary = {
+  goal: Goal;
+  latestRun?: GoalRun;
+  feedbackCount: number;
+  prItems: Array<{
+    id: string;
+    status: string;
+    title: string;
+    nextCommands: string[];
+  }>;
+};
+
+export type GoalFeedbackAction = 'note' | 'pause' | 'resume' | 'cancel_run' | 'deep_dive' | 'change_priority';
+
+export type GoalFeedbackInput = {
+  goalId: string;
+  runId?: string;
+  action?: GoalFeedbackAction;
+  text: string;
+  channel?: 'qq' | 'feishu' | 'cli' | 'web';
+  priority?: Goal['priority'];
+  proposal?: PRPoolProposal;
+};
+
+export type GoalServiceCreateResult = {
+  goal: Goal;
+  created: boolean;
+  run?: GoalRun;
+};
+
+export type GoalScanDueInput = {
+  goalType?: GoalType;
+  now?: Date;
+  timezone?: string;
+  scheduleWindow?: string;
+};
+
+export type GoalScanDueResult = {
+  scanned: number;
+  enqueued: GoalRun[];
+  skipped: Array<{ goalId: string; reason: string }>;
+};
+
+export async function createGoalService(input: GoalCreateServiceInput): Promise<GoalServiceCreateResult> {
+  const idempotencyKey = cleanString(input.idempotencyKey);
+  if (idempotencyKey) {
+    const existingGoalId = await readIdempotencyGoalId(idempotencyKey);
+    if (existingGoalId) {
+      const existing = await readGoal(existingGoalId);
+      if (existing) {
+        return { goal: existing, created: false };
+      }
+    }
+  }
+
+  const goalId = input.id || createGoalId(input.title);
+  const goal = await createGoal({
+    id: goalId,
+    type: input.type,
+    title: input.title,
+    objective: input.objective,
+    scope: input.scope,
+    status: input.status,
+    cadence: input.cadence,
+    sources: input.sources,
+    artifactPolicy: input.artifactPolicy,
+    feedbackPolicy: input.feedbackPolicy,
+    tags: input.tags,
+    priority: input.priority,
+  });
+
+  if (idempotencyKey) {
+    await writeIdempotencyGoalId(idempotencyKey, goal.id);
+  }
+
+  const run = input.autoRun ? await enqueueGoalRun(goal.id) : undefined;
+  return { goal, created: true, run };
+}
+
+export async function listGoals(filters: GoalListFilters = {}): Promise<Goal[]> {
+  await fs.mkdir(goalsRoot, { recursive: true });
+  const entries = await fs.readdir(goalsRoot, { withFileTypes: true });
+  const goals: Goal[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const goal = await readGoal(entry.name);
+    if (goal) goals.push(goal);
+  }
+
+  return goals
+    .filter(goal => !filters.status || goal.status === filters.status)
+    .filter(goal => !filters.type || goal.type === filters.type)
+    .filter(goal => !filters.tag || (goal.tags || []).includes(filters.tag))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function getGoalStatus(goalId: string): Promise<GoalStatusSummary> {
+  const goal = await readGoal(goalId);
+  if (!goal) throw new Error(`Goal not found: ${goalId}`);
+  const runs = await listGoalRuns(goalId);
+  const feedback = await listFeedbackEvents(goalId);
+  const runPrItemIds = runs.flatMap(run => run.prItemIds || []);
+  const goalPrItems = await prPoolRuntime.list({ goalId });
+  const prItemsById = new Map(goalPrItems.map(item => [item.id, item]));
+  for (const prItemId of runPrItemIds) {
+    if (!prItemsById.has(prItemId)) {
+      const item = await prPoolRuntime.get(prItemId);
+      if (item) prItemsById.set(item.id, item);
+    }
+  }
+  const prItems = [...prItemsById.values()]
+    .filter(item => item.status === 'draft' || item.status === 'ready')
+    .map(item => ({
+      id: item.id,
+      status: item.status,
+      title: item.title,
+      nextCommands: buildPrItemNextCommands(item.id, item.status),
+    }));
+  return {
+    goal,
+    latestRun: runs.at(-1),
+    feedbackCount: feedback.length,
+    prItems,
+  };
+}
+
+export async function enqueueGoalRun(goalId: string, input: { runId?: string; plan?: unknown } = {}): Promise<GoalRun> {
+  const goal = await readGoal(goalId);
+  if (!goal) throw new Error(`Goal not found: ${goalId}`);
+  const run = await createGoalRun({
+    goalId,
+    id: input.runId || createRunId(),
+    status: 'pending',
+    plan: input.plan,
+  });
+  await updateGoalStatus(goalId, 'active');
+  await taskRuntime.createTask({
+    sourceAgentId: 'goal-runtime',
+    targetAgentId: 'goal-runtime',
+    objective: `Run goal: ${goal.title}`,
+    requestedBy: `goal:${goalId}`,
+    metadata: {
+      taskType: runtimeTaskTypes.goalRun,
+      payload: {
+        goalId,
+        runId: run.id,
+      },
+    },
+  });
+  return run;
+}
+
+export async function applyGoalFeedback(input: GoalFeedbackInput) {
+  const action = input.action || inferFeedbackAction(input.text);
+  const event = await recordRawFeedback({
+    goalId: input.goalId,
+    runId: input.runId,
+    channel: input.channel || 'cli',
+    rawMessage: input.text,
+  });
+
+  let goal = await readGoal(input.goalId);
+  if (!goal) throw new Error(`Goal not found: ${input.goalId}`);
+  let run: GoalRun | undefined;
+
+  if (action === 'pause') {
+    goal = await updateGoalStatus(input.goalId, 'paused');
+  } else if (action === 'resume') {
+    goal = await updateGoalStatus(input.goalId, 'active');
+  } else if (action === 'cancel_run') {
+    run = input.runId ? undefined : (await listGoalRuns(input.goalId)).at(-1);
+    const runId = input.runId || run?.id;
+    if (runId) run = await updateGoalRunStatus(input.goalId, runId, 'cancelled');
+  } else if (action === 'change_priority' && input.priority) {
+    goal = await updateGoal(input.goalId, { priority: input.priority });
+  }
+
+  let prItem;
+  if (input.proposal) {
+    prItem = await prPoolRuntime.ingestProposal(
+      {
+        ...input.proposal,
+        source: 'goal_driven',
+        origin: {
+          ...input.proposal.origin,
+          type: 'goal',
+          goalId: input.goalId,
+          runId: input.runId,
+        },
+        metadata: {
+          ...input.proposal.metadata,
+          goalId: input.goalId,
+          runId: input.runId,
+        },
+      },
+      process.env.OMNI_PROJECT_ROOT || process.cwd(),
+    );
+    if (input.runId) await linkGoalRunPrItem(input.goalId, input.runId, prItem.id);
+  }
+
+  return { goal, event, action, run, prItem };
+}
+
+export async function scanDueGoals(input: GoalScanDueInput = {}): Promise<GoalScanDueResult> {
+  const now = input.now || new Date();
+  const today = formatDay(now, input.timezone);
+  const goals = await listGoals({ status: 'active', type: input.goalType || 'module_improvement' });
+  const enqueued: GoalRun[] = [];
+  const skipped: GoalScanDueResult['skipped'] = [];
+
+  for (const goal of goals) {
+    const runs = await listGoalRuns(goal.id);
+    if (runs.some(run => ['running', 'succeeded'].includes(run.status) && run.startedAt && formatDay(new Date(run.startedAt), input.timezone) === today)) {
+      skipped.push({ goalId: goal.id, reason: 'already running or succeeded today' });
+      continue;
+    }
+    if (!isGoalDue(goal, runs, now)) {
+      skipped.push({ goalId: goal.id, reason: 'not due' });
+      continue;
+    }
+    enqueued.push(await enqueueGoalRun(goal.id, { plan: { source: 'goal.cron_scan', scheduleWindow: input.scheduleWindow, timezone: input.timezone || 'local' } }));
+  }
+
+  return { scanned: goals.length, enqueued, skipped };
+}
+
+function buildPrItemNextCommands(id: string, status: string): string[] {
+  const commands = [`/pr show ${id}`, `/pr delete ${id}`, `/pr revise ${id} <comment>`];
+  if (status === 'draft') commands.splice(1, 0, `/pr confirm ${id}`);
+  return commands;
+}
+
+function isGoalDue(goal: Goal, runs: GoalRun[], now: Date): boolean {
+  if (!goal.cadence) return true;
+  const cadence = goal.cadence.toLowerCase();
+  const latest = runs.at(-1);
+  if (!latest?.startedAt) return true;
+  const elapsedMs = now.getTime() - new Date(latest.startedAt).getTime();
+  if (cadence.includes('weekly') || cadence.includes('每周')) return elapsedMs >= 7 * 24 * 60 * 60 * 1000;
+  if (cadence.includes('monthly') || cadence.includes('每月')) return elapsedMs >= 28 * 24 * 60 * 60 * 1000;
+  return elapsedMs >= 24 * 60 * 60 * 1000;
+}
+
+function formatDay(date: Date, timezone?: string): string {
+  if (!timezone || timezone === 'local') return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+function createGoalId(title: string) {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'goal';
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+function createRunId() {
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function inferFeedbackAction(text: string): GoalFeedbackAction {
+  const normalized = text.toLowerCase();
+  if (normalized.includes('pause') || normalized.includes('暂停')) return 'pause';
+  if (normalized.includes('resume') || normalized.includes('恢复') || normalized.includes('继续')) return 'resume';
+  if (normalized.includes('cancel') || normalized.includes('取消运行')) return 'cancel_run';
+  if (normalized.includes('priority') || normalized.includes('优先级')) return 'change_priority';
+  if (normalized.includes('deep') || normalized.includes('深入') || normalized.includes('重点分析')) return 'deep_dive';
+  return 'note';
+}
+
+async function readIdempotencyGoalId(key: string): Promise<string | undefined> {
+  try {
+    const raw = await fs.readFile(idempotencyPath(), 'utf8');
+    const index = JSON.parse(raw) as Record<string, string>;
+    return index[key];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function writeIdempotencyGoalId(key: string, goalId: string): Promise<void> {
+  await fs.mkdir(goalsRoot, { recursive: true });
+  let index: Record<string, string> = {};
+  try {
+    index = JSON.parse(await fs.readFile(idempotencyPath(), 'utf8')) as Record<string, string>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  index[key] = goalId;
+  await fs.writeFile(idempotencyPath(), `${JSON.stringify(index, null, 2)}\n`, 'utf8');
+}
+
+function idempotencyPath() {
+  return path.join(goalsRoot, 'idempotency.json');
+}
+
+function cleanString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}

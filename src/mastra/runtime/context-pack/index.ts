@@ -24,10 +24,22 @@ export type {
   ToolOutputCompressionResult,
   TestLogSummary,
 } from './context-juice';
-export { loadContextPack, writeContextPack } from './context-pack-loader';
+export { loadContextPack, loadContextSnapshot, writeContextPack, writeContextSnapshot } from './context-pack-loader';
 export {
+  codeImpactContextBlockSchema,
+  contextRefSchema,
   contextPackDocumentRefSchema,
   contextPackSchema,
+  contextSnapshotSchema,
   contextPackTaskTypeSchema,
+  memoryContextBlockSchema,
 } from './context-pack.schema';
-export type { ContextPack, ContextPackDocumentRef, ContextPackTaskType } from './context-pack.schema';
+export type {
+  CodeImpactContextBlock,
+  ContextPack,
+  ContextPackDocumentRef,
+  ContextPackTaskType,
+  ContextRef,
+  ContextSnapshot,
+  MemoryContextBlock,
+} from './context-pack.schema';
