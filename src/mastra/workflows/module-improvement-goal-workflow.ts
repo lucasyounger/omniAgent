@@ -154,6 +154,10 @@ function isModulePlan(plan: unknown): plan is { moduleName: string } {
   return Boolean(plan && typeof plan === 'object' && !Array.isArray(plan) && typeof (plan as { moduleName?: unknown }).moduleName === 'string');
 }
 
+function isModulePlan(plan: unknown): plan is { moduleName: string } {
+  return Boolean(plan && typeof plan === 'object' && !Array.isArray(plan) && typeof (plan as { moduleName?: unknown }).moduleName === 'string');
+}
+
 function renderRepoAnalysis(repos: Awaited<ReturnType<typeof readCandidateRepo>>[]): string {
   return [
     '# Repo Analysis',
