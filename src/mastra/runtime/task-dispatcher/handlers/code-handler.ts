@@ -18,7 +18,9 @@ export async function dispatchCodeTask(task: RuntimeTask): Promise<DispatchResul
   const executionMode = requestedExecutionMode === 'patch_proposal' ? 'patch_proposal' : 'direct';
   const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(metadata.executor);
   const command = stringValue(payload.command) || stringValue(metadata.command);
-  const args = stringArrayValue(payload.args).length ? stringArrayValue(payload.args) : stringArrayValue(metadata.args);
+  const payloadArgs = stringArrayValue(payload.args);
+  const metadataArgs = stringArrayValue(metadata.args);
+  const args = payloadArgs.length ? payloadArgs : metadataArgs.length ? metadataArgs : undefined;
   const promptArg = stringValue(payload.promptArg) || stringValue(metadata.promptArg);
 
   if (!workspacePath) {

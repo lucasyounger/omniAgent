@@ -120,7 +120,7 @@ work is delegated, executed, reported, and recovered across all agents.
 - Capability Registry executable bindings now list native tool ids for schedule, goal, and PR Pool capabilities while keeping task types and runtime services as durable execution bindings.
 - Goal and Req native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Goal create/run/feedback enqueue `goal.*` tasks; Req create/import/confirm/reject/update enqueue `req.*` tasks. Goal/Req read tools remain direct audited reads.
 - Schedule/Notify/Knowledge native facades reuse `create-and-dispatch-runtime-task` for side-effecting operations. Schedule creation enqueues `schedule.create`, notifications enqueue `notify.send_channel_message`, and public knowledge writes enqueue `knowledge.*` tasks; low-level cron/delivery/memory tools remain internal compatibility boundaries.
-- CodeAgent receives only PR Pool/RuntimeTask read-status tools in addition to code tools, so it can inspect assigned context without recursively starting PR Pool development. CronAgent receives RuntimeTask status/dispatch helpers plus the approval-gated PR Pool scan tool for scheduler/admin operation.
+- CodeAgent receives only PR Pool/RuntimeTask read-status tools in addition to code tools, so it can inspect assigned context without recursively starting PR Pool development. CronAgent receives RuntimeTask status/dispatch helpers plus the audited PR Pool scan tool for scheduler/admin operation.
 - CodeAgent automatically creates a Team Task if `start-code-task` is
   called without `teamTaskId`.
 - CodeAgent returns both `taskId` and durable `teamTaskId` / `teamRunId`.
@@ -282,11 +282,16 @@ work is delegated, executed, reported, and recovered across all agents.
   `idempotencyKey` returns the existing PR item and records a deduplication
   event.
 - PR Pool develop dispatch writes a `code-agent-pr-brief.md` execution contract
-  under `~/.omni/runs/pr-pool/{prItemId}/` before creating the CodeAgent task.
+  under `~/.omni/pr-pool/active/{prItemId}/` before creating the CodeAgent task.
+  It also writes a structured `execution-contract.json` in the same directory so
+  execution semantics, workspace policy, verification requirements, and artifact
+  refs are machine-readable for downstream consumers.
   The CodeAgent payload includes `codeAgentBriefPath`, and the context brief
   points to that file so CodeAgent can read the PR slice objective, impact,
   4+1 design summary, acceptance criteria, verification command, and stop
-  conditions before implementation.
+  conditions before implementation. The active item directory is removed after
+  archive succeeds; the archived copy remains under
+  `~/.omni/pr-pool/archive/{prItemId}/`.
 - PR Pool item contracts include verification plan, docs sync requirements,
   test sync requirements, and workspace policy. These fields are persisted on
   each item, rendered into PR briefs, and passed through CodeAgent handoff

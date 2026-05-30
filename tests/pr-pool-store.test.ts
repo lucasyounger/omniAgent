@@ -50,6 +50,30 @@ describe('PR pool store', () => {
     expect(item.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Objective');
     await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('## Workspace Policy');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'execution-contract.json'), 'utf8')).resolves.toContain('"schemaVersion": 1');
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'execution-contract.json'), 'utf8')).resolves.toContain('"producerJob"');
+    const contract = store.buildPrItemExecutionContract(item);
+    expect(contract).toMatchObject({
+      schemaVersion: 1,
+      id: item.id,
+      type: 'pr_pool.execution_job',
+      status: 'draft',
+      inputContract: {
+        objective: 'Implement one safe change',
+        acceptanceCriteria: ['change works'],
+      },
+      resumeCursor: { status: 'draft', retryCount: 0, maxRetries: 3 },
+      verification: { acceptanceCriteria: ['change works'] },
+    });
+    expect(contract.artifactRefs.map(ref => ref.ref)).toEqual(expect.arrayContaining([`pr-pool://${item.id}/artifacts/brief.md`]));
+    expect(JSON.stringify(contract.artifactRefs)).not.toContain(path.join(tempRoot, '.omni'));
+    expect(JSON.stringify(contract.artifactRefs)).not.toContain('active');
+    expect(JSON.stringify(contract.artifactRefs)).not.toContain('archive');
+    expect(store.buildPrItemExecutionEvidence(item)).toMatchObject({
+      schemaVersion: 1,
+      status: 'draft',
+      refs: expect.arrayContaining([expect.objectContaining({ ref: `pr-pool://${item.id}/artifacts/brief.md` })]),
+    });
     await expect(store.listPrPoolItems({ status: 'draft' })).resolves.toHaveLength(1);
 
     const readyItem = await store.createPrPoolItem({
@@ -82,11 +106,18 @@ describe('PR pool store', () => {
       constraints: ['Keep develop path unchanged'],
       references: [{ type: 'file', path: '.omc/archive-source.md', summary: 'Source slice' }],
     });
+    const codeAgentBriefPath = await store.writeCodeAgentPrBrief(archiveItem);
+    expect(codeAgentBriefPath).toBe(path.join(tempRoot, '.omni', 'pr-pool', 'active', archiveItem.id, 'code-agent-pr-brief.md'));
+    await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('# CodeAgent PR Brief');
+    await expect(fs.readdir(path.join(tempRoot, '.omni', 'runs', 'pr-pool', archiveItem.id))).rejects.toThrow();
+    const legacyRunDir = path.join(tempRoot, '.omni', 'runs', 'pr-pool', archiveItem.id);
+    await fs.mkdir(legacyRunDir, { recursive: true });
+    await fs.writeFile(path.join(legacyRunDir, 'code-agent-pr-brief.md'), 'legacy duplicate brief', 'utf8');
     const archiveEntry = await store.archivePrPoolItem(archiveItem.id, 'completed');
     const archiveDir = path.join(tempRoot, '.omni', 'pr-pool', 'archive', archiveItem.id);
     expect(archiveEntry).toMatchObject({ prItemId: archiveItem.id, archiveReason: 'completed' });
     await expect(fs.readdir(archiveDir)).resolves.toEqual(
-      expect.arrayContaining(['archive-entry.json', 'item.json', 'brief.md', 'references.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md']),
+      expect.arrayContaining(['archive-entry.json', 'item.json', 'brief.md', 'references.json', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'execution-contract.json', 'code-run-summary.md', 'final-summary.md']),
     );
     await expect(fs.readFile(path.join(archiveDir, 'brief.md'), 'utf8')).resolves.toContain('Do not change scheduler');
     await expect(fs.readFile(path.join(archiveDir, 'references.json'), 'utf8')).resolves.toContain('.omc/archive-source.md');
@@ -94,6 +125,8 @@ describe('PR pool store', () => {
     expect(archiveEntry.artifacts).toContain('references.json');
     await expect(fs.readFile(path.join(archiveDir, 'final-summary.md'), 'utf8')).resolves.toContain('Merge Recommendation');
     await expect(store.getPrPoolItem(archiveItem.id)).resolves.toBeUndefined();
+    await expect(fs.readdir(path.join(tempRoot, '.omni', 'pr-pool', 'active', archiveItem.id))).rejects.toThrow();
+    await expect(fs.readdir(legacyRunDir)).rejects.toThrow();
     await expect(store.listArchivedItems()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ prItemId: archiveItem.id })]));
 
     const events = await fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'events.jsonl'), 'utf8');

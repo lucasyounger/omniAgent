@@ -9,7 +9,7 @@ export type ScheduleResult = {
   conflicts: Conflict[];
 };
 
-export async function executeDispatchPlan(plan: DispatchPlan): Promise<ScheduleResult> {
+export async function executeDispatchPlan(plan: DispatchPlan, options: { approvalToken?: string } = {}): Promise<ScheduleResult> {
   const result: ScheduleResult = {
     dispatched: [],
     skipped: [...plan.skipped],
@@ -27,7 +27,7 @@ export async function executeDispatchPlan(plan: DispatchPlan): Promise<ScheduleR
             objective: `Develop PR ${item.id}: ${item.title}`,
             metadata: {
               taskType: runtimeTaskTypes.prPoolDevelop,
-              payload: { prItemId: item.id },
+              payload: { prItemId: item.id, approvalToken: options.approvalToken },
             },
           });
           const { dispatchRuntimeTask } = await import('../task-dispatcher');

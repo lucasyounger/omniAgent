@@ -1,7 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { createCronJob, listCronJobs, type CronJob } from '../../lib/cron-store';
-import { prPoolRunsRoot, projectRoot } from '../../lib/paths';
+import { projectRoot } from '../../lib/paths';
 import { runtimeTaskTypes } from '../task-types';
 import { buildDispatchPlan } from './dependency-planner';
 import { executeDispatchPlan } from './parallel-scheduler';
@@ -35,7 +33,7 @@ export async function ensurePrPoolCronJob(): Promise<CronJob> {
   return existing || registerPrPoolCronJob();
 }
 
-export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
+export async function runPrPoolCronScan(options: { approvalToken?: string } = {}): Promise<PRPoolCronScanResult> {
   const before = await prPoolRuntime.reconcileDevelopmentRuns();
   const readyItems = await prPoolRuntime.list({ status: 'ready' });
   const runningItems = await prPoolRuntime.list({ status: 'developing' });
@@ -43,7 +41,7 @@ export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
     maxConcurrent: Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT || 3),
     maxConcurrentPerRepo: Number(process.env.OMNI_PR_POOL_MAX_CONCURRENT_PER_REPO || 2),
   });
-  const scheduleResult = await executeDispatchPlan(plan);
+  const scheduleResult = await executeDispatchPlan(plan, { approvalToken: options.approvalToken });
   const after = await prPoolRuntime.reconcileDevelopmentRuns();
   const result: PRPoolCronScanResult = {
     scanned: readyItems.length,
@@ -53,13 +51,5 @@ export async function runPrPoolCronScan(): Promise<PRPoolCronScanResult> {
     reconciled: { before, after },
   };
 
-  await writeScanSummary({ ...result, conflicts: scheduleResult.conflicts, cycles: plan.cycles });
   return result;
-}
-
-async function writeScanSummary(result: Record<string, unknown>): Promise<void> {
-  const runId = `scan-${Date.now().toString(36)}`;
-  const runDir = path.join(prPoolRunsRoot, runId);
-  await fs.mkdir(runDir, { recursive: true });
-  await fs.writeFile(path.join(runDir, 'scan-summary.json'), JSON.stringify(result, null, 2), 'utf8');
 }

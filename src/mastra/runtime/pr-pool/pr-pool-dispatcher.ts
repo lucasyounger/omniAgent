@@ -28,8 +28,9 @@ const prPoolWritePolicy = {
 } as const satisfies ToolGatewayPolicy;
 
 const prPoolDevelopPolicy = {
-  risk: 'medium',
+  risk: 'dangerous',
   capability: 'pr_pool.develop',
+  requireApproval: true,
   audit: true,
 } as const satisfies ToolGatewayPolicy;
 
@@ -120,11 +121,12 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
     const approvedItem = (await prPoolRuntime.get(prItemId)) || item;
     const executor = codeTaskExecutorValue(payload.executor) || codeTaskExecutorValue(process.env.OMNI_CODE_AGENT_EXECUTOR) || 'claude_code';
 
-    if (approvedItem.status === 'developing' && approvedItem.run.codeTaskId) {
+    const existingCodeTaskId = approvedItem.run.codeRuntimeTaskId || approvedItem.run.codeTaskId;
+    if (approvedItem.status === 'developing' && existingCodeTaskId) {
       return {
         prItemId,
         status: 'developing',
-        codeTaskId: approvedItem.run.codeTaskId,
+        codeTaskId: existingCodeTaskId,
         codeDispatchStatus: 'already_dispatched',
         executor,
       };
@@ -163,7 +165,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       run: {
         ...worktreeItem.run,
         runtimeTaskId: task.id,
-        codeTaskId: codeTask.id,
+        codeRuntimeTaskId: codeTask.id,
         codeAgentBriefPath,
         lastDispatchedAt: new Date().toISOString(),
       },
@@ -177,7 +179,7 @@ async function dispatchPrPoolDevelopTask(task: RuntimeTask): Promise<DispatchRes
       const reason = codeDispatch.reason || 'Code task dispatch failed.';
       await prPoolRuntime.update(prItemId, {
         status: 'failed',
-        run: { ...worktreeItem.run, runtimeTaskId: task.id, codeTaskId: codeTask.id, codeAgentBriefPath, lastFailureReason: reason },
+        run: { ...worktreeItem.run, runtimeTaskId: task.id, codeRuntimeTaskId: codeTask.id, codeAgentBriefPath, lastFailureReason: reason },
         blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
       });
     }
@@ -200,7 +202,8 @@ async function dispatchPrPoolArchiveTask(task: RuntimeTask): Promise<DispatchRes
 }
 
 async function dispatchPrPoolCronScanTask(task: RuntimeTask): Promise<DispatchResult> {
-  return runPrPoolHandler(task, 'Scanned PR pool items for scheduled development.', prPoolDevelopPolicy, () => runPrPoolCronScan());
+  const payload = readPayload(task);
+  return runPrPoolHandler(task, 'Scanned PR pool items for scheduled development.', prPoolDevelopPolicy, () => runPrPoolCronScan({ approvalToken: stringValue(payload.approvalToken) }));
 }
 
 async function runPrPoolHandler(

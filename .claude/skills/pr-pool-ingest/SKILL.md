@@ -1,6 +1,6 @@
 ---
 name: pr-pool-ingest
-description: 整理已确认方案并通过 Runtime/CLI 录入 PR Pool draft，不直接写 PR Pool 存储。
+description: 整理已确认方案并通过 Runtime/CLI 录入 PR Pool；proposal 文件归档到 ~/.omni/pr-pool，不直接写 PR Pool 存储索引。
 ---
 
 # PR Pool Ingest
@@ -14,11 +14,13 @@ Use this skill when the user asks to:
 
 ## Contract
 
-- Do not write `~/.omni/pr-pool/**` directly.
-- Do not edit `items.json` or `events.jsonl` directly.
+- Do not write PR Pool runtime indexes such as `~/.omni/pr-pool/**/items.json` or `~/.omni/pr-pool/**/events.jsonl` directly.
+- Proposal JSON files are runtime artifacts and must be archived under `~/.omni/pr-pool/proposals/{slug}.json`, not inside the code repository.
 - Always call the shared CLI, which routes through Runtime ingest:
   `npm run prpool:ingest -- --file <proposal-file>`.
-- Ingest creates a `draft` item only. Do not auto-confirm, develop, archive, push, or create a GitHub PR.
+- User-confirmed requirements should set `confirmation: "confirmed"` or use CLI `--confirmed`, creating a `ready` item that PR Pool can develop without another implementation approval.
+- Generated, exploratory, Goal-candidate, or ambiguous requirements should set `confirmation: "required"` or omit confirmation, creating a `draft` item until reviewed.
+- Do not archive, push, or create a GitHub PR during ingest.
 
 ## Required Proposal Fields
 
@@ -49,27 +51,30 @@ Optional fields:
 1. Identify the proposal source from the current conversation or user-provided document.
 2. Extract `title`, `objective`, `impact`, `acceptanceCriteria`, and `codeAgentPrompt`.
 3. If any required field is missing, ask the user for the missing fields before continuing. Do not guess.
-4. Write the proposal to `.omc/proposals/{slug}.json` or use an existing proposal file.
-5. Validate first with:
+4. Write the proposal to `~/.omni/pr-pool/proposals/{slug}.json` or use an existing proposal file from that runtime archive.
+5. Choose confirmation semantics:
+   - If the user actively pushed or confirmed the requirement for implementation, add `confirmation: "confirmed"` and pass `--confirmed`; this creates a `ready` item.
+   - If the proposal is exploratory, Goal-generated, or not explicitly approved for implementation, use `confirmation: "required"` or omit confirmation; this creates a `draft` item.
+6. Validate first with:
 
    ```bash
-   npm run prpool:ingest -- --file .omc/proposals/{slug}.json --dry-run
+   npm run prpool:ingest -- --file ~/.omni/pr-pool/proposals/{slug}.json --dry-run
    ```
 
-6. If dry-run succeeds, ingest with:
+7. If dry-run succeeds, ingest with:
 
    ```bash
-   npm run prpool:ingest -- --file .omc/proposals/{slug}.json
+   npm run prpool:ingest -- --file ~/.omni/pr-pool/proposals/{slug}.json [--confirmed]
    ```
 
-7. Return the created PR item id, `draft` status, source, and next step: confirm the item when ready to develop.
+8. Return the created PR item id, status, source, and next step based on status: `ready` can be developed by PR Pool without another implementation approval; `draft` needs confirmation before develop.
 
 ## Output Format
 
 ```text
-已录入 PR Pool draft。
+已录入 PR Pool。
 - PR Item: <id>
-- Status: draft
+- Status: <draft|ready>
 - Source: <source>
-下一步：确认该 PR item 后再进入 develop。
+下一步：ready item 可由 PR Pool 直接 develop；draft item 需先 confirm。
 ```

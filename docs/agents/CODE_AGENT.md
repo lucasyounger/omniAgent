@@ -52,20 +52,26 @@ execution through Team Runtime.
 - PR Pool workspace preparation exposes the resolved workspace/worktree path,
   editable and forbidden path scopes, cleanup policy, and rollback hints before
   executor work starts. Path checks reject escapes, forbidden paths, and edits
-  outside the PR item's editable policy; managed worktrees are removed only when
-  the item cleanup policy is `delete_on_archive`.
-- Supports `executionMode: patch_proposal`, which writes a review artifact and
-  does not spawn the selected executor or modify the workspace.
-- Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
-- Captures stdout/stderr in `~/.omni/runs/code-runs/{taskId}.jsonl`.
-- Writes Team Runtime events for progress.
-- Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
-- Sends completion or failure inbox messages.
+  outside the PR item's editable policy. CodeAgent starts the local executor with
+  `cwd` set to the prepared workspace/worktree and records compact workspace
+  metadata plus referenced logs, not raw environment values. Managed worktrees are
+  removed only when the item cleanup policy is `delete_on_archive`.
 - When a user-confirmed requirement is recorded into PR Pool via
   `pr_pool.ingest_proposal`, the proposal must include
   `confirmation: "confirmed"` so PR Pool creates a `ready` item. Generated,
   exploratory, or ambiguous requirements should omit confirmation and remain
   `draft` until reviewed.
+- Returns legacy `taskId` plus durable `teamTaskId` and `teamRunId`.
+- Captures stdout/stderr in `~/.omni/runs/code-runs/{taskId}.jsonl`.
+- Writes Team Runtime events for progress.
+- Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
+- Sends completion or failure inbox messages.
+- For PR Pool ready/scheduled develop handoffs, CodeAgent should execute within
+  the provided PR Pool contract, complete the slice end-to-end in one run when
+  possible, split large work into internal sequential steps, update docs/tests,
+  and run verification. It should stop only for real blockers such as
+  HIGH/CRITICAL GitNexus impact, missing credentials, external-service failures,
+  impossible requirements, or unresolved verification failures.
 
 - Uses PR Pool read tools and RuntimeTask status/list tools to inspect assigned PR slice context and parent RuntimeTask state.
 - Uses the internal CodeAgent tool set from `src/mastra/tools/tool-registry.ts`:

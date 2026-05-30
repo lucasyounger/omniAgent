@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { cleanupPreparedWorkspace } from './worktree-manager';
-import { getCodeTask } from '../../lib/code-task-store';
+import { getCodeTask, listCodeTasks } from '../../lib/code-task-store';
 import { taskRuntime } from '../task-runtime';
 import { runtimeTaskTypes } from '../task-types';
 import { queueRuntimeNotification } from '../notification-dispatch';
@@ -289,18 +289,29 @@ export const prPoolRuntime = {
     const result: PrPoolReconcileResult = { scanned: activeItems.length, completed: 0, failed: 0, waitingUserConfirm: 0 };
 
     for (const item of activeItems) {
-      if (!item.run.codeTaskId) continue;
-      let codeTask;
-      try {
-        codeTask = await getCodeTask(item.run.codeTaskId);
-      } catch {
-        continue;
-      }
+      const codeTask = await resolvePrPoolCodeTask(item);
+      if (!codeTask) continue;
+      const runPatch = buildResolvedRunPatch(item, codeTask);
+      const evidencePatch = buildResolvedEvidencePatch(item, codeTask);
       if (codeTask.status === 'completed') {
+        const blocker = detectCompletedCodeTaskBlocker(codeTask);
+        if (blocker) {
+          const updated = await updatePrPoolItem(item.id, {
+            status: 'failed',
+            run: { ...item.run, ...runPatch, lastRunId: codeTask.teamRunId, lastFailureReason: blocker },
+            evidence: evidencePatch,
+            blocking: { category: 'permission', reason: blocker, detectedAt: new Date().toISOString() },
+          });
+          await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_failed', from: item.status, to: 'failed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId, status: codeTask.status, reason: blocker }) });
+          await notifyPrPoolStatusChange(item, updated, 'failed', blocker, codeTask.taskId);
+          result.failed += 1;
+          continue;
+        }
         const completedAt = new Date().toISOString();
         const updated = await updatePrPoolItem(item.id, {
           status: 'completed',
-          run: { ...item.run, lastRunId: codeTask.teamRunId, lastCompletedAt: completedAt },
+          run: { ...item.run, ...runPatch, lastRunId: codeTask.teamRunId, lastCompletedAt: completedAt },
+          evidence: evidencePatch,
           blocking: undefined,
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_completed', from: item.status, to: 'completed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId }) });
@@ -310,17 +321,27 @@ export const prPoolRuntime = {
         const reason = codeTask.recentEvents.find(event => event.type === 'task_failed')?.message || `Code task ${codeTask.status}.`;
         const updated = await updatePrPoolItem(item.id, {
           status: 'failed',
-          run: { ...item.run, lastRunId: codeTask.teamRunId, lastFailureReason: reason },
+          run: { ...item.run, ...runPatch, lastRunId: codeTask.teamRunId, lastFailureReason: reason },
+          evidence: evidencePatch,
           blocking: { category: 'runtime_error', reason, detectedAt: new Date().toISOString() },
         });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_failed', from: item.status, to: 'failed', detail: JSON.stringify({ codeTaskId: codeTask.taskId, teamRunId: codeTask.teamRunId, status: codeTask.status, reason }) });
         await notifyPrPoolStatusChange(item, updated, 'failed', reason, codeTask.taskId);
         result.failed += 1;
       } else if (item.status !== 'waiting_user_confirm' && codeTask.status === 'queued') {
-        const updated = await updatePrPoolItem(item.id, { status: 'waiting_user_confirm' });
+        const updated = await updatePrPoolItem(item.id, {
+          status: 'waiting_user_confirm',
+          run: { ...item.run, ...runPatch },
+          evidence: evidencePatch,
+        });
         await appendPrPoolEvent({ prItemId: item.id, type: 'code_task_waiting_user_confirm', from: item.status, to: 'waiting_user_confirm', detail: JSON.stringify({ codeTaskId: codeTask.taskId }) });
         await notifyPrPoolStatusChange(item, updated, 'waiting_user_confirm', `Code task ${codeTask.taskId} is waiting for confirmation.`, codeTask.taskId);
         result.waitingUserConfirm += 1;
+      } else if (runPatch.codeTaskId !== item.run.codeTaskId || runPatch.codeRuntimeTaskId !== item.run.codeRuntimeTaskId || runPatch.executionJob?.teamRunId !== item.run.executionJob?.teamRunId) {
+        await updatePrPoolItem(item.id, {
+          run: { ...item.run, ...runPatch },
+          evidence: evidencePatch,
+        });
       }
     }
 
@@ -357,6 +378,72 @@ export const prPoolRuntime = {
     return updated;
   },
 };
+
+type ResolvedCodeTask = Awaited<ReturnType<typeof getCodeTask>>;
+
+async function resolvePrPoolCodeTask(item: PRItem): Promise<ResolvedCodeTask | undefined> {
+  const storedCodeTaskId = item.run.codeTaskId;
+  if (storedCodeTaskId?.startsWith('code-')) {
+    try {
+      return await getCodeTask(storedCodeTaskId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const runtimeTaskId = item.run.codeRuntimeTaskId || (storedCodeTaskId?.startsWith('task-') ? storedCodeTaskId : undefined);
+  if (!runtimeTaskId) return undefined;
+
+  const codeTasks = await listCodeTasks();
+  return codeTasks.find(codeTask => codeTask.teamTaskId === runtimeTaskId);
+}
+
+function detectCompletedCodeTaskBlocker(codeTask: ResolvedCodeTask): string | undefined {
+  const blockerEvent = codeTask.recentEvents.find(event => {
+    if (event.type !== 'stdout' && event.type !== 'stderr') return false;
+    return isCodeTaskBlockerMessage(event.message);
+  });
+  return blockerEvent?.message.trim().slice(0, 500);
+}
+
+function isCodeTaskBlockerMessage(message: string): boolean {
+  return /写入权限挡住|编辑请求未获批准|不能继续实现|不能继续|permission|approval|not approved|blocked|HIGH\s+impact|CRITICAL\s+impact|高风险|需要先停下|确认继续/i.test(message);
+}
+
+function buildResolvedRunPatch(item: PRItem, codeTask: ResolvedCodeTask): PRItem['run'] {
+  const codeRuntimeTaskId = item.run.codeRuntimeTaskId || codeTask.teamTaskId;
+  return {
+    ...item.run,
+    codeRuntimeTaskId,
+    codeTaskId: codeTask.taskId,
+    executionJob: {
+      codeTaskId: codeTask.taskId,
+      runtimeTaskId: codeRuntimeTaskId,
+      teamRunId: codeTask.teamRunId,
+      status: codeTask.status,
+      executionMode: codeTask.executionMode,
+      executor: codeTask.executor,
+      command: codeTask.command,
+      args: codeTask.args,
+      promptArg: codeTask.promptArg,
+      workspacePath: codeTask.workspacePath,
+      logFile: codeTask.logFile,
+      patchFile: codeTask.patchFile,
+      updatedAt: codeTask.endedAt || codeTask.startedAt,
+    },
+  };
+}
+
+function buildResolvedEvidencePatch(item: PRItem, codeTask: ResolvedCodeTask): PRItem['evidence'] {
+  const status = codeTask.verificationEvidence.status;
+  return {
+    ...item.evidence,
+    verification: {
+      ...codeTask.verificationEvidence,
+      status: status === 'passed' || status === 'failed' || status === 'pending' ? status : 'pending',
+    },
+  };
+}
 
 function readPrPoolNotifyTarget(item: PRItem): ChannelTarget | undefined {
   const value = item.metadata.notifyTarget;

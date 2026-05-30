@@ -992,6 +992,10 @@ describe('Gateway message handler', () => {
   it('does not fast-path natural language PR pool execution through gateway regex', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     process.env.OMNI_GATEWAY_LLM_ORCHESTRATOR = '0';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'router fallback response' }),
+    } as Response);
     const { handleChannelMessage } = await loadHandler();
     const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
@@ -1018,6 +1022,8 @@ describe('Gateway message handler', () => {
     });
     const tasks = await taskRuntime.listTasks();
 
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(replies[0].text).toBe('router fallback response');
     expect(replies[0].text).not.toContain('PR Pool ready 需求扫描已触发');
     expect(replies[0].text).not.toContain('Dispatch: dispatched');
     expect(tasks).not.toEqual(expect.arrayContaining([

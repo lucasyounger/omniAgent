@@ -33,6 +33,8 @@ afterEach(async () => {
   delete process.env.OMNI_CODEX_COMMAND;
   delete process.env.OMNI_CODEX_ARGS;
   delete process.env.OMNI_CODEX_PROMPT_ARG;
+  delete process.env.OMNI_TEST_FROM_REPO_ENV;
+  delete process.env.OMNI_TEST_SECRET;
   await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   vi.restoreAllMocks();
 });
@@ -145,6 +147,30 @@ describe('Code task store', () => {
     await expect(fs.readFile(argvFile, 'utf8')).resolves.toBe(JSON.stringify(['-p', 'windows prompt arg test\n']));
   });
 
+  it.runIf(process.platform === 'win32')('uses an absolute PowerShell wrapper by default on Windows', async () => {
+    const argvFile = path.join(tempRoot, 'absolute-powershell-argv.json');
+    const scriptFile = path.join(tempRoot, 'record-absolute-powershell-argv.js');
+    await fs.writeFile(scriptFile, "require('node:fs').writeFileSync(process.argv[2],JSON.stringify(process.argv.slice(3)))", 'utf8');
+    const store = await loadCodeTaskStore();
+    const started = await store.startCodeTask({
+      workspacePath: tempRoot,
+      objective: 'absolute powershell wrapper test',
+      command: process.execPath,
+      args: [scriptFile, argvFile],
+      promptArg: '-p',
+    });
+
+    let current = started;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (current.status !== 'running') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      current = await store.getCodeTask(started.taskId);
+    }
+
+    expect(current).toMatchObject({ status: 'completed' });
+    await expect(fs.readFile(argvFile, 'utf8')).resolves.toBe(JSON.stringify(['-p', 'absolute powershell wrapper test\n']));
+  });
+
   it('records opencode executor command metadata', async () => {
     process.env.OMNI_CODE_AGENT_EXECUTOR = 'opencode';
     process.env.OMNI_OPENCODE_ARGS = '--model test';
@@ -193,6 +219,71 @@ describe('Code task store', () => {
       args: ['--model', 'test'],
       promptArg: 'exec',
     });
+  });
+
+  it('uses process env when resolving executor defaults for a worktree run', async () => {
+    const worktreeRoot = path.join(tempRoot, 'worktree-command');
+    await fs.mkdir(worktreeRoot, { recursive: true });
+    process.env.OMNI_CLAUDE_COMMAND = 'process-claude';
+
+    const store = await loadCodeTaskStore();
+    const started = await store.startCodeTask({
+      workspacePath: worktreeRoot,
+      objective: 'resolve command from process env',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(started).toMatchObject({
+      executor: 'claude_code',
+      command: 'process-claude',
+      args: ['--dangerously-skip-permissions'],
+    });
+  });
+
+  it('does not persist secret process env values in task artifacts', async () => {
+    const outputFile = path.join(tempRoot, 'env-output.json');
+    const scriptFile = path.join(tempRoot, 'record-env.js');
+    process.env.OMNI_TEST_SECRET = 'do-not-persist';
+    await fs.writeFile(
+      scriptFile,
+      [
+        "const fs = require('node:fs');",
+        'fs.writeFileSync(process.argv[2], JSON.stringify({',
+        '  cwd: process.cwd(),',
+        '  secretPresent: process.env.OMNI_TEST_SECRET === \'do-not-persist\'',
+        '}));',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const store = await loadCodeTaskStore();
+    const started = await store.startCodeTask({
+      workspacePath: tempRoot,
+      objective: 'env persistence test',
+      command: process.execPath,
+      args: [scriptFile, outputFile],
+      promptArg: '--prompt',
+    });
+
+    let current = started;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (current.status !== 'running') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      current = await store.getCodeTask(started.taskId);
+    }
+
+    expect(current).toMatchObject({ status: 'completed', exitCode: 0 });
+    await expect(fs.readFile(outputFile, 'utf8')).resolves.toBe(JSON.stringify({
+      cwd: tempRoot,
+      secretPresent: true,
+    }));
+
+    const persistedTask = await fs.readFile(path.join(tempRoot, '.omni', 'runs', 'code-runs', 'tasks.json'), 'utf8');
+    const taskEvents = await fs.readFile(current.logFile, 'utf8');
+    const teamResult = await fs.readFile(path.join(tempRoot, '.omni', 'runs', 'team', 'results', `${started.teamRunId}.json`), 'utf8');
+    expect(persistedTask).not.toContain('do-not-persist');
+    expect(taskEvents).not.toContain('do-not-persist');
+    expect(teamResult).not.toContain('do-not-persist');
   });
 
   it('launches a real coding process and verifies progress output and final result', async () => {

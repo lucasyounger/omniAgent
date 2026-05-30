@@ -514,6 +514,7 @@ async function readTaskEvents(logFile: string): Promise<CodeTaskEvent[]> {
 
 function summarizeTask(task: CodeTask) {
   const recentEvents = task.events.slice(-20);
+  const verificationEvidence = buildVerificationEvidence(task, recentEvents);
   return {
     taskId: task.taskId,
     teamTaskId: task.teamTaskId,
@@ -531,6 +532,32 @@ function summarizeTask(task: CodeTask) {
     command: task.command,
     args: task.args,
     promptArg: task.promptArg,
+    verificationEvidence,
     recentEvents,
+  };
+}
+
+function buildVerificationEvidence(task: CodeTask, recentEvents: CodeTaskEvent[]) {
+  const stdout = recentEvents.filter(event => event.type === 'stdout').map(event => event.message).join('');
+  const stderr = recentEvents.filter(event => event.type === 'stderr').map(event => event.message).join('');
+  return {
+    status: task.status === 'completed' ? 'passed' : task.status === 'failed' || task.status === 'cancelled' ? 'failed' : 'pending',
+    summary: task.status === 'completed'
+      ? `Code task ${task.taskId} completed.`
+      : task.status === 'failed' || task.status === 'cancelled'
+        ? `Code task ${task.taskId} ${task.status}.`
+        : `Code task ${task.taskId} is ${task.status}.`,
+    sources: [
+      {
+        type: 'code_task_log',
+        ref: task.logFile,
+        detail: stderr.trim().slice(0, 500) || stdout.trim().slice(0, 500) || undefined,
+      },
+      {
+        type: 'team_run_result',
+        ref: `omni://runs/team/results/${task.teamRunId}.json`,
+      },
+    ],
+    updatedAt: task.endedAt || task.startedAt,
   };
 }
