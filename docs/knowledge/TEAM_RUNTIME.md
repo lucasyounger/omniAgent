@@ -248,6 +248,18 @@ approval linkage.
   and raw logs stay in their producing stores and are fetched through the referenced
   artifact/log ids when needed.
 
+  Reconcile now generates governed memory candidate refs on completion and failure.
+  Completed PR items produce `decision` and `doc_update` candidates; goal-linked
+  items additionally produce a `goal:` scoped decision candidate. Failed items
+  produce a `failure_lesson` candidate, and items that exhausted retries also
+  produce a `follow_up_proposal`. All candidates carry `schemaVersion`, `candidateType`,
+  `scope`, `confidence`, `status` (always `proposed` at generation time),
+  `summary`, `sourceEvidenceRefs`, `producerJobId`, and `producedAt`. Candidates
+  are stored on `PRItem.memoryCandidateRefs` and surfaced in the execution
+  contract under `memoryCandidateRefs`. They are **not** automatically written
+  to long-term memory; a future MemoryRuntime approval/conflict/expiry workflow
+  will consume them.
+
   PR Pool items now carry verification plans, docs sync requirements, test sync requirements,
   and workspace policy so every CodeAgent handoff has explicit execution and
   review boundaries. For managed worktree handoffs, the CodeAgent task executes

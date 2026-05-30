@@ -130,6 +130,18 @@ export type PRItemWorkspacePolicy = {
   cleanup: 'keep' | 'delete_on_archive';
 };
 
+export type MemoryCandidateRef = {
+  schemaVersion: 1;
+  candidateType: 'decision' | 'doc_update' | 'failure_lesson' | 'follow_up_proposal';
+  scope: string;
+  confidence: 'high' | 'medium' | 'low';
+  status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+  summary: string;
+  sourceEvidenceRefs: PRItemExecutionArtifactRef[];
+  producerJobId: string;
+  producedAt: string;
+};
+
 export type PRItemBlocking = {
   reason: string;
   category: 'missing_config' | 'test_failed' | 'conflict' | 'permission' | 'unclear_requirement' | 'runtime_error';
@@ -167,6 +179,7 @@ export type PRItem = {
   approval: PRItemApproval;
   run: PRItemRun;
   evidence?: PRItemEvidence;
+  memoryCandidateRefs?: MemoryCandidateRef[];
   blocking?: PRItemBlocking;
   design4Plus1?: {
     logical: string;
@@ -253,6 +266,7 @@ export type PRItemExecutionContract = {
   };
   artifactRefs: PRItemExecutionArtifactRef[];
   evidence: PRItemExecutionEvidence;
+  memoryCandidateRefs?: MemoryCandidateRef[];
   producerJob: {
     kind: 'pr_pool_item';
     prItemId: string;
@@ -577,6 +591,7 @@ export function buildPrItemExecutionContract(item: PRItem): PRItemExecutionContr
     },
     artifactRefs: buildPrItemArtifactRefs(item),
     evidence: buildPrItemExecutionEvidence(item),
+    memoryCandidateRefs: item.memoryCandidateRefs,
   };
 }
 

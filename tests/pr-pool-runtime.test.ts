@@ -623,4 +623,251 @@ describe('PR pool runtime', () => {
       refs: expect.arrayContaining([expect.objectContaining({ ref: 'code-task://code-bad/log' })]),
     });
   });
+
+  it('generates memory candidate refs for completed PR items', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [],
+      verificationEvidence: {
+        status: 'passed',
+        summary: `Code task ${taskId} completed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Memory candidate test'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-mem' } });
+
+    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+
+    expect(result.completed).toBe(1);
+    const updated = await prPoolRuntime.get(item.id);
+    expect(updated?.memoryCandidateRefs).toBeDefined();
+    expect(updated!.memoryCandidateRefs!.length).toBeGreaterThanOrEqual(2);
+    const decisionCandidate = updated!.memoryCandidateRefs!.find(c => c.candidateType === 'decision' && c.scope === `pr_pool:${item.id}`);
+    expect(decisionCandidate).toMatchObject({
+      schemaVersion: 1,
+      candidateType: 'decision',
+      confidence: 'high',
+      status: 'proposed',
+      sourceEvidenceRefs: expect.arrayContaining([expect.objectContaining({ schemaVersion: 1 })]),
+      producerJobId: item.id,
+    });
+    const docCandidate = updated!.memoryCandidateRefs!.find(c => c.candidateType === 'doc_update');
+    expect(docCandidate).toMatchObject({
+      candidateType: 'doc_update',
+      status: 'proposed',
+    });
+  });
+
+  it('generates memory candidate refs for goal-linked completed items', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [],
+      verificationEvidence: {
+        status: 'passed',
+        summary: `Code task ${taskId} completed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create({ ...input('Goal-linked memory candidate'), goalId: 'goal-42' });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-goal' } });
+
+    await prPoolRuntime.reconcileDevelopmentRuns();
+
+    const updated = await prPoolRuntime.get(item.id);
+    const goalCandidate = updated!.memoryCandidateRefs!.find(c => c.scope === `goal:goal-42`);
+    expect(goalCandidate).toMatchObject({
+      candidateType: 'decision',
+      scope: 'goal:goal-42',
+      status: 'proposed',
+    });
+  });
+
+  it('generates failure lesson candidates for failed PR items', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'failed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 1,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'patch_proposal',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [{ type: 'task_failed', message: 'Build error: module not found', ts: new Date().toISOString() }],
+      verificationEvidence: {
+        status: 'failed',
+        summary: `Code task ${taskId} failed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Failure lesson test'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-fail' } });
+
+    await prPoolRuntime.reconcileDevelopmentRuns();
+
+    const updated = await prPoolRuntime.get(item.id);
+    expect(updated?.memoryCandidateRefs).toBeDefined();
+    expect(updated!.memoryCandidateRefs!.length).toBeGreaterThanOrEqual(1);
+    const failureCandidate = updated!.memoryCandidateRefs!.find(c => c.candidateType === 'failure_lesson');
+    expect(failureCandidate).toMatchObject({
+      schemaVersion: 1,
+      candidateType: 'failure_lesson',
+      confidence: 'high',
+      status: 'proposed',
+      summary: expect.stringContaining('Build error'),
+      sourceEvidenceRefs: expect.arrayContaining([expect.objectContaining({ schemaVersion: 1 })]),
+      producerJobId: item.id,
+    });
+  });
+
+  it('generates follow-up proposal when retries are exhausted', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'failed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 1,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'patch_proposal',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [{ type: 'task_failed', message: 'Persistent failure', ts: new Date().toISOString() }],
+      verificationEvidence: {
+        status: 'failed',
+        summary: `Code task ${taskId} failed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Exhausted retries'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-exh', retryCount: 3, maxRetries: 3 } });
+
+    await prPoolRuntime.reconcileDevelopmentRuns();
+
+    const updated = await prPoolRuntime.get(item.id);
+    const followUp = updated!.memoryCandidateRefs!.find(c => c.candidateType === 'follow_up_proposal');
+    expect(followUp).toMatchObject({
+      candidateType: 'follow_up_proposal',
+      confidence: 'low',
+      status: 'proposed',
+      summary: expect.stringContaining('exhausted retries'),
+    });
+  });
+
+  it('includes memoryCandidateRefs in execution contract', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockImplementation(async taskId => ({
+      taskId,
+      teamTaskId: `runtime-${taskId}`,
+      teamRunId: `run-${taskId}`,
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      logFile: path.join(tempRoot, `${taskId}.jsonl`),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [],
+      verificationEvidence: {
+        status: 'passed',
+        summary: `Code task ${taskId} completed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Contract candidate test'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-ctr' } });
+
+    await prPoolRuntime.reconcileDevelopmentRuns();
+
+    const updated = await prPoolRuntime.get(item.id);
+    const { buildPrItemExecutionContract } = await import('../src/mastra/runtime/pr-pool/pr-pool-store');
+    const contract = buildPrItemExecutionContract(updated!);
+    expect(contract.memoryCandidateRefs).toBeDefined();
+    expect(contract.memoryCandidateRefs!.length).toBeGreaterThanOrEqual(2);
+    expect(contract.memoryCandidateRefs!.every(c => c.status === 'proposed')).toBe(true);
+  });
 });
