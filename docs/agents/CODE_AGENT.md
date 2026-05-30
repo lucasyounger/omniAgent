@@ -106,7 +106,10 @@ execution through Team Runtime.
   boundary; PR Pool items and `/task` commands should not require a second Tool
   Gateway approval before the local executor starts.
 - Prefer `patch_proposal` for untrusted or remote code requests until a real
-  sandbox/worktree apply flow is in place.
+  sandbox/worktree apply flow is in place. Direct execution mode is restricted
+  to confirmed PR Pool items that carry a workspace policy; non-PR-pool code
+  tasks default to `patch_proposal`, and requesting `direct` without a confirmed
+  PR Pool context is rejected at dispatch time.
 - In-memory code task status is lost after service restart; Team Runtime files
   are the durable source.
 

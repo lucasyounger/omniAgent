@@ -207,9 +207,14 @@ approval linkage.
   optional executor metadata for `claude_code`, `opencode`, `codex`, or `custom`.
   Confirmed PR Pool items enter development through the existing develop approval
   gate and Tool Gateway audit path; execution remains bounded by the assigned
-  allowed workspace. Develop dispatch defaults the child CodeAgent task to direct
-  execution so confirmed PR slices start the selected local executor; callers may
-  still pass `executionMode: patch_proposal` for review-only handoff. Cron scans reconcile
+   allowed workspace. Develop dispatch defaults the child CodeAgent task to direct
+   execution so confirmed PR slices start the selected local executor; callers may
+   still pass `executionMode: patch_proposal` for review-only handoff. Direct
+   execution is now restricted to confirmed PR Pool items only; non-PR-pool code
+   tasks default to `patch_proposal` mode, and requesting `executionMode: 'direct'`
+   without a confirmed PR Pool context is rejected. Direct execution also requires
+   a `workspacePolicy` payload; dispatch fails if direct mode is resolved but no
+   workspace policy is present. Cron scans reconcile
   active CodeTask results before and after scheduling so
   completed runs mark PR items `completed` and failures mark items `failed` with
   blocking details. PR Pool develop

@@ -1219,6 +1219,55 @@ describe('Task Dispatcher', () => {
     await expect(fs.readFile(argvFile, 'utf8')).resolves.toContain('--prompt');
   });
 
+  it('rejects direct execution without confirmed PR pool context', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'code-agent',
+      objective: 'direct task without policy',
+      metadata: {
+        taskType: 'code.task',
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'direct task without policy',
+          executionMode: 'direct',
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'failed',
+      reason: expect.stringContaining('confirmed PR Pool'),
+    });
+  });
+
+  it('resolves execution mode as patch_proposal for non-PR-pool tasks without explicit mode', async () => {
+    delete process.env.OMNI_CODE_EXECUTION_MODE;
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'code-agent',
+      objective: 'non-PR-pool task',
+      metadata: {
+        taskType: 'code.task',
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'non-PR-pool task',
+        },
+      },
+    });
+
+    const result = await dispatchRuntimeTask(task.id);
+    expect(result).toMatchObject({
+      taskId: task.id,
+      status: 'dispatched',
+      handler: 'code-agent',
+    });
+  });
+
   it('dispatches goal runtime tasks through the goal handler', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const createTask = await taskRuntime.createTask({
