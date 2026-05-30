@@ -198,22 +198,56 @@ approval linkage.
   The legacy `code.claude_code_task` type remains accepted for persisted compatibility.
   The child task keeps `codeAgentBriefPath`, structured PR contract fields, and
   optional executor metadata for `claude_code`, `opencode`, `codex`, or `custom`.
-  Confirmed PR Pool items are already
-  reviewed, so develop dispatch does not carry a second approval token; execution
-  is bounded by the assigned allowed workspace and Tool Gateway audit records.
-  Develop dispatch defaults the child CodeAgent task to direct execution so
-  confirmed PR slices start the selected local executor; callers may still pass
-  `executionMode: patch_proposal` for review-only handoff. Cron scans reconcile
+  Confirmed PR Pool items enter development through the existing develop approval
+  gate and Tool Gateway audit path; execution remains bounded by the assigned
+  allowed workspace. Develop dispatch defaults the child CodeAgent task to direct
+  execution so confirmed PR slices start the selected local executor; callers may
+  still pass `executionMode: patch_proposal` for review-only handoff. Cron scans reconcile
   active CodeTask results before and after scheduling so
   completed runs mark PR items `completed` and failures mark items `failed` with
   blocking details. PR Pool develop
   dispatch now creates a durable `code-agent-pr-brief.md` under
-  `~/.omni/runs/pr-pool/{prItemId}/`, passes `codeAgentBriefPath` to the
-  generated CodeAgent RuntimeTask, and archives the same brief with the PR Pool
-  evidence bundle so the implementation contract is traceable. PR Pool items
-  now carry verification plans, docs sync requirements, test sync requirements,
+  `~/.omni/pr-pool/active/{prItemId}/`, passes `codeAgentBriefPath` to the
+  generated CodeAgent RuntimeTask, writes a structured `execution-contract.json`
+  alongside the brief for machine-readable producer/workspace/verification
+  semantics, and archives both artifacts under
+  `~/.omni/pr-pool/archive/{prItemId}/` before removing the active item
+  directory. The PR item run
+  record separates the PR Pool develop RuntimeTask (`runtimeTaskId`), child
+  CodeAgent RuntimeTask (`codeRuntimeTaskId`), and CodeTask store id
+  (`codeTaskId`). Develop dispatch treats either `codeRuntimeTaskId` or
+  `codeTaskId` on a developing item as an already-dispatched child execution
+  sentinel, so retries do not create duplicate CodeAgent RuntimeTasks while
+  CodeTask reconciliation has not yet written the canonical store id. Reconcile
+  resolves older records that stored a `task-*` child RuntimeTask id in
+  `codeTaskId` by matching it to the CodeTask store `teamTaskId`,
+  then writes back the canonical `code-*` id before marking the item completed or
+  failed. Reconcile now also writes a structured execution snapshot to
+  `run.executionJob` (runtime task id, team run id, execution metadata, workspace,
+  and expandable log/patch refs) and stores CodeTask-derived verification evidence on
+  `evidence.verification`, so downstream consumers can read stable execution and
+  evidence state directly from PR items without parsing raw logs. The PR Pool Phase 1
+  execution contract skeleton is emitted as a compact `execution-contract.json` read-model,
+  not as a replacement for RuntimeTask or Execution Engine persistence. Its Job fields
+  are `schemaVersion`, `id`, `type`, `status`, `inputContract`, `owner`, `timestamps`,
+  and `resumeCursor`; Artifact fields are schema-versioned logical refs such as
+  `pr-pool://{prItemId}/artifacts/brief.md` plus expandable `code-task://...` log or
+  patch refs, never private active/archive filesystem paths; Approval fields mirror the
+  PR item approval ids/tokens; Workspace fields describe repo/worktree/branch plus
+  workspace policy; Verification fields carry acceptance criteria, verification plan,
+  docs sync, tests sync, and test command; Evidence fields expose compact completion,
+  failure, or human-intervention summaries with refs to expandable logs. The main PR
+  item and contract keep summaries and refs only; large transcripts, diffs, patches,
+  and raw logs stay in their producing stores and are fetched through the referenced
+  artifact/log ids when needed.
+
+  PR Pool items now carry verification plans, docs sync requirements, test sync requirements,
   and workspace policy so every CodeAgent handoff has explicit execution and
-  review boundaries. Public/internal tool exposure is defined in
+  review boundaries. For managed worktree handoffs, the CodeAgent task executes
+  with `cwd` in the worktree and uses the normal CodeTask executor environment;
+  runtime artifacts record only compact workspace metadata and referenced logs,
+  not copied secrets or raw environment values. Public/internal tool
+  exposure is defined in
   `src/mastra/tools/tool-registry.ts`: OmniRouter receives public facades plus
   read/status tools, while CodeAgent receives executor and assigned-context
   internal tools. The task type

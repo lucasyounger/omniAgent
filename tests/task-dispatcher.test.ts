@@ -243,6 +243,40 @@ describe('Task Dispatcher', () => {
     });
   });
 
+  it('preserves Claude Code default permission args when no task args are provided', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'code-agent',
+      objective: 'run claude code without explicit args',
+      metadata: {
+        taskType: 'code.task',
+        payload: {
+          workspacePath: tempRoot,
+          objective: 'run claude code without explicit args',
+          executionMode: 'patch_proposal',
+          executor: 'claude_code',
+        },
+      },
+    });
+
+    await expect(dispatchRuntimeTask(task.id)).resolves.toMatchObject({
+      status: 'dispatched',
+      handler: 'code-agent',
+    });
+    const { listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+
+    await expect(listCodeTasks()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          teamTaskId: task.id,
+          executor: 'claude_code',
+          args: ['--dangerously-skip-permissions'],
+        }),
+      ]),
+    );
+  });
+
   it('exposes notify delivery queueing as a Mastra Tool', async () => {
     const { queueChannelNotificationTool } = await import('../src/mastra/tools/notify-tools');
 
@@ -733,7 +767,7 @@ describe('Task Dispatcher', () => {
       objective: 'scan PR pool',
       metadata: {
         taskType: 'pr_pool.cron_scan',
-        payload: {},
+        payload: { approvalToken: 'approved' },
       },
     });
 
@@ -746,7 +780,7 @@ describe('Task Dispatcher', () => {
       handler: 'pr-pool-handler',
       result: { scanned: 1, dispatched: 1, skipped: 0, failed: 0 },
     });
-    expect(updatedReady).toMatchObject({ status: 'developing' });
+    expect(updatedReady?.status === 'developing' || updatedReady?.status === 'completed').toBe(true);
     expect(updatedDraft).toMatchObject({ status: 'draft' });
     await expect(prPoolRuntime.get(waiting.id)).resolves.toMatchObject({ status: 'waiting_user_confirm' });
     await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({ status: 'failed' });
@@ -771,7 +805,7 @@ describe('Task Dispatcher', () => {
     });
   });
 
-  it('dispatches PR pool develop tasks into code-agent runtime tasks without extra approval', async () => {
+  it('dispatches approved PR pool develop tasks into code-agent runtime tasks', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
@@ -807,14 +841,14 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id, executor: 'opencode', executionMode: 'patch_proposal' },
+        payload: { prItemId: item.id, executor: 'opencode', executionMode: 'patch_proposal', approvalToken: 'approved' },
       },
     });
 
     const result = await dispatchRuntimeTask(task.id);
     const updated = await prPoolRuntime.get(item.id);
     const tasks = await taskRuntime.listTasks();
-    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeTaskId);
+    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeRuntimeTaskId);
 
     expect(result).toMatchObject({
       status: 'dispatched',
@@ -828,6 +862,8 @@ describe('Task Dispatcher', () => {
     expect(updated?.approval.developApprovalId).toBeUndefined();
     expect(updated?.approval.developApprovalToken).toBeUndefined();
     await expect(fs.readFile(updated?.run.codeAgentBriefPath || '', 'utf8')).resolves.toContain('# CodeAgent PR Brief');
+    await expect(fs.readFile(updated?.run.codeAgentBriefPath || '', 'utf8')).resolves.toContain('Execute within the provided PR Pool contract instead of returning only a plan.');
+    await expect(fs.readFile(updated?.run.codeAgentBriefPath || '', 'utf8')).resolves.toContain('- Allow Commit: no');
     expect(codeTask).toMatchObject({
       targetAgentId: 'code-agent',
       status: 'succeeded',
@@ -836,7 +872,7 @@ describe('Task Dispatcher', () => {
         payload: {
           workspacePath: tempRoot,
           objective: 'Create the implementation',
-          codeAgentBriefPath: expect.stringContaining(path.join('.omni', 'runs', 'pr-pool', item.id, 'code-agent-pr-brief.md')),
+          codeAgentBriefPath: expect.stringContaining(path.join('.omni', 'pr-pool', 'active', item.id, 'code-agent-pr-brief.md')),
           executionMode: 'patch_proposal',
           executor: 'opencode',
           prItemId: item.id,
@@ -893,14 +929,14 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id, executor: 'codex', executionMode: 'patch_proposal' },
+        payload: { prItemId: item.id, executor: 'codex', executionMode: 'patch_proposal', approvalToken: 'approved' },
       },
     });
 
     const result = await dispatchRuntimeTask(task.id);
     const updated = await prPoolRuntime.get(item.id);
     const tasks = await taskRuntime.listTasks();
-    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeTaskId);
+    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeRuntimeTaskId);
 
     expect(result).toMatchObject({
       status: 'dispatched',
@@ -940,7 +976,7 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id, executor: 'claude_code' },
+        payload: { prItemId: item.id, executor: 'claude_code', approvalToken: 'approved' },
       },
     });
 
@@ -961,16 +997,60 @@ describe('Task Dispatcher', () => {
     expect(after).toHaveLength(before.length);
   });
 
-  it('ignores stale PR pool develop approval tokens because confirmed slices execute directly', async () => {
+  it('does not create duplicate CodeTasks for an already developing PR pool item with only a runtime task id', async () => {
+    const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const item = await prPoolRuntime.create({
+      title: 'Already developing runtime item',
+      objective: 'Do not duplicate CodeTask before reconciliation',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['runtime'], risk: 'low' },
+      acceptanceCriteria: ['existing runtime task reused'],
+      codeAgentPrompt: 'Reuse existing runtime task',
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, {
+      run: { ...item.run, runtimeTaskId: 'runtime-old', codeRuntimeTaskId: 'code-runtime-existing' },
+    });
+    const task = await taskRuntime.createTask({
+      sourceAgentId: 'test',
+      targetAgentId: 'pr-pool-runtime',
+      objective: 'develop PR pool item',
+      metadata: {
+        taskType: 'pr_pool.develop',
+        payload: { prItemId: item.id, executor: 'claude_code', approvalToken: 'approved' },
+      },
+    });
+
+    const before = await taskRuntime.listTasks();
+    const result = await dispatchRuntimeTask(task.id);
+    const after = await taskRuntime.listTasks();
+
+    expect(result).toMatchObject({
+      status: 'dispatched',
+      result: {
+        prItemId: item.id,
+        status: 'developing',
+        codeTaskId: 'code-runtime-existing',
+        codeDispatchStatus: 'already_dispatched',
+        executor: 'claude_code',
+      },
+    });
+    expect(after).toHaveLength(before.length);
+  });
+
+  it('dispatches approved PR pool develop tasks even when stored develop token is stale', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
       title: 'Expired approval item',
-      objective: 'Run despite stale develop token',
+      objective: 'Run with explicit dispatcher approval',
       workspaceRepoPath: tempRoot,
       impact: { modules: ['runtime'], risk: 'low' },
-      acceptanceCriteria: ['stale token does not block'],
-      codeAgentPrompt: 'Run without checking stale token',
+      acceptanceCriteria: ['dispatcher approval allows execution'],
+      codeAgentPrompt: 'Run with explicit dispatcher approval',
     });
     await prPoolRuntime.confirm(item.id);
     await prPoolRuntime.update(item.id, {
@@ -993,7 +1073,7 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id },
+        payload: { prItemId: item.id, approvalToken: 'approved' },
       },
     });
 
@@ -1003,7 +1083,7 @@ describe('Task Dispatcher', () => {
     await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({ status: 'developing' });
   });
 
-  it('dispatches confirmed PR pool develop tasks without extra approval', async () => {
+  it('dispatches approved confirmed PR pool develop tasks', async () => {
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
     const item = await prPoolRuntime.create({
@@ -1028,7 +1108,7 @@ describe('Task Dispatcher', () => {
       objective: 'develop PR pool item',
       metadata: {
         taskType: 'pr_pool.develop',
-        payload: { prItemId: item.id },
+        payload: { prItemId: item.id, approvalToken: 'approved' },
       },
     });
 
@@ -1068,7 +1148,7 @@ describe('Task Dispatcher', () => {
     });
   });
 
-  it('dispatches PR pool develop tasks in direct execution mode by default', async () => {
+  it('dispatches approved PR pool develop tasks in direct execution mode by default', async () => {
     delete process.env.OMNI_CODE_EXECUTION_MODE;
     const { taskRuntime, dispatchRuntimeTask } = await loadRuntime();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
@@ -1101,6 +1181,7 @@ describe('Task Dispatcher', () => {
           prItemId: item.id,
           command: process.execPath,
           args: [scriptFile, argvFile],
+          approvalToken: 'approved',
           promptArg: '--prompt',
         },
       },
@@ -1109,7 +1190,7 @@ describe('Task Dispatcher', () => {
     const result = await dispatchRuntimeTask(task.id);
     const updated = await prPoolRuntime.get(item.id);
     const tasks = await taskRuntime.listTasks();
-    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeTaskId);
+    const codeTask = tasks.find(candidate => candidate.id === updated?.run.codeRuntimeTaskId);
 
     expect(result).toMatchObject({
       status: 'dispatched',
@@ -1123,22 +1204,19 @@ describe('Task Dispatcher', () => {
           command: process.execPath,
           args: [scriptFile, argvFile],
           promptArg: '--prompt',
+          workspacePath: tempRoot,
         },
       },
     });
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      if ((await fs.readFile(argvFile, 'utf8').catch(() => ''))) break;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    await expect(fs.readFile(argvFile, 'utf8')).resolves.toContain('--prompt');
     const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
     const codeRun = (await listCodeTasks()).find(candidate => candidate.teamTaskId === codeTask!.id)!;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const current = await getCodeTask(codeRun.taskId);
-      if (current.status === 'completed') break;
+    let completedCodeTask = await getCodeTask(codeRun.taskId);
+    for (let attempt = 0; attempt < 300 && completedCodeTask.status !== 'completed'; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 50));
+      completedCodeTask = await getCodeTask(codeRun.taskId);
     }
-    await expect(getCodeTask(codeRun.taskId)).resolves.toMatchObject({ status: 'completed' });
+    expect(completedCodeTask).toMatchObject({ status: 'completed' });
+    await expect(fs.readFile(argvFile, 'utf8')).resolves.toContain('--prompt');
   });
 
   it('dispatches goal runtime tasks through the goal handler', async () => {

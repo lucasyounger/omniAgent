@@ -9,9 +9,8 @@ OmniAgent starts code executor work through `startCodeTaskTool`. Task progress i
 CodeAgent execution is medium-risk and audit-only after the workspace path passes
 `OMNI_ALLOWED_WORKSPACES`. `start-code-task`, RuntimeTask code dispatch,
 and `run-code-task-workflow` write Tool Gateway audit records but do not create
-approval requests or require an `approvalToken`. PR Pool items are reviewed before
-development, so confirmed slices execute in their assigned workspace without a
-second security approval gate.
+approval requests or require an `approvalToken`. PR Pool develop dispatch still
+uses the PR Pool develop approval boundary before CodeAgent receives work.
 
 ## Tool Gateway
 
@@ -47,12 +46,10 @@ Use three distinct layers:
 
 For schedule operations, create/list/delete/pause/resume and immediate run are audit-only today. Code schedules still rely on the CodeAgent workspace boundary before execution.
 
-PR Pool dispatcher operations now use Tool Gateway audit-only policies as the
+PR Pool dispatcher operations now use Tool Gateway policies as the
 side-effect boundary: list uses `pr_pool.read`, create/ingest/confirm/archive use
-`pr_pool.write`, and develop/cron scan use `pr_pool.develop`. Confirmed PR Pool
-items have already passed requirement review, so develop/cron scan may dispatch
-CodeAgent work directly inside the assigned allowed workspace; repeated develop
-approval tokens are no longer part of the execution gate.
+`pr_pool.write`, and develop/cron scan use required-approval `pr_pool.develop`
+checks before dispatching CodeAgent work in the assigned allowed workspace.
 
 ## RuntimeTask and PR Pool Native Facades
 
@@ -65,9 +62,9 @@ the agent boundary while preserving Task Dispatcher as the execution backend.
 PR Pool now exposes native facades for list/get/create/ingest/confirm/develop/scan/
 archive/pause/retry/delete operations. Read tools use `pr_pool.read`; normal writes
 use `pr_pool.write`; destructive delete uses `pr_pool.delete`; develop and batch scan
-remain approval-gated through `pr_pool.develop` and `pr_pool.batch_develop`. The
-Gateway `/pr` command is a compatibility layer over these tools instead of owning a
-separate PR Pool implementation.
+use audited `pr_pool.develop` / `pr_pool.batch_develop` policies with required
+Tool Gateway approval. The Gateway `/pr` command is a compatibility layer over
+these tools instead of owning a separate PR Pool implementation.
 
 ## Req Runtime Tools
 

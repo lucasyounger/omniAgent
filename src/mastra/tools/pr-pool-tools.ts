@@ -257,7 +257,7 @@ export const scanPrPoolReadyItemsTool = createTool({
     targetAgentId: 'pr-pool-runtime',
     objective: 'Scan ready PR Pool items for development',
     taskType: runtimeTaskTypes.prPoolCronScan,
-    payload: {},
+    payload: { approvalToken: input.approvalToken },
     priority: 'high',
   })),
 });

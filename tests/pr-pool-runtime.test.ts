@@ -15,6 +15,7 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('../src/mastra/lib/code-task-store', () => ({
   getCodeTask: vi.fn(),
+  listCodeTasks: vi.fn(),
 }));
 
 let tempRoot: string;
@@ -73,6 +74,18 @@ describe('PR pool runtime', () => {
     expect(confirmed).toHaveLength(2);
     await expect(prPoolRuntime.list({ status: 'draft' })).resolves.toHaveLength(0);
     await expect(prPoolRuntime.list({ status: 'ready' })).resolves.toHaveLength(2);
+  });
+
+  it('defaults PR Pool slices to local commits disabled without push', async () => {
+    const { prPoolRuntime } = await loadRuntime();
+
+    const item = await prPoolRuntime.create(input('Commit-disabled slice'));
+
+    expect(item.workspacePolicy).toMatchObject({
+      allowCommit: false,
+      allowPush: false,
+    });
+    await expect(fs.readFile(path.join(tempRoot, '.omni', 'pr-pool', 'active', item.id, 'brief.md'), 'utf8')).resolves.toContain('- Allow Commit: no');
   });
 
   it('retries failed items while keeping blocking details', async () => {
@@ -262,8 +275,204 @@ describe('PR pool runtime', () => {
     ]);
   });
 
+  it('reconciles PR items that stored a CodeAgent RuntimeTask id as the CodeTask id', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(getCodeTask).mockRejectedValue(new Error('not a CodeTask id'));
+    vi.mocked(listCodeTasks).mockResolvedValue([
+      {
+        taskId: 'code-real',
+        teamTaskId: 'task-code-runtime',
+        teamRunId: 'run-code-real',
+        workspacePath: tempRoot,
+        objective: 'develop',
+        status: 'completed',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        exitCode: 0,
+        logFile: path.join(tempRoot, 'code-real.jsonl'),
+        executionMode: 'direct',
+        patchFile: undefined,
+        executor: 'claude_code',
+        command: 'cc',
+        args: ['--dangerously-skip-permissions'],
+        promptArg: '-p',
+        recentEvents: [],
+        verificationEvidence: {
+          status: 'passed',
+          summary: 'Code task code-real completed.',
+          sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-real.jsonl') }],
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    ]);
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Resolve runtime id'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'task-code-runtime' } });
+
+    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+
+    expect(result).toMatchObject({ scanned: 1, completed: 1 });
+    expect(getCodeTask).not.toHaveBeenCalledWith('task-code-runtime');
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({
+      status: 'completed',
+      run: {
+        codeRuntimeTaskId: 'task-code-runtime',
+        codeTaskId: 'code-real',
+        lastRunId: 'run-code-real',
+        executionJob: {
+          codeTaskId: 'code-real',
+          runtimeTaskId: 'task-code-runtime',
+          teamRunId: 'run-code-real',
+          status: 'completed',
+        },
+      },
+      evidence: {
+        verification: {
+          status: 'passed',
+        },
+      },
+    });
+    const { buildPrItemExecutionEvidence } = await import('../src/mastra/runtime/pr-pool/pr-pool-store');
+    const resolved = await prPoolRuntime.get(item.id);
+    expect(resolved && buildPrItemExecutionEvidence(resolved)).toMatchObject({
+      schemaVersion: 1,
+      status: 'completed',
+      completion: { codeTaskId: 'code-real', teamRunId: 'run-code-real' },
+      verification: {
+        status: 'passed',
+        refs: [expect.objectContaining({ ref: 'code-task-log://code-real.jsonl' })],
+      },
+      refs: expect.arrayContaining([expect.objectContaining({ type: 'log', ref: 'code-task://code-real/log' })]),
+    });
+  });
+  it('treats completed CodeTasks with approval blockers as failed PR items', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockResolvedValue({
+      taskId: 'code-blocked',
+      teamTaskId: 'runtime-code-blocked',
+      teamRunId: 'run-code-blocked',
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: 0,
+      logFile: path.join(tempRoot, 'code-blocked.jsonl'),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [
+        {
+          type: 'stdout',
+          message: 'GitNexus 返回 HIGH impact，需要先停下并确认继续。',
+          ts: new Date().toISOString(),
+        },
+      ],
+      verificationEvidence: {
+        status: 'passed',
+        summary: 'Code task code-blocked completed.',
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-blocked.jsonl') }],
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Blocked completed task'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-blocked' } });
+
+    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+
+    expect(result).toMatchObject({ scanned: 1, completed: 0, failed: 1 });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({
+      status: 'failed',
+      run: {
+        lastRunId: 'run-code-blocked',
+        lastFailureReason: expect.stringContaining('HIGH impact'),
+        executionJob: {
+          codeTaskId: 'code-blocked',
+          runtimeTaskId: 'runtime-code-blocked',
+          teamRunId: 'run-code-blocked',
+          status: 'completed',
+        },
+      },
+      evidence: {
+        verification: {
+          status: 'passed',
+        },
+      },
+      blocking: { category: 'permission', reason: expect.stringContaining('确认继续') },
+    });
+    const { buildPrItemExecutionEvidence } = await import('../src/mastra/runtime/pr-pool/pr-pool-store');
+    const blocked = await prPoolRuntime.get(item.id);
+    expect(blocked && buildPrItemExecutionEvidence(blocked)).toMatchObject({
+      schemaVersion: 1,
+      status: 'failed',
+      failure: { category: 'permission', reason: expect.stringContaining('HIGH impact') },
+      humanIntervention: { reason: expect.stringContaining('HIGH impact') },
+      verification: { status: 'passed' },
+    });
+  });
+
+  it('projects queued CodeTasks as waiting for user confirmation evidence', async () => {
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
+    vi.mocked(getCodeTask).mockResolvedValue({
+      taskId: 'code-queued',
+      teamTaskId: 'runtime-code-queued',
+      teamRunId: 'run-code-queued',
+      workspacePath: tempRoot,
+      objective: 'develop',
+      status: 'queued',
+      startedAt: new Date().toISOString(),
+      endedAt: undefined,
+      exitCode: undefined,
+      logFile: path.join(tempRoot, 'code-queued.jsonl'),
+      executionMode: 'direct',
+      patchFile: undefined,
+      executor: 'claude_code',
+      command: 'cc',
+      args: [],
+      promptArg: '-p',
+      recentEvents: [],
+      verificationEvidence: {
+        status: 'pending',
+        summary: 'Waiting for confirmation.',
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, 'code-queued.jsonl') }],
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    const { prPoolRuntime } = await loadRuntime();
+    const item = await prPoolRuntime.create(input('Queued task'));
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.transition(item.id, 'scheduled');
+    await prPoolRuntime.transition(item.id, 'developing');
+    await prPoolRuntime.update(item.id, { run: { ...item.run, codeTaskId: 'code-queued' } });
+
+    const result = await prPoolRuntime.reconcileDevelopmentRuns();
+
+    expect(result).toMatchObject({ scanned: 1, waitingUserConfirm: 1 });
+    const { buildPrItemExecutionEvidence } = await import('../src/mastra/runtime/pr-pool/pr-pool-store');
+    const waiting = await prPoolRuntime.get(item.id);
+    expect(waiting && buildPrItemExecutionEvidence(waiting)).toMatchObject({
+      schemaVersion: 1,
+      status: 'waiting_user_confirm',
+      humanIntervention: { reason: expect.stringContaining('Waiting for user confirmation') },
+      verification: { status: 'pending' },
+    });
+  });
+
   it('reconciles completed and failed CodeTask runs back to PR items', async () => {
-    const { getCodeTask } = await import('../src/mastra/lib/code-task-store');
+    const { getCodeTask, listCodeTasks } = await import('../src/mastra/lib/code-task-store');
+    vi.mocked(listCodeTasks).mockResolvedValue([]);
     vi.mocked(getCodeTask).mockImplementation(async taskId => ({
       taskId,
       teamTaskId: `runtime-${taskId}`,
@@ -282,6 +491,12 @@ describe('PR pool runtime', () => {
       args: ['--dangerously-skip-permissions'],
       promptArg: '-p',
       recentEvents: taskId === 'code-ok' ? [] : [{ type: 'task_failed', message: 'tests failed', ts: new Date().toISOString() }],
+      verificationEvidence: {
+        status: taskId === 'code-ok' ? 'passed' : 'failed',
+        summary: taskId === 'code-ok' ? `Code task ${taskId} completed.` : `Code task ${taskId} failed.`,
+        sources: [{ type: 'code_task_log', ref: path.join(tempRoot, `${taskId}.jsonl`) }],
+        updatedAt: new Date().toISOString(),
+      },
     }));
     const { prPoolRuntime } = await loadRuntime();
     const completed = await prPoolRuntime.create(input('Complete me'));
@@ -298,11 +513,51 @@ describe('PR pool runtime', () => {
     const result = await prPoolRuntime.reconcileDevelopmentRuns();
 
     expect(result).toMatchObject({ scanned: 2, completed: 1, failed: 1 });
-    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({ status: 'completed', run: { lastRunId: 'run-code-ok', lastCompletedAt: expect.any(String) } });
+    await expect(prPoolRuntime.get(completed.id)).resolves.toMatchObject({
+      status: 'completed',
+      run: {
+        lastRunId: 'run-code-ok',
+        lastCompletedAt: expect.any(String),
+        executionJob: {
+          codeTaskId: 'code-ok',
+          runtimeTaskId: 'runtime-code-ok',
+          teamRunId: 'run-code-ok',
+          status: 'completed',
+        },
+      },
+      evidence: {
+        verification: {
+          status: 'passed',
+        },
+      },
+    });
     await expect(prPoolRuntime.get(failed.id)).resolves.toMatchObject({
       status: 'failed',
-      run: { lastRunId: 'run-code-bad', lastFailureReason: 'tests failed' },
+      run: {
+        lastRunId: 'run-code-bad',
+        lastFailureReason: 'tests failed',
+        executionJob: {
+          codeTaskId: 'code-bad',
+          runtimeTaskId: 'runtime-code-bad',
+          teamRunId: 'run-code-bad',
+          status: 'failed',
+        },
+      },
+      evidence: {
+        verification: {
+          status: 'failed',
+        },
+      },
       blocking: { reason: 'tests failed', category: 'runtime_error' },
+    });
+    const { buildPrItemExecutionEvidence } = await import('../src/mastra/runtime/pr-pool/pr-pool-store');
+    const failedItem = await prPoolRuntime.get(failed.id);
+    expect(failedItem && buildPrItemExecutionEvidence(failedItem)).toMatchObject({
+      schemaVersion: 1,
+      status: 'failed',
+      failure: { category: 'runtime_error', reason: 'tests failed' },
+      verification: { status: 'failed' },
+      refs: expect.arrayContaining([expect.objectContaining({ ref: 'code-task://code-bad/log' })]),
     });
   });
 });

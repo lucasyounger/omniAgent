@@ -240,7 +240,24 @@ describe('tool approval policy', () => {
     expect(await readPendingApprovalRequests()).toHaveLength(0);
   });
 
-  it('requires approval for dangerous RuntimeTask and PR Pool facades', async () => {
+  it('passes approved scan approval token into the PR Pool cron scan RuntimeTask payload', async () => {
+    const { scanPrPoolReadyItemsTool, listRuntimeTasksTool } = await loadTools();
+
+    await expect(executeTool(scanPrPoolReadyItemsTool, { approvalToken: 'approved' })).resolves.toMatchObject({
+      dispatch: expect.objectContaining({ status: 'dispatched' }),
+    });
+    await expect(executeTool(listRuntimeTasksTool, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          taskType: 'pr_pool.cron_scan',
+          payload: expect.objectContaining({ approvalToken: 'approved' }),
+          toolFacade: true,
+        }),
+      }),
+    ]));
+  });
+
+  it('requires approval for dangerous RuntimeTask, PR Pool develop, and delete facades', async () => {
     const { cancelRuntimeTaskTool, developPrPoolItemTool, scanPrPoolReadyItemsTool, deletePrPoolItemTool, createRuntimeTaskTool, createPrPoolItemTool } = await loadTools();
     const task = await executeTool<{ objective: string; taskType: string }, { id: string }>(createRuntimeTaskTool, {
       objective: 'cancel me',
@@ -253,9 +270,12 @@ describe('tool approval policy', () => {
       impact: { modules: ['tests'], risk: 'low' },
       acceptanceCriteria: ['approval required'],
       codeAgentPrompt: 'Implement approval fixture',
+      workspacePolicy: { useWorktree: false },
       initialStatus: 'ready',
     });
 
+    expect(developPrPoolItemTool).toMatchObject({ requireApproval: true });
+    expect(scanPrPoolReadyItemsTool).toMatchObject({ requireApproval: true });
     await expect(executeTool(cancelRuntimeTaskTool, { taskId: task.id })).rejects.toThrow('Approval required');
     await expect(executeTool(developPrPoolItemTool, { prItemId: item.id })).rejects.toThrow('Approval required');
     await expect(executeTool(scanPrPoolReadyItemsTool, {})).rejects.toThrow('Approval required');

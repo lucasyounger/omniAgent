@@ -40,8 +40,70 @@ export type PRItemApproval = {
   approvedAt?: string;
 };
 
+export type PRItemExecutionJobView = {
+  codeTaskId: string;
+  runtimeTaskId: string;
+  teamRunId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  executionMode?: 'direct' | 'patch_proposal';
+  executor?: 'claude_code' | 'opencode' | 'codex' | 'custom';
+  command?: string;
+  args?: string[];
+  promptArg?: string;
+  workspacePath?: string;
+  logFile?: string;
+  patchFile?: string;
+  updatedAt: string;
+};
+
+export type PRItemExecutionArtifactRef = {
+  schemaVersion: 1;
+  type: 'artifact' | 'log' | 'patch' | 'evidence';
+  name: string;
+  ref: string;
+  summary: string;
+};
+
+export type PRItemExecutionEvidence = {
+  schemaVersion: 1;
+  status: PRItemStatus;
+  summary: string;
+  completion?: {
+    completedAt?: string;
+    codeTaskId?: string;
+    teamRunId?: string;
+  };
+  failure?: {
+    category: PRItemBlocking['category'];
+    reason: string;
+    detectedAt: string;
+  };
+  humanIntervention?: {
+    reason: string;
+    detectedAt: string;
+  };
+  verification?: {
+    status: 'passed' | 'failed' | 'pending';
+    summary: string;
+    refs: PRItemExecutionArtifactRef[];
+    updatedAt: string;
+  };
+  refs: PRItemExecutionArtifactRef[];
+  updatedAt: string;
+};
+
+export type PRItemEvidence = {
+  verification?: {
+    status: 'passed' | 'failed' | 'pending';
+    summary: string;
+    sources: Array<{ type: string; ref: string; detail?: string }>;
+    updatedAt: string;
+  };
+};
+
 export type PRItemRun = {
   runtimeTaskId?: string;
+  codeRuntimeTaskId?: string;
   codeTaskId?: string;
   previousCodeTaskId?: string;
   lastRunId?: string;
@@ -51,6 +113,7 @@ export type PRItemRun = {
   lastFailureReason?: string;
   lastDispatchedAt?: string;
   lastCompletedAt?: string;
+  executionJob?: PRItemExecutionJobView;
 };
 
 export type PRItemWorkspacePolicy = {
@@ -100,6 +163,7 @@ export type PRItem = {
   references: PRItemReference[];
   approval: PRItemApproval;
   run: PRItemRun;
+  evidence?: PRItemEvidence;
   blocking?: PRItemBlocking;
   design4Plus1?: {
     logical: string;
@@ -134,6 +198,69 @@ export type PRPoolEvent = {
   to?: PRItemStatus;
   detail?: string;
   timestamp: string;
+};
+
+export type PRItemExecutionContract = {
+  schemaVersion: 1;
+  id: string;
+  type: 'pr_pool.execution_job';
+  status: PRItemStatus;
+  inputContract: {
+    objective: string;
+    acceptanceCriteria: string[];
+    nonGoals: string[];
+    constraints: string[];
+    prompt: string;
+  };
+  owner: {
+    source: PRItem['source'];
+    goalId?: string;
+    proposalId?: string;
+    designArtifactId?: string;
+  };
+  timestamps: {
+    createdAt: string;
+    updatedAt: string;
+    lastDispatchedAt?: string;
+    lastCompletedAt?: string;
+  };
+  resumeCursor: {
+    status: PRItemStatus;
+    runtimeTaskId?: string;
+    codeRuntimeTaskId?: string;
+    codeTaskId?: string;
+    previousCodeTaskId?: string;
+    retryCount: number;
+    maxRetries: number;
+    blocking?: PRItemBlocking;
+  };
+  approval: PRItemApproval;
+  workspace: {
+    repoPath: string;
+    worktreePath?: string;
+    branchName?: string;
+    policy: PRItemWorkspacePolicy;
+  };
+  verification: {
+    acceptanceCriteria: string[];
+    verificationPlan: string[];
+    docSyncRequirements: string[];
+    testSyncRequirements: string[];
+    testCommand?: string;
+  };
+  artifactRefs: PRItemExecutionArtifactRef[];
+  evidence: PRItemExecutionEvidence;
+  producerJob: {
+    kind: 'pr_pool_item';
+    prItemId: string;
+    status: PRItemStatus;
+    source: PRItem['source'];
+  };
+  consumerSemantics: {
+    implementationConfirmed: boolean;
+    requirePlanApproval: boolean;
+    stopConditions: string[];
+  };
 };
 
 export type CreatePRItemInput = {
@@ -253,6 +380,7 @@ export async function createPrPoolItem(input: CreatePRItemInput): Promise<PRItem
   await writeItems(items);
   await appendPrPoolEvent({ prItemId: item.id, type: 'created', to: item.status });
   await writePrItemBrief(item);
+  await writePrItemExecutionContract(item);
   return item;
 }
 
@@ -332,7 +460,7 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
     },
     codeTaskId: item.run.codeTaskId || '',
     codeRunSummary: buildCodeRunSummary(item),
-    artifacts: ['item.json', 'brief.md', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'code-run-summary.md', 'final-summary.md', 'archive-entry.json', 'references.json'],
+    artifacts: ['item.json', 'brief.md', 'objective.md', 'context-brief.md', 'design-4plus1.md', 'code-agent-pr-brief.md', 'execution-contract.json', 'code-run-summary.md', 'final-summary.md', 'archive-entry.json', 'references.json'],
     archivedAt,
     archiveReason: reason,
   };
@@ -343,18 +471,21 @@ export async function archivePrPoolItem(id: string, reason: PRArchiveEntry['arch
   await fs.writeFile(path.join(archiveDir, 'context-brief.md'), buildContextBriefMarkdown(item), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'design-4plus1.md'), buildDesignMarkdown(archiveEntry.design4Plus1), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'code-agent-pr-brief.md'), buildCodeAgentPrBriefMarkdown(item), 'utf8');
+  await fs.writeFile(path.join(archiveDir, 'execution-contract.json'), JSON.stringify(buildPrItemExecutionContract(item), null, 2), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'code-run-summary.md'), archiveEntry.codeRunSummary, 'utf8');
   await fs.writeFile(path.join(archiveDir, 'final-summary.md'), buildFinalSummaryMarkdown(item, archiveEntry), 'utf8');
   await fs.writeFile(path.join(archiveDir, 'archive-entry.json'), JSON.stringify(archiveEntry, null, 2), 'utf8');
   await writeItems(items.filter(entry => entry.id !== id));
+  await fs.rm(path.join(activeRoot, id), { recursive: true, force: true });
+  await fs.rm(path.join(prPoolRunsRoot, id), { recursive: true, force: true });
   await appendPrPoolEvent({ prItemId: id, type: 'archived', from: item.status, to: 'archived' });
   return archiveEntry;
 }
 
 export async function writeCodeAgentPrBrief(item: PRItem): Promise<string> {
-  const runDir = path.join(prPoolRunsRoot, item.id);
-  await fs.mkdir(runDir, { recursive: true });
-  const briefPath = path.join(runDir, 'code-agent-pr-brief.md');
+  const itemDir = path.join(activeRoot, item.id);
+  await fs.mkdir(itemDir, { recursive: true });
+  const briefPath = path.join(itemDir, 'code-agent-pr-brief.md');
   await fs.writeFile(briefPath, buildCodeAgentPrBriefMarkdown(item), 'utf8');
   return briefPath;
 }
@@ -365,6 +496,85 @@ export async function writePrItemBrief(item: PRItem): Promise<string> {
   const briefPath = path.join(itemDir, 'brief.md');
   await fs.writeFile(briefPath, buildPrItemBriefMarkdown(item), 'utf8');
   return briefPath;
+}
+
+export async function writePrItemExecutionContract(item: PRItem): Promise<string> {
+  const itemDir = path.join(activeRoot, item.id);
+  await fs.mkdir(itemDir, { recursive: true });
+  const contractPath = path.join(itemDir, 'execution-contract.json');
+  await fs.writeFile(contractPath, `${JSON.stringify(buildPrItemExecutionContract(item), null, 2)}\n`, 'utf8');
+  return contractPath;
+}
+
+export function buildPrItemExecutionContract(item: PRItem): PRItemExecutionContract {
+  return {
+    schemaVersion: 1,
+    id: item.id,
+    type: 'pr_pool.execution_job',
+    status: item.status,
+    inputContract: {
+      objective: item.objective,
+      acceptanceCriteria: item.acceptanceCriteria,
+      nonGoals: item.nonGoals,
+      constraints: item.constraints,
+      prompt: item.codeAgentPrompt,
+    },
+    owner: {
+      source: item.source,
+      goalId: item.goalId,
+      proposalId: item.proposalId,
+      designArtifactId: item.designArtifactId,
+    },
+    timestamps: {
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      lastDispatchedAt: item.run.lastDispatchedAt,
+      lastCompletedAt: item.run.lastCompletedAt,
+    },
+    resumeCursor: {
+      status: item.status,
+      runtimeTaskId: item.run.runtimeTaskId,
+      codeRuntimeTaskId: item.run.codeRuntimeTaskId,
+      codeTaskId: item.run.codeTaskId,
+      previousCodeTaskId: item.run.previousCodeTaskId,
+      retryCount: item.run.retryCount,
+      maxRetries: item.run.maxRetries,
+      blocking: item.blocking,
+    },
+    approval: item.approval,
+    consumerSemantics: {
+      implementationConfirmed: item.status === 'ready' || item.status === 'scheduled' || item.status === 'developing' || item.status === 'waiting_user_confirm' || item.status === 'completed',
+      requirePlanApproval: false,
+      stopConditions: [
+        'HIGH/CRITICAL GitNexus impact not pre-approved',
+        'Missing credentials or required configuration',
+        'Failing external services',
+        'Impossible requirements',
+        'Verification failures that cannot be resolved',
+      ],
+    },
+    producerJob: {
+      kind: 'pr_pool_item',
+      prItemId: item.id,
+      status: item.status,
+      source: item.source,
+    },
+    workspace: {
+      repoPath: item.workspace.repoPath,
+      worktreePath: item.workspace.worktreePath,
+      branchName: item.workspace.branchName,
+      policy: prItemWorkspacePolicy(item),
+    },
+    verification: {
+      acceptanceCriteria: item.acceptanceCriteria,
+      verificationPlan: prItemVerificationPlan(item),
+      docSyncRequirements: prItemDocSyncRequirements(item),
+      testSyncRequirements: prItemTestSyncRequirements(item),
+      testCommand: item.testCommand,
+    },
+    artifactRefs: buildPrItemArtifactRefs(item),
+    evidence: buildPrItemExecutionEvidence(item),
+  };
 }
 
 export function buildPrItemBriefMarkdown(item: PRItem): string {
@@ -388,6 +598,15 @@ export function buildPrItemBriefMarkdown(item: PRItem): string {
     item.designArtifactId ? `- Design Artifact ID: ${item.designArtifactId}` : undefined,
     `- Workspace: ${workspacePath}`,
     item.workspace.branchName ? `- Branch: ${item.workspace.branchName}` : undefined,
+    '',
+    '## Execution Semantics',
+    '',
+    '- This item reached CodeAgent through the PR Pool develop dispatch path and carries the approval metadata recorded on the PR item.',
+    '- Execute within the provided PR Pool contract instead of returning only a plan.',
+    '- Complete the whole slice end-to-end in one run: inspect, implement, update docs/tests, verify, and commit if commits are allowed.',
+    '- If the slice is large, split it into internal sequential steps and complete them in order before reporting done.',
+    '- Stop only for real blockers: HIGH/CRITICAL GitNexus impact, missing credentials, failing external services, impossible requirements, or verification failures you cannot resolve.',
+    '- Commit created changes when Allow Commit is yes; never push unless Allow Push is yes and the user explicitly requested pushing.',
     '',
     '## Objective',
     '',
@@ -445,8 +664,9 @@ export function buildPrItemBriefMarkdown(item: PRItem): string {
     '',
     '## Stop Conditions',
     '',
-    '- Stop if requirements or implementation boundaries are unclear.',
-    '- Stop if impact analysis reveals unapproved high-risk changes.',
+    '- Stop if requirements are impossible to satisfy with the provided context and report the specific missing information.',
+    '- Stop if impact analysis reveals unapproved HIGH/CRITICAL changes.',
+    '- Do not stop for routine implementation planning after this item is ready; split large work into internal sequential steps and continue.',
     '- Do not mark the PR item completed unless acceptance criteria and verification evidence are satisfied.',
     '- Report changed files, tests run, test results, remaining risks, and follow-up work.',
     '',
@@ -522,6 +742,96 @@ function buildCodeRunSummary(item: PRItem): string {
     `- Runtime Task: ${item.run.runtimeTaskId || 'n/a'}`,
     `- Status: ${item.status}`,
   ].join('\n');
+}
+
+function buildPrItemArtifactRefs(item: PRItem): PRItemExecutionArtifactRef[] {
+  const ref = (name: string, summary: string): PRItemExecutionArtifactRef => ({
+    schemaVersion: 1,
+    type: 'artifact',
+    name,
+    ref: `pr-pool://${item.id}/artifacts/${name}`,
+    summary,
+  });
+  const refs = [
+    ref('brief.md', 'Human-readable PR Pool requirement brief.'),
+    ref('code-agent-pr-brief.md', 'CodeAgent handoff brief.'),
+    ref('objective.md', 'Objective and acceptance criteria.'),
+    ref('context-brief.md', 'Compact implementation context.'),
+    ref('design-4plus1.md', 'Optional 4+1 design summary.'),
+    ref('references.json', 'Structured source references.'),
+    ref('code-run-summary.md', 'Compact CodeTask run summary.'),
+    ref('final-summary.md', 'Archive-time final summary.'),
+  ];
+  if (item.run.executionJob?.logFile) {
+    refs.push({ schemaVersion: 1, type: 'log', name: 'code-task-log', ref: `code-task://${item.run.executionJob.codeTaskId}/log`, summary: 'Expandable CodeTask log reference.' });
+  }
+  if (item.run.executionJob?.patchFile) {
+    refs.push({ schemaVersion: 1, type: 'patch', name: 'code-task-patch', ref: `code-task://${item.run.executionJob.codeTaskId}/patch`, summary: 'Expandable CodeTask patch reference.' });
+  }
+  return refs;
+}
+
+export function buildPrItemExecutionEvidence(item: PRItem): PRItemExecutionEvidence {
+  const refs = buildPrItemArtifactRefs(item);
+  const verificationRefs = (item.evidence?.verification?.sources || []).map<PRItemExecutionArtifactRef>((source, index) => ({
+    schemaVersion: 1,
+    type: 'evidence',
+    name: `verification-${index + 1}`,
+    ref: compactEvidenceRef(source.ref),
+    summary: source.detail || `${source.type} evidence`,
+  }));
+  const failureReason = item.blocking?.reason || item.run.lastFailureReason;
+  const humanIntervention = item.status === 'waiting_user_confirm' || item.blocking?.category === 'permission'
+    ? {
+        reason: failureReason || 'Waiting for user confirmation.',
+        detectedAt: item.blocking?.detectedAt || item.updatedAt,
+      }
+    : undefined;
+
+  return {
+    schemaVersion: 1,
+    status: item.status,
+    summary: summarizePrItemEvidence(item),
+    completion: item.status === 'completed'
+      ? {
+          completedAt: item.run.lastCompletedAt,
+          codeTaskId: item.run.codeTaskId,
+          teamRunId: item.run.lastRunId || item.run.executionJob?.teamRunId,
+        }
+      : undefined,
+    failure: item.status === 'failed'
+      ? {
+          category: item.blocking?.category || 'runtime_error',
+          reason: failureReason || 'PR Pool item failed.',
+          detectedAt: item.blocking?.detectedAt || item.updatedAt,
+        }
+      : undefined,
+    humanIntervention,
+    verification: item.evidence?.verification
+      ? {
+          status: item.evidence.verification.status,
+          summary: item.evidence.verification.summary,
+          refs: verificationRefs,
+          updatedAt: item.evidence.verification.updatedAt,
+        }
+      : undefined,
+    refs: [...refs, ...verificationRefs],
+    updatedAt: item.updatedAt,
+  };
+}
+
+function compactEvidenceRef(ref: string): string {
+  const normalized = ref.replaceAll('\\', '/');
+  const fileName = normalized.split('/').filter(Boolean).at(-1) || ref;
+  if (normalized.includes('/code-') || fileName.startsWith('code-')) return `code-task-log://${fileName}`;
+  return `evidence://${fileName}`;
+}
+
+function summarizePrItemEvidence(item: PRItem): string {
+  if (item.status === 'completed') return `PR item ${item.id} completed${item.run.codeTaskId ? ` by ${item.run.codeTaskId}` : ''}.`;
+  if (item.status === 'failed') return item.blocking?.reason || item.run.lastFailureReason || `PR item ${item.id} failed.`;
+  if (item.status === 'waiting_user_confirm') return item.blocking?.reason || `PR item ${item.id} is waiting for user confirmation.`;
+  return `PR item ${item.id} is ${item.status}.`;
 }
 
 function buildObjectiveMarkdown(item: PRItem): string {
