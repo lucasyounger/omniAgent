@@ -1,5 +1,4 @@
 import type { ChannelTarget } from '../../gateway/types';
-import { taskRuntime } from './task-runtime';
 import { runtimeTaskTypes } from './task-types';
 import type { DispatchResult } from './task-dispatcher/types';
 import { stringValue } from './task-dispatcher/utils';
@@ -51,6 +50,7 @@ export async function queueRuntimeNotification(input: QueueRuntimeNotificationIn
     target: input.target,
   });
 
+  const { taskRuntime } = await import('./task-runtime');
   const notifyTask = await taskRuntime.createTask({
     sourceAgentId: input.sourceAgentId,
     targetAgentId: 'notify-agent',

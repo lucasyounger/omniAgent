@@ -1,6 +1,5 @@
 import type { ChannelTarget } from '../../../gateway/types';
 import type { CronJob } from '../../lib/cron-store';
-import { taskRuntime } from '../task-runtime';
 import type { RuntimeTask } from '../types';
 
 export function readPayload(task: RuntimeTask) {
@@ -13,6 +12,7 @@ export function readTaskType(task: RuntimeTask) {
 }
 
 export async function leaseTask(task: RuntimeTask) {
+  const { taskRuntime } = await import('../task-runtime');
   return taskRuntime.transition({
     taskId: task.id,
     nextStatus: 'pending',
