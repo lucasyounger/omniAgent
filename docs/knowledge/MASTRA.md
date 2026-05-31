@@ -10,6 +10,11 @@ OmniAgent uses:
 - Mastra Memory uses `omniStorage` for agent conversation continuity. R7 keeps
   that boundary explicit through `memoryRuntime.boundary`; auditable long-term
   knowledge stays in file-backed docs memory and reviewable proposals.
+- `scripts/patch-mastra-studio-reasoning.mjs` patches the bundled Mastra Studio
+  chat asset after install and before `npm run dev`/`bun run dev`. The patch keeps
+  reasoning stream parts visible in the Studio message header while removing the
+  duplicated legacy `content.reasoning` copy that caused two Hide reasoning
+  sections around the final answer.
 
 ## Current Pattern
 

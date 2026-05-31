@@ -2,10 +2,13 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { buildContextPack } from '../runtime/context-pack';
 import { createWorkflowRun } from '../runtime/execution-engine';
+import { prPoolRuntime } from '../runtime/pr-pool/pr-pool-runtime';
 import { taskRuntime } from '../runtime/task-runtime';
+import { runtimeTaskTypes } from '../runtime/task-types';
 import type { RuntimeTaskStatus } from '../runtime/types';
+import { createAndDispatchRuntimeTask } from '../tools/runtime-task-tools';
 
-const aiDevE2EModeSchema = z.enum(['dry_run', 'shadow']);
+const aiDevE2EModeSchema = z.enum(['dry_run', 'shadow', 'execute_confirmed']);
 const aiDevE2EStepStatusSchema = z.enum(['completed', 'shadowed', 'waiting_approval', 'needs_input', 'skipped']);
 
 const aiDevE2EInputSchema = z.object({
@@ -21,6 +24,9 @@ const aiDevE2EInputSchema = z.object({
   verificationCommands: z.array(z.string()).default([]),
   requiresApproval: z.boolean().default(false),
   approvalConfirmed: z.boolean().default(false),
+  approvalToken: z.string().optional(),
+  executor: z.enum(['claude_code', 'opencode', 'codex', 'custom']).optional(),
+  executionMode: z.enum(['direct', 'patch_proposal']).optional(),
   scheduleFollowUp: z.boolean().default(false),
 });
 
@@ -69,10 +75,15 @@ const aiDevE2EReconcileSchema = z.object({
 
 const aiDevE2EOutputSchema = z.object({
   runId: z.string(),
+  workflowRunId: z.string(),
   mode: aiDevE2EModeSchema,
-  status: z.enum(['shadow_completed', 'waiting_approval', 'needs_input']),
+  status: z.enum(['shadow_completed', 'execute_dispatched', 'execute_completed', 'waiting_approval', 'needs_input']),
   contextSnapshotId: z.string(),
   contextPackType: z.string(),
+  prPoolItemId: z.string().optional(),
+  prPoolDevelopRuntimeTaskId: z.string().optional(),
+  codeRuntimeTaskId: z.string().optional(),
+  codeTaskId: z.string().optional(),
   steps: z.array(aiDevE2EStepSchema),
   proposedPrSlice: z.object({
     title: z.string(),
@@ -82,7 +93,7 @@ const aiDevE2EOutputSchema = z.object({
     verificationPlan: z.array(z.string()),
     docSyncRequirements: z.array(z.string()),
     testSyncRequirements: z.array(z.string()),
-    shadowOnly: z.literal(true),
+    shadowOnly: z.boolean(),
   }),
   evidence: z.array(aiDevE2EEvidenceSchema),
   runtimeTaskBindings: z.array(aiDevE2ERuntimeTaskBindingSchema),
@@ -133,16 +144,25 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
       gitnexusRequired: Boolean(parsed.affectedAreas.length || parsed.prPoolItemId),
       docsSyncRequired: true,
       testsSyncRequired: true,
-      notes: ['Shadow mode only: run GitNexus impact before any future code edit.'],
+      notes: [parsed.mode === 'execute_confirmed' ? 'Confirmed execution mode: collect GitNexus impact before code edits.' : 'Shadow mode only: run GitNexus impact before any future code edit.'],
     },
   });
   const runId = `ai-dev-e2e-${Date.now().toString(36)}`;
-  const approvalStatus = parsed.requiresApproval && !parsed.approvalConfirmed ? 'waiting_approval' : 'shadowed';
-  const status = approvalStatus === 'waiting_approval' ? 'waiting_approval' : parsed.request.trim() ? 'shadow_completed' : 'needs_input';
+  const executionBlockedReason = getExecuteConfirmedBlocker(parsed);
+  const approvalStatus = executionBlockedReason === 'approval' || (parsed.requiresApproval && !parsed.approvalConfirmed) ? 'waiting_approval' : 'shadowed';
+  const status = executionBlockedReason === 'approval'
+    ? 'waiting_approval'
+    : executionBlockedReason
+      ? 'needs_input'
+      : approvalStatus === 'waiting_approval'
+        ? 'waiting_approval'
+        : parsed.request.trim()
+          ? 'shadow_completed'
+          : 'needs_input';
   const verificationPlan = parsed.verificationCommands.length
     ? parsed.verificationCommands
     : ['npm run typecheck', 'npm test', 'npm run verify:change-sync', 'gitnexus detect changes before commit'];
-  const shadowSteps = buildShadowSteps(parsed, approvalStatus);
+  const shadowSteps = buildShadowSteps(parsed, approvalStatus, executionBlockedReason);
   const runtimeTaskBindings = parsed.mode === 'dry_run'
     ? await bindWorkflowStepsToRuntimeTasks({
       runId,
@@ -151,18 +171,30 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
       steps: shadowSteps,
     })
     : [];
-  const steps = attachRuntimeTaskBindings(shadowSteps, runtimeTaskBindings);
   const verificationEvidence = buildVerificationEvidence(parsed, verificationPlan);
   const memoryWritebackCandidates = parsed.goalId
     ? [{ type: 'goal', title: 'AI dev E2E shadow run completed', scope: `goal:${parsed.goalId}` }]
     : [];
-  const reconcile = buildReconcilePlan(parsed, status, runtimeTaskBindings, memoryWritebackCandidates.length);
+  const execution = !executionBlockedReason && parsed.mode === 'execute_confirmed'
+    ? await executeConfirmedPrPoolDevelop(parsed, runId)
+    : undefined;
+  const workflowStatus = execution?.workflowStatus || status;
+  const steps = attachRuntimeTaskBindings(
+    execution ? attachExecutionToSteps(shadowSteps, execution) : shadowSteps,
+    runtimeTaskBindings,
+  );
+  const reconcile = buildReconcilePlan(parsed, workflowStatus, runtimeTaskBindings, memoryWritebackCandidates.length);
   const output = aiDevE2EOutputSchema.parse({
     runId,
+    workflowRunId: runId,
     mode: parsed.mode,
-    status,
+    status: workflowStatus,
     contextSnapshotId: contextPack.snapshot.id,
     contextPackType: contextPack.task.type,
+    prPoolItemId: execution?.prPoolItemId || parsed.prPoolItemId,
+    prPoolDevelopRuntimeTaskId: execution?.prPoolDevelopRuntimeTaskId,
+    codeRuntimeTaskId: execution?.codeRuntimeTaskId,
+    codeTaskId: execution?.codeTaskId,
     steps,
     proposedPrSlice: {
       title: summarizeTitle(parsed.request),
@@ -172,14 +204,17 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
       verificationPlan,
       docSyncRequirements: ['Update mapped docs for any behavior-changing source edit.'],
       testSyncRequirements: ['Add or update tests for any behavior-changing source edit.'],
-      shadowOnly: true,
+      shadowOnly: parsed.mode !== 'execute_confirmed',
     },
     evidence: [
       { kind: 'context_snapshot', summary: `Built ${contextPack.task.type} context snapshot ${contextPack.snapshot.id}.` },
       ...verificationEvidence,
+      ...(execution?.evidence || []),
       parsed.mode === 'dry_run'
         ? { kind: 'workflow_runtime_tasks', summary: `Created ${runtimeTaskBindings.length} RuntimeTask bindings without dispatching executor work.` }
-        : { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
+        : parsed.mode === 'execute_confirmed'
+          ? { kind: execution ? 'workflow_execute_confirmed' : 'workflow_execute_blocked', summary: execution ? 'Dispatched confirmed PR Pool item through RuntimeTask native facade.' : 'Confirmed execution was blocked before creating PR Pool develop RuntimeTasks.' }
+          : { kind: 'workflow_shadow', summary: 'No PR Pool item, RuntimeTask, verification command, commit, push, or memory write was executed.' },
     ],
     runtimeTaskBindings,
     reconcile,
@@ -191,6 +226,136 @@ export async function runAiDevE2EWorkflow(input: AiDevE2EInput): Promise<AiDevE2
 
   await persistAiDevE2EWorkflowRun(parsed, output);
   return output;
+}
+
+type ExecuteConfirmedBlocker = 'missing_pr_pool_item' | 'missing_acceptance_criteria' | 'approval' | undefined;
+
+type ExecuteConfirmedResult = {
+  workflowStatus: 'execute_dispatched' | 'execute_completed' | 'waiting_approval';
+  prPoolItemId: string;
+  prPoolDevelopRuntimeTaskId: string;
+  codeRuntimeTaskId?: string;
+  codeTaskId?: string;
+  dispatchStatus: string;
+  evidence: z.infer<typeof aiDevE2EEvidenceSchema>[];
+};
+
+function getExecuteConfirmedBlocker(input: z.infer<typeof aiDevE2EInputSchema>): ExecuteConfirmedBlocker {
+  if (input.mode !== 'execute_confirmed') return undefined;
+  if (!input.prPoolItemId) return 'missing_pr_pool_item';
+  if (input.acceptanceCriteria.length === 0) return 'missing_acceptance_criteria';
+  if (!input.approvalConfirmed || !input.approvalToken) return 'approval';
+  return undefined;
+}
+
+async function executeConfirmedPrPoolDevelop(
+  input: z.infer<typeof aiDevE2EInputSchema>,
+  runId: string,
+): Promise<ExecuteConfirmedResult> {
+  const prPoolItemId = input.prPoolItemId!;
+  const develop = await createAndDispatchRuntimeTask({
+    sourceAgentId: 'ai-dev-e2e-workflow',
+    targetAgentId: 'pr-pool-runtime',
+    requestedBy: input.requester,
+    parentTaskId: runId,
+    objective: `Develop confirmed PR Pool item ${prPoolItemId}: ${input.request}`,
+    taskType: runtimeTaskTypes.prPoolDevelop,
+    payload: {
+      prItemId: prPoolItemId,
+      executor: input.executor,
+      executionMode: input.executionMode,
+      approvalToken: input.approvalToken,
+    },
+    metadata: {
+      workflowId: 'ai-dev-e2e-workflow',
+      workflowRunId: runId,
+      context: 'execute_confirmed',
+    },
+  });
+  const itemAfterDispatch = await prPoolRuntime.get(prPoolItemId);
+  const dispatchResult = develop.dispatch.status === 'dispatched' ? develop.dispatch.result : undefined;
+  const waitingApproval = develop.dispatch.status === 'waiting_user_confirm';
+  if (!waitingApproval) {
+    await prPoolRuntime.reconcileDevelopmentRuns();
+  }
+  const item = await prPoolRuntime.get(prPoolItemId) || itemAfterDispatch;
+  const codeRuntimeTaskId = typeof item?.run.codeRuntimeTaskId === 'string'
+    ? item.run.codeRuntimeTaskId
+    : readStringField(dispatchResult, 'codeTaskId');
+  const codeTaskId = item?.run.codeTaskId;
+
+  return {
+    workflowStatus: waitingApproval ? 'waiting_approval' : codeTaskId ? 'execute_completed' : 'execute_dispatched',
+    prPoolItemId,
+    prPoolDevelopRuntimeTaskId: develop.task.id,
+    codeRuntimeTaskId,
+    codeTaskId,
+    dispatchStatus: develop.dispatch.status,
+    evidence: [
+      {
+        kind: 'pr_pool_develop_runtime_task',
+        status: waitingApproval ? 'blocked' : 'passed',
+        sourceRef: `runtime-task://${develop.task.id}`,
+        summary: waitingApproval
+          ? 'PR Pool develop RuntimeTask is waiting for approval before CodeAgent dispatch.'
+          : `PR Pool develop RuntimeTask dispatched with status ${develop.dispatch.status}.`,
+      },
+      ...(codeRuntimeTaskId
+        ? [{
+          kind: 'code_runtime_task',
+          status: 'passed' as const,
+          sourceRef: `runtime-task://${codeRuntimeTaskId}`,
+          summary: 'CodeAgent RuntimeTask was linked from PR Pool develop.',
+        }]
+        : []),
+      ...(codeTaskId
+        ? [{
+          kind: 'code_task',
+          status: item?.status === 'completed' ? 'passed' as const : 'not_run' as const,
+          sourceRef: `code-task://${codeTaskId}`,
+          summary: 'CodeTask id was resolved from PR Pool reconcile state.',
+        }]
+        : []),
+    ],
+  };
+}
+
+function readStringField(value: unknown, key: string): string | undefined {
+  return value && typeof value === 'object' && key in value && typeof (value as Record<string, unknown>)[key] === 'string'
+    ? (value as Record<string, string>)[key]
+    : undefined;
+}
+
+function attachExecutionToSteps(steps: ReturnType<typeof buildShadowSteps>, execution: ExecuteConfirmedResult) {
+  return steps.map(workflowStep => {
+    if (workflowStep.id === 'pr_pool_ingest') {
+      return {
+        ...workflowStep,
+        status: 'completed' as const,
+        summary: `Using confirmed PR Pool item ${execution.prPoolItemId}; ingest was not repeated.`,
+      };
+    }
+    if (workflowStep.id === 'execute') {
+      return {
+        ...workflowStep,
+        status: execution.workflowStatus === 'waiting_approval' ? 'waiting_approval' as const : 'completed' as const,
+        summary: execution.workflowStatus === 'waiting_approval'
+          ? 'PR Pool develop RuntimeTask is waiting for approval.'
+          : `PR Pool develop RuntimeTask ${execution.prPoolDevelopRuntimeTaskId} dispatched CodeAgent RuntimeTask ${execution.codeRuntimeTaskId || 'pending'}.`,
+        runtimeTaskId: execution.prPoolDevelopRuntimeTaskId,
+        runtimeTaskStatus: execution.dispatchStatus,
+        resultRef: `runtime-task://${execution.prPoolDevelopRuntimeTaskId}`,
+      };
+    }
+    if (execution.codeTaskId && (workflowStep.id === 'verify' || workflowStep.id === 'review' || workflowStep.id === 'reconcile')) {
+      return {
+        ...workflowStep,
+        status: 'completed' as const,
+        summary: `${workflowStep.label} evidence resolved from CodeTask ${execution.codeTaskId}.`,
+      };
+    }
+    return workflowStep;
+  });
 }
 
 async function persistAiDevE2EWorkflowRun(
@@ -233,19 +398,24 @@ function workflowStepStatusToRunStatus(status: z.infer<typeof aiDevE2EStepStatus
   return status;
 }
 
-function buildShadowSteps(input: z.infer<typeof aiDevE2EInputSchema>, approvalStatus: z.infer<typeof aiDevE2EStepStatusSchema>) {
+function buildShadowSteps(
+  input: z.infer<typeof aiDevE2EInputSchema>,
+  approvalStatus: z.infer<typeof aiDevE2EStepStatusSchema>,
+  executionBlockedReason?: ExecuteConfirmedBlocker,
+) {
   const needsClarification = input.acceptanceCriteria.length === 0;
+  const executing = input.mode === 'execute_confirmed' && !executionBlockedReason;
   return [
     step('intake', 'Intake', 'completed', 'Normalized the user request into an AI development run intent.'),
     step('context', 'Context Build', 'completed', 'Built a replayable Context Pack snapshot.'),
-    step('clarify', 'Clarify', needsClarification ? 'needs_input' : 'shadowed', needsClarification ? 'Acceptance criteria are missing for real execution.' : 'Acceptance criteria are present.'),
-    step('plan', 'Plan And Slice', 'shadowed', 'Prepared a shadow PR slice contract without ingesting it.'),
-    step('approval', 'Human Confirmation', approvalStatus, approvalStatus === 'waiting_approval' ? 'Approval is required before real execution.' : 'No blocking approval is required in shadow mode.'),
-    step('pr_pool_ingest', 'PR Pool Ingest', 'skipped', 'Shadow mode does not create or mutate PR Pool items.'),
-    step('execute', 'Execute Slice', 'skipped', 'Shadow mode does not create RuntimeTasks or executor runs.'),
-    step('verify', 'Verify', 'shadowed', 'Verification commands were normalized as evidence requirements only.'),
-    step('review', 'Review', 'shadowed', 'Review remains a required lane before real reconcile.'),
-    step('reconcile', 'Reconcile', 'shadowed', 'Would reconcile PR Pool, Req, GoalRun, and memory candidates after real evidence exists.'),
+    step('clarify', 'Clarify', needsClarification ? 'needs_input' : executing ? 'completed' : 'shadowed', needsClarification ? 'Acceptance criteria are missing for real execution.' : 'Acceptance criteria are present.'),
+    step('plan', 'Plan And Slice', executing ? 'completed' : 'shadowed', executing ? 'Using the confirmed PR Pool slice contract.' : 'Prepared a shadow PR slice contract without ingesting it.'),
+    step('approval', 'Human Confirmation', approvalStatus, approvalStatus === 'waiting_approval' ? 'Approval is required before real execution.' : executing ? 'Confirmed execution approval token is present.' : 'No blocking approval is required in shadow mode.'),
+    step('pr_pool_ingest', 'PR Pool Ingest', executing ? 'completed' : 'skipped', executing ? 'Using an existing confirmed PR Pool item.' : 'Shadow mode does not create or mutate PR Pool items.'),
+    step('execute', 'Execute Slice', executionBlockedReason === 'approval' ? 'waiting_approval' : executionBlockedReason ? 'needs_input' : executing ? 'completed' : 'skipped', executionBlockedReason === 'approval' ? 'Approval confirmation and approval token are required before dispatch.' : executionBlockedReason === 'missing_pr_pool_item' ? 'Confirmed execution requires a PR Pool item id.' : executionBlockedReason === 'missing_acceptance_criteria' ? 'Acceptance criteria are missing for real execution.' : executing ? 'Confirmed execution will dispatch PR Pool develop.' : 'Shadow mode does not create RuntimeTasks or executor runs.'),
+    step('verify', 'Verify', executing ? 'shadowed' : 'shadowed', 'Verification commands were normalized as evidence requirements only.'),
+    step('review', 'Review', executing ? 'shadowed' : 'shadowed', 'Review remains a required lane before real reconcile.'),
+    step('reconcile', 'Reconcile', executing ? 'shadowed' : 'shadowed', 'Would reconcile PR Pool, Req, GoalRun, and memory candidates after real evidence exists.'),
     step('memory_writeback', 'Memory Writeback', 'shadowed', 'Would emit governed memory candidates; no memory was written.'),
     step('follow_up', 'Schedule Follow-up', input.scheduleFollowUp ? 'shadowed' : 'skipped', input.scheduleFollowUp ? 'A follow-up recommendation was emitted.' : 'No follow-up was requested.'),
   ];

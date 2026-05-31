@@ -175,13 +175,22 @@ approval linkage.
   WorkflowRun record under `~/.omni/runs/workflow/{runId}.json` with source
   `ai_dev_e2e`, normalized step results, the original input, and the parsed
   output so Web/Desktop/CLI clients can resume from the WorkflowRun store instead
-  of replaying in-memory workflow output. These bindings are auditable planning records only: they are
-  not dispatched to executor handlers and do not mutate PR Pool state. The same
-  output normalizes test, typecheck, change-sync, GitNexus, and review evidence
-  requirements for downstream verification/reconcile consumers and carries one
-  structured reconcile plan for PR Pool, Req, GoalRun, and memory writeback. The
-  reconcile plan points back to the durable reconcile RuntimeTask binding when
-  the run is in `dry_run`; `shadow` mode remains no-side-effect.
+  of replaying in-memory workflow output. These bindings are auditable planning
+  records only: they are not dispatched to executor handlers and do not mutate PR
+  Pool state. `execute_confirmed` is the explicit side-effecting mode for an
+  already confirmed PR Pool item: it requires acceptance criteria plus an
+  approval token, creates a `pr_pool.develop` RuntimeTask through the native
+  facade, dispatches CodeAgent, reconciles the PR Pool run, and returns
+  `workflowRunId`, `contextSnapshotId`, `prPoolItemId`,
+  `prPoolDevelopRuntimeTaskId`, `codeRuntimeTaskId`, and `codeTaskId` when those
+  links are resolved. Missing acceptance criteria stops at `needs_input`; missing
+  approval stops at `waiting_approval`; both blockers happen before creating a PR
+  Pool develop RuntimeTask or CodeAgent task. The same output normalizes test,
+  typecheck, change-sync, GitNexus, and review evidence requirements for
+  downstream verification/reconcile consumers and carries one structured
+  reconcile plan for PR Pool, Req, GoalRun, and memory writeback. The reconcile
+  plan points back to the durable reconcile RuntimeTask binding when the run is
+  in `dry_run`; `shadow` mode remains no-side-effect.
 - ExecutorRuntime registry records detected local AI CLI runtimes under
   `~/.omni/runs/executor-runtimes/registry.json`. Each record captures runtime
   kind, command, version, capabilities, max concurrency, status, and heartbeat

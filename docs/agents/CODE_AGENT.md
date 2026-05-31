@@ -78,10 +78,11 @@ execution through Team Runtime.
   requests, those inbox messages return to `channel-gateway`; the Gateway
   delivery worker then creates traceable QQBot or Feishu outbox records using
   the original channel source metadata.
-- For PR Pool ready/scheduled develop handoffs, CodeAgent should execute within
-  the provided PR Pool contract, complete the slice end-to-end in one run when
-  possible, split large work into internal sequential steps, update docs/tests,
-  and run verification. It should stop only for real blockers such as
+- For PR Pool ready/scheduled develop handoffs, including AI Dev E2E
+  `execute_confirmed` runs, CodeAgent should execute within the provided PR Pool
+  contract and parent RuntimeTask context, complete the slice end-to-end in one
+  run when possible, split large work into internal sequential steps, update
+  docs/tests, and run verification. It should stop only for real blockers such as
   HIGH/CRITICAL GitNexus impact, missing credentials, external-service failures,
   impossible requirements, or unresolved verification failures.
 

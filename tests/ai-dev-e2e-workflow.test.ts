@@ -9,6 +9,7 @@ async function loadWorkflow() {
   vi.resetModules();
   process.env.OMNI_PROJECT_ROOT = tempRoot;
   process.env.OMNI_HOME = path.join(tempRoot, '.omni');
+  process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
   return import('../src/mastra/workflows/ai-dev-e2e-workflow');
 }
 
@@ -39,6 +40,7 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.OMNI_PROJECT_ROOT;
   delete process.env.OMNI_HOME;
+  delete process.env.OMNI_ALLOWED_WORKSPACES;
   await fs.rm(tempRoot, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -245,5 +247,162 @@ describe('ai-dev-e2e workflow', () => {
         expect.objectContaining({ stepId: 'execute', status: 'skipped' }),
       ]),
     });
+  });
+
+  it('executes a confirmed PR Pool item through CodeAgent and reconcile', async () => {
+    const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+
+    const item = await prPoolRuntime.create({
+      title: 'Execute confirmed AI dev slice',
+      objective: 'Run a confirmed PR Pool item through CodeAgent and reconcile.',
+      workspaceRepoPath: tempRoot,
+      impact: { modules: ['ai-dev-e2e'], risk: 'low' },
+      acceptanceCriteria: ['CodeAgent RuntimeTask is linked and reconciled.'],
+      verificationPlan: ['npm test -- tests/ai-dev-e2e-workflow.test.ts'],
+      docSyncRequirements: ['Update Team Runtime docs'],
+      testSyncRequirements: ['Update AI Dev E2E workflow tests'],
+      workspacePolicy: { editablePaths: ['src/**', 'tests/**', 'docs/**'], forbiddenPaths: ['secrets/**'] },
+      codeAgentPrompt: 'Create a patch proposal for the confirmed slice.',
+      design4Plus1: {
+        logical: 'AI Dev E2E confirmed execution dispatches PR Pool develop.',
+        process: 'Workflow creates PR Pool develop RuntimeTask, CodeAgent RuntimeTask, CodeTask, then reconcile.',
+        development: 'Use patch proposal execution in tests to avoid executor side effects.',
+        physical: 'Run inside the prepared PR Pool workspace.',
+        scenarios: ['Confirmed item completes after mocked patch-proposal CodeTask.'],
+      },
+    });
+    await prPoolRuntime.confirm(item.id);
+    await prPoolRuntime.update(item.id, {
+      workspace: {
+        repoPath: tempRoot,
+        worktreePath: tempRoot,
+        branchName: `omni/${item.id}`,
+      },
+    });
+
+    const result = await runAiDevE2EWorkflow({
+      mode: 'execute_confirmed',
+      request: 'Execute confirmed AI Dev E2E slice',
+      prPoolItemId: item.id,
+      requester: 'tester',
+      acceptanceCriteria: ['CodeAgent RuntimeTask is linked and reconciled.'],
+      approvalConfirmed: true,
+      approvalToken: 'approved',
+      executor: 'opencode',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(result.status).toBe('execute_completed');
+    expect(result.workflowRunId).toBe(result.runId);
+    expect(result.contextSnapshotId).toMatch(/^ctx-/);
+    expect(result.prPoolItemId).toBe(item.id);
+    expect(result.prPoolDevelopRuntimeTaskId).toMatch(/^task-/);
+    expect(result.codeRuntimeTaskId).toMatch(/^task-/);
+    expect(result.codeTaskId).toMatch(/^code-/);
+    expect(result.runtimeTaskBindings).toEqual([]);
+    expect(result.steps.find(step => step.id === 'execute')).toMatchObject({
+      status: 'completed',
+      runtimeTaskId: result.prPoolDevelopRuntimeTaskId,
+      runtimeTaskStatus: 'dispatched',
+      resultRef: `runtime-task://${result.prPoolDevelopRuntimeTaskId}`,
+    });
+    expect(result.steps.find(step => step.id === 'verify')).toMatchObject({ status: 'completed' });
+    expect(result.steps.find(step => step.id === 'review')).toMatchObject({ status: 'completed' });
+    expect(result.steps.find(step => step.id === 'reconcile')).toMatchObject({ status: 'completed' });
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_execute_confirmed' }),
+      expect.objectContaining({ kind: 'pr_pool_develop_runtime_task', status: 'passed', sourceRef: `runtime-task://${result.prPoolDevelopRuntimeTaskId}` }),
+      expect.objectContaining({ kind: 'code_runtime_task', status: 'passed', sourceRef: `runtime-task://${result.codeRuntimeTaskId}` }),
+      expect.objectContaining({ kind: 'code_task', status: 'passed', sourceRef: `code-task://${result.codeTaskId}` }),
+    ]));
+
+    await expect(taskRuntime.getTask(result.prPoolDevelopRuntimeTaskId!)).resolves.toMatchObject({
+      status: 'succeeded',
+      metadata: expect.objectContaining({
+        taskType: 'pr_pool.develop',
+        workflowId: 'ai-dev-e2e-workflow',
+        payload: expect.objectContaining({
+          prItemId: item.id,
+          approvalToken: 'approved',
+          executionMode: 'patch_proposal',
+        }),
+      }),
+    });
+    await expect(taskRuntime.getTask(result.codeRuntimeTaskId!)).resolves.toMatchObject({
+      targetAgentId: 'code-agent',
+      status: 'succeeded',
+      metadata: expect.objectContaining({
+        taskType: 'code.task',
+        payload: expect.objectContaining({
+          prItemId: item.id,
+          runtimeTaskId: result.prPoolDevelopRuntimeTaskId,
+          executionMode: 'patch_proposal',
+        }),
+      }),
+    });
+    await expect(prPoolRuntime.get(item.id)).resolves.toMatchObject({
+      status: 'completed',
+      run: expect.objectContaining({
+        runtimeTaskId: result.prPoolDevelopRuntimeTaskId,
+        codeRuntimeTaskId: result.codeRuntimeTaskId,
+        codeTaskId: result.codeTaskId,
+      }),
+      evidence: expect.objectContaining({
+        verification: expect.objectContaining({ status: 'passed' }),
+      }),
+    });
+  });
+
+  it('blocks execute_confirmed without acceptance criteria before creating develop RuntimeTasks', async () => {
+    const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { listRuntimeTaskRecords } = await import('../src/mastra/runtime/runtime-task-store');
+
+    const result = await runAiDevE2EWorkflow({
+      mode: 'execute_confirmed',
+      request: 'Execute without acceptance criteria',
+      prPoolItemId: 'pr-missing-ac',
+      approvalConfirmed: true,
+      approvalToken: 'approved',
+      executionMode: 'patch_proposal',
+    });
+
+    expect(result.status).toBe('needs_input');
+    expect(result.prPoolItemId).toBe('pr-missing-ac');
+    expect(result.prPoolDevelopRuntimeTaskId).toBeUndefined();
+    expect(result.codeRuntimeTaskId).toBeUndefined();
+    expect(result.codeTaskId).toBeUndefined();
+    expect(result.steps.find(step => step.id === 'clarify')).toMatchObject({ status: 'needs_input' });
+    expect(result.steps.find(step => step.id === 'execute')).toMatchObject({ status: 'needs_input' });
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_execute_blocked' }),
+    ]));
+    await expect(listRuntimeTaskRecords()).resolves.toEqual([]);
+  });
+
+  it('blocks execute_confirmed without approval before creating develop RuntimeTasks', async () => {
+    const { runAiDevE2EWorkflow } = await loadWorkflow();
+    const { listRuntimeTaskRecords } = await import('../src/mastra/runtime/runtime-task-store');
+
+    const result = await runAiDevE2EWorkflow({
+      mode: 'execute_confirmed',
+      request: 'Execute without approval confirmation',
+      prPoolItemId: 'pr-waiting-approval',
+      acceptanceCriteria: ['Approval must be confirmed before dispatch.'],
+      executionMode: 'patch_proposal',
+    });
+
+    expect(result.status).toBe('waiting_approval');
+    expect(result.prPoolItemId).toBe('pr-waiting-approval');
+    expect(result.prPoolDevelopRuntimeTaskId).toBeUndefined();
+    expect(result.codeRuntimeTaskId).toBeUndefined();
+    expect(result.codeTaskId).toBeUndefined();
+    expect(result.steps.find(step => step.id === 'approval')).toMatchObject({ status: 'waiting_approval' });
+    expect(result.steps.find(step => step.id === 'execute')).toMatchObject({ status: 'waiting_approval' });
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_execute_blocked' }),
+    ]));
+    await expect(listRuntimeTaskRecords()).resolves.toEqual([]);
   });
 });

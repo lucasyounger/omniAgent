@@ -4,7 +4,8 @@
   "description": "Local Mastra Agent Team with routing, Claude Code execution, cron management, and file-backed memory.",
   "type": "module",
   "scripts": {
-    "dev": "mastra dev",
+    "postinstall": "node scripts/patch-mastra-studio-reasoning.mjs",
+    "dev": "node scripts/patch-mastra-studio-reasoning.mjs && mastra dev",
     "gateway": "node scripts/gateway-manager.mjs",
     "build": "mastra build",
     "start": "mastra start",
