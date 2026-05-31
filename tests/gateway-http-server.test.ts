@@ -44,6 +44,10 @@ afterEach(async () => {
 describe('Gateway HTTP server', () => {
   it('routes /message requests through the unified gateway request pipeline', async () => {
     const { startGatewayHttpServer } = await loadGateway();
+    const { createApprovalRequest } = await import('../src/mastra/runtime/approval-store');
+    const { createTeamTask, startTeamTaskRun, completeTeamRun, sendAgentInboxMessage } = await import('../src/mastra/lib/team-runtime-store');
+    const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const { deliverPendingInbox } = await import('../src/gateway/delivery');
     const server = startGatewayHttpServer({
       ...baseConfig(),
       allowSenders: ['trusted'],
@@ -58,22 +62,178 @@ describe('Gateway HTTP server', () => {
 
     try {
       const address = server.address() as AddressInfo;
-      const response = await fetch(`http://127.0.0.1:${address.port}/message`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          channel: 'http',
-          accountId: 'local',
-          conversationId: 'conv-1',
-          senderId: 'trusted',
-          text: '/status',
-        }),
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const postMessage = async (text: string) => {
+        const response = await fetch(`${baseUrl}/message`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            channel: 'http',
+            accountId: 'local',
+            conversationId: 'conv-1',
+            senderId: 'trusted',
+            text,
+          }),
+        });
+        const body = (await response.json()) as { ok: boolean; replies: Array<{ text: string }> };
+        expect(response.status).toBe(200);
+        expect(body.ok).toBe(true);
+        return body.replies[0].text;
+      };
+
+      const status = await postMessage('/status');
+      expect(status).toContain('Omni Gateway 在线');
+      expect(status).toContain('Delivery: pending=0, failed=0, dead_letter=0');
+
+      const goalCreate = await postMessage('/goal create HTTP Channel Goal');
+      const goalId = goalCreate.match(/Goal 已创建：([^\n]+)/)?.[1];
+      expect(goalId).toBeDefined();
+      const goalList = await postMessage('/goal list');
+      expect(goalList).toContain(goalId);
+
+      const prItem = await prPoolRuntime.create({
+        title: 'HTTP inbox PR item',
+        objective: 'Validate HTTP inbox compact PR refs',
+        workspaceRepoPath: tempRoot,
+        impact: { modules: ['gateway'], risk: 'low' },
+        acceptanceCriteria: ['visible in HTTP inbox'],
+        codeAgentPrompt: 'Implement HTTP inbox PR item',
       });
-      const body = (await response.json()) as { ok: boolean; replies: Array<{ text: string }> };
+      await createApprovalRequest({
+        toolId: 'http-dangerous-tool',
+        policy: { capability: 'gateway.admin', risk: 'dangerous', requireApproval: true },
+        context: { actorId: 'trusted', channel: 'http', requestId: 'http-approval-1' },
+        toolInput: { largeArtifact: 'should stay out of chat' },
+        reason: 'HTTP E2E compact approval',
+      });
+      const inboxTask = await createTeamTask({
+        sourceAgentId: 'tester',
+        targetAgentId: 'channel-gateway',
+        objective: 'HTTP inbox notification',
+        metadata: { taskType: 'code.task' },
+      });
+      const inboxRun = await startTeamTaskRun({ taskId: inboxTask.taskId, executorAgentId: 'tester' });
+      const inboxResult = await completeTeamRun({
+        taskId: inboxTask.taskId,
+        runId: inboxRun.runId,
+        executorAgentId: 'tester',
+        summary: 'Large inbox result stored by ref',
+        output: 'long inbox artifact should stay out of reply',
+      });
+      await sendAgentInboxMessage({
+        recipientAgentId: 'channel-gateway',
+        sourceAgentId: 'tester',
+        taskId: inboxTask.taskId,
+        runId: inboxRun.runId,
+        type: 'team.run.completed',
+        summary: 'Large inbox result stored by ref',
+        resultRef: inboxResult.resultRef,
+        payload: { output: 'long inbox artifact should stay out of reply' },
+      });
+
+      const inbox = await postMessage('/inbox');
+      expect(inbox).toContain('待确认 Inbox (compact):');
+      expect(inbox).toContain(`pr_draft=1`);
+      expect(inbox).toContain(`${prItem.id} | HTTP inbox PR item | refs: /pr show ${prItem.id}`);
+      expect(inbox).toContain('http-approval-1 | http-dangerous-tool | dangerous | refs: approval request');
+      expect(inbox).toContain(`refs: ${inboxResult.resultRef}`);
+      expect(inbox).not.toContain('long inbox artifact should stay out of reply');
+
+      const deliveryTask = await createTeamTask({
+        sourceAgentId: 'tester',
+        targetAgentId: 'code-agent',
+        objective: 'Send HTTP completion notification',
+        metadata: {
+          taskType: 'code.task',
+          notifyTarget: {
+            channel: 'http',
+            accountId: 'local',
+            conversationId: 'conv-1',
+            senderId: 'trusted',
+            messageType: 'dm',
+          },
+        },
+      });
+      const deliveryRun = await startTeamTaskRun({ taskId: deliveryTask.taskId, executorAgentId: 'code-agent' });
+      const deliveryResult = await completeTeamRun({
+        taskId: deliveryTask.taskId,
+        runId: deliveryRun.runId,
+        executorAgentId: 'code-agent',
+        summary: 'HTTP delivery completed',
+      });
+      await sendAgentInboxMessage({
+        recipientAgentId: 'channel-gateway',
+        sourceAgentId: 'code-agent',
+        taskId: deliveryTask.taskId,
+        runId: deliveryRun.runId,
+        type: 'team.run.completed',
+        summary: 'HTTP delivery completed',
+        resultRef: deliveryResult.resultRef,
+      });
+      await deliverPendingInbox(baseConfig());
+      const { listDeliveries } = await import('../src/gateway/gateway-store');
+      const deliveries = await listDeliveries();
+      expect(deliveries).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          status: 'sent',
+          channel: 'http',
+          taskId: deliveryTask.taskId,
+          runId: deliveryRun.runId,
+          resultRef: deliveryResult.resultRef,
+          outboundEnvelope: expect.objectContaining({
+            protocolVersion: 2,
+            target: expect.objectContaining({
+              identity: { channel: 'http', accountId: 'local' },
+              conversation: { id: 'conv-1', type: 'dm' },
+              recipient: { id: 'trusted' },
+            }),
+          }),
+        }),
+      ]));
+    } finally {
+      server.close();
+    }
+  });
+
+  it('returns delivery status summary from /status', async () => {
+    const { createDelivery, markDeliveryAttempt, startGatewayHttpServer } = await loadGateway();
+    const failed = await createDelivery({
+      target: { channel: 'qqbot', accountId: 'default', conversationId: 'failed-user', messageType: 'dm' },
+      text: 'failed',
+      sourceId: 'failed-source',
+      maxAttempts: 2,
+    });
+    const deadLetter = await createDelivery({
+      target: { channel: 'qqbot', accountId: 'default', conversationId: 'dead-user', messageType: 'dm' },
+      text: 'dead',
+      sourceId: 'dead-source',
+      maxAttempts: 1,
+    });
+    await markDeliveryAttempt({ deliveryId: failed.deliveryId, error: 'temporary', retryDelayMs: 1 });
+    await markDeliveryAttempt({ deliveryId: deadLetter.deliveryId, error: 'permanent', retryDelayMs: 1 });
+
+    const server = startGatewayHttpServer(baseConfig());
+    await new Promise<void>(resolve => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once('listening', resolve);
+      }
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/status`);
+      const body = (await response.json()) as {
+        ok: boolean;
+        delivery: { pending: number; failed: number; dead_letter: number; total: number };
+        adapters: Array<{ id: string }>;
+      };
 
       expect(response.status).toBe(200);
       expect(body.ok).toBe(true);
-      expect(body.replies[0].text).toContain('Omni Gateway 在线');
+      expect(body.delivery).toMatchObject({ total: 2, pending: 0, failed: 1, dead_letter: 1 });
+      expect(body.adapters.map(adapter => adapter.id)).toContain('http');
     } finally {
       server.close();
     }

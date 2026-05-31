@@ -7,9 +7,9 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
 ## Responsibilities
 
 - Connect to QQ Bot websocket events. Webhook support is not implemented yet and is a future adapter option.
-- Normalize QQ events into `ChannelMessage`; Channel protocol v2 converters can map
-  the same data into inbound envelopes with bot identity, conversation, sender
-  actor, raw event metadata, and text when the adapter is migrated.
+- Normalize QQ events into `ChannelInboundEnvelopeV2` with bot identity,
+  conversation, sender actor, raw event metadata, and text, then expose the
+  existing `ChannelMessage` shape through compatibility wrappers.
 - Send outgoing `OutboundMessage` replies through QQ Bot APIs.
 - Keep credentials outside docs and git.
 - Respect group mention-only behavior and allowlists.
@@ -23,24 +23,28 @@ events and HTTP send APIs. It plugs into the same `ChannelMessage` and
   - Use `group_openid` as `conversationId`.
   - Strip the bot mention from inbound text before routing.
 - Immediate replies from the shared `processRequest(UnifiedRequest, config, context)` gateway pipeline are sent through
-  `sendOutbound`. The adapter still normalizes QQ events to `ChannelMessage`, then
-  converts them to `UnifiedRequest` at the Gateway boundary so QQBot, HTTP, and
-  OneBot follow the same command/capability/legacy routing path. Outbound protocol
-  v2 envelopes model the same QQ target as channel/account identity plus a
-  conversation and optional recipient actor, but `sendOutbound` continues to accept
-  the existing `OutboundMessage` contract until the later adapter-registry slice.
-- Deferred replies and scheduled channel messages flow through Team Runtime
-  inbox messages addressed to `channel-gateway`, then the reliable delivery outbox
-  stores a traceable `DeliveryRecord` before the worker sends them to QQ Bot. The
-  record keeps `sourceType`, `sourceId`, `traceId`, `messageKey`, channel, target,
-  and `ChannelOutboundEnvelopeV2` so a Team Runtime result/inbox item can be traced
+  `sendOutbound`. The adapter uses Channel protocol v2 helpers as the primary QQ
+  event and outbound target model, while keeping the existing `ChannelMessage` and
+  `OutboundMessage` contracts as compatibility wrappers so QQBot, HTTP, and OneBot
+  continue to share the same command/capability/legacy routing path.
+- Deferred replies, scheduled channel messages, and `/task` completion or failure
+  pushbacks flow through Team Runtime inbox messages addressed to
+  `channel-gateway`, then the reliable delivery outbox stores a traceable
+  `DeliveryRecord` before the worker sends them to QQ Bot. The record keeps
+  `sourceType`, `sourceId`, `traceId`, `messageKey`, channel, target, and
+  `ChannelOutboundEnvelopeV2` so a Team Runtime result/inbox item can be traced
   to the outbound send attempt.
 - `messageKey` is the delivery idempotency key. Re-enqueueing the same source,
   channel target, and template kind returns the existing outbox record instead of
   creating a duplicate outbound notification.
 - Delivery status progresses through `pending -> sending -> sent` on success and
   `pending/sending -> failed -> dead_letter` on repeated failure. Sent records set
-  `ackAt`; dead-letter records keep `deadLetterReason`.
+  `ackAt` and, when QQ returns one, `channelMessageId`; dead-letter records keep
+  `deadLetterReason`. Each worker attempt logs `deliveryId`, `traceId`, `channel`,
+  `attempt`, `latency`, and `status` for local observability.
+- `GET /status` exposes aggregate delivery counts for `pending`, `failed`, and
+  `dead_letter` alongside adapter status, and the channel `/status` command includes
+  the same delivery counts in its reply.
 - Gateway exposes `GET /qqbot/status` for local diagnostics. The same safe status
   data is also represented in `GET /adapters/status` under adapter id `qqbot`,
   alongside HTTP, OneBot, Feishu, CLI, and Desktop registry entries. The registry
@@ -86,7 +90,26 @@ When the schedule fires, Cron creates a Runtime Task, the dispatcher handles
 `channel-gateway`, and the delivery worker sends the original text back to the
 QQ conversation.
 
-## Verification Status
+## Phase 7 Validation Scope
+
+QQBot is implemented and locally validated by adapter/unit tests plus the shared
+Gateway delivery tests. External validation is not recorded until a live QQ Open
+Platform bot is exercised end-to-end.
+
+External validation must record:
+
+- credentials: `OMNI_QQBOT_APPID` and `OMNI_QQBOT_CLIENTSECRET` configured
+  outside git;
+- callback/session: websocket session connected and receiving C2C or group-at
+  events;
+- inbound events: C2C and group messages normalize into Gateway requests;
+- compact flows: goal, task, approval inbox, status, PR Pool board, and digest
+  requests return concise channel-safe replies with ids/refs for detail;
+- outbound delivery: completion/failure/digest notifications preserve
+  `ChannelOutboundEnvelopeV2` target metadata and produce QQ message acks when
+  accepted by the official send API;
+- retry/dead-letter: failed official sends are visible in delivery status and move
+  to `dead_letter` after configured attempts.
 
 The adapter implements websocket event normalization, HTTP send calls, safe
 status reporting, and shared delivery-worker routing. A real QQ end-to-end loop

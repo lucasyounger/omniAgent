@@ -5,11 +5,13 @@ import { cronRunsRoot, projectRoot } from './paths';
 import { taskRuntime } from '../runtime/task-runtime';
 import { defaultTargetAgentIdForTaskType, runtimeTaskTypes } from '../runtime/task-types';
 import { queueRuntimeNotification } from '../runtime/notification-dispatch';
+import { listRuntimeTaskRecords } from '../runtime/runtime-task-store';
 import type { DispatchResult } from '../runtime/task-dispatcher';
 import type { ChannelTarget } from '../../gateway/types';
 import { nowUtc, parseCstDateTime, parseCstDailyTime, cstDailyToUtc, formatCstTime } from '../../lib/time';
 
 export type CronJobStatus = 'active' | 'paused';
+export type CronMisfirePolicy = 'skip' | 'run_once' | 'catch_up_limited';
 
 export type CronJob = {
   id: string;
@@ -23,6 +25,11 @@ export type CronJob = {
   payload?: Record<string, unknown>;
   notifyTarget?: ChannelTarget;
   status: CronJobStatus;
+  misfirePolicy?: CronMisfirePolicy;
+  concurrencyKey?: string;
+  lastSkippedAt?: string;
+  lastSkippedReason?: 'misfire_policy_skip' | 'concurrency_key_active' | 'goal_scan_same_day';
+  lastSkippedConcurrencyKey?: string;
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;
@@ -73,21 +80,27 @@ export async function createCronJob(input: {
   workspacePath?: string;
   payload?: Record<string, unknown>;
   notifyTarget?: ChannelTarget;
+  misfirePolicy?: CronMisfirePolicy;
+  concurrencyKey?: string;
 }) {
   const jobs = await readJobs();
   const now = nowUtc();
+  const taskType = input.taskType || inferTaskType(input.targetAgentId || input.targetAgent);
+  const payload = input.payload || buildLegacyPayload(input);
   const job: CronJob = {
     id: `cron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: input.name,
     schedule: normalizeScheduleToUtc(input.schedule),
     task: input.task,
-    taskType: input.taskType || inferTaskType(input.targetAgentId || input.targetAgent),
+    taskType,
     targetAgent: input.targetAgent,
-    targetAgentId: input.targetAgentId || normalizeAgentId(input.targetAgent) || defaultTargetAgentIdForTaskType(input.taskType) || 'code-agent',
+    targetAgentId: input.targetAgentId || normalizeAgentId(input.targetAgent) || defaultTargetAgentIdForTaskType(taskType) || 'code-agent',
     workspacePath: input.workspacePath,
-    payload: input.payload || buildLegacyPayload(input),
+    payload,
     notifyTarget: input.notifyTarget || readPayloadNotifyTarget(input.payload),
     status: 'active',
+    misfirePolicy: input.misfirePolicy || 'run_once',
+    concurrencyKey: input.concurrencyKey || deriveCronConcurrencyKey(taskType, payload),
     createdAt: now,
     updatedAt: now,
   };
@@ -202,9 +215,25 @@ export async function runDueCronJobs(now = new Date()) {
       continue;
     }
 
-    job.lastRunAt = now.toISOString();
-    job.updatedAt = job.lastRunAt;
+    const previousRunAt = job.lastRunAt;
+    const runAt = now.toISOString();
+    job.lastRunAt = runAt;
+    job.updatedAt = runAt;
     changed = true;
+
+    if (shouldSkipMisfire(job, now, previousRunAt)) {
+      recordCronSkip(job, runAt, 'misfire_policy_skip');
+      if (isOneTimeSchedule(job.schedule)) {
+        job.status = 'paused';
+      }
+      continue;
+    }
+
+    const concurrencySkipReason = await getCronConcurrencySkipReason(job, now);
+    if (concurrencySkipReason) {
+      recordCronSkip(job, runAt, concurrencySkipReason);
+      continue;
+    }
 
     try {
       const result = await executeCronJob(job);
@@ -223,6 +252,9 @@ export async function runDueCronJobs(now = new Date()) {
         delete job.lastDispatchError;
       }
       delete job.lastRunError;
+      delete job.lastSkippedAt;
+      delete job.lastSkippedReason;
+      delete job.lastSkippedConcurrencyKey;
 
       if (isOneTimeSchedule(job.schedule)) {
         job.status = 'paused';
@@ -354,6 +386,87 @@ function isOneTimeSchedule(schedule: string) {
   return Boolean(parseOneTimeSchedule(schedule));
 }
 
+function shouldSkipMisfire(job: CronJob, now: Date, previousRunAt?: string) {
+  if ((job.misfirePolicy || 'run_once') !== 'skip') {
+    return false;
+  }
+
+  const reference = previousRunAt ? new Date(previousRunAt).getTime() : new Date(job.createdAt).getTime();
+
+  const oneTime = parseOneTimeSchedule(job.schedule);
+  if (oneTime) {
+    return oneTime.getTime() < reference;
+  }
+
+  const daily = parseDailySchedule(job.schedule);
+  if (daily) {
+    const dueAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), daily.hours, daily.minutes, 0, 0)).getTime();
+    return dueAt < reference;
+  }
+
+  const cronSchedule = parseCronSchedule(job.schedule);
+  if (cronSchedule) {
+    return cronSchedule.nextFireAt(reference - 1) < now.getTime();
+  }
+
+  return false;
+}
+
+function recordCronSkip(job: CronJob, runAt: string, reason: NonNullable<CronJob['lastSkippedReason']>) {
+  job.lastRunStatus = 'skipped';
+  job.lastSkippedAt = runAt;
+  job.lastSkippedReason = reason;
+  job.lastSkippedConcurrencyKey = job.concurrencyKey;
+  delete job.lastRunTaskId;
+  delete job.lastRunTeamTaskId;
+  delete job.lastRunTeamRunId;
+  delete job.lastRunError;
+  delete job.lastDispatchStatus;
+  delete job.lastDispatchError;
+}
+
+async function getCronConcurrencySkipReason(job: CronJob, now: Date): Promise<CronJob['lastSkippedReason'] | undefined> {
+  const records = await listRuntimeTaskRecords();
+
+  if (job.concurrencyKey && records.some(record => record.metadata?.concurrencyKey === job.concurrencyKey && !isTerminalRuntimeStatus(record.status))) {
+    return 'concurrency_key_active';
+  }
+
+  if (job.taskType === runtimeTaskTypes.goalCronScan && hasSameDayGoalScan(records, now)) {
+    return 'goal_scan_same_day';
+  }
+
+  return undefined;
+}
+
+function hasSameDayGoalScan(records: Awaited<ReturnType<typeof listRuntimeTaskRecords>>, now: Date) {
+  const day = now.toISOString().slice(0, 10);
+  return records.some(record => {
+    const metadata = record.metadata || {};
+    if (metadata.taskType !== runtimeTaskTypes.goalCronScan || isTerminalRuntimeStatus(record.status)) {
+      return false;
+    }
+
+    return record.createdAt.slice(0, 10) === day || Boolean(metadata.concurrencyKey);
+  });
+}
+
+function isTerminalRuntimeStatus(status: string) {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled';
+}
+
+function deriveCronConcurrencyKey(taskType: string, payload: Record<string, unknown>) {
+  if (taskType === runtimeTaskTypes.goalCronScan) {
+    return `goal.cron_scan:${String(payload.goalType || 'all')}:${String(payload.action || 'scan_due_goals')}`;
+  }
+
+  if (taskType.startsWith('pr_pool.') || payload.prPoolId || payload.prPoolItemId) {
+    return `prpool:${taskType}:${String(payload.prPoolId || payload.prPoolItemId || payload.itemId || 'scan')}`;
+  }
+
+  return undefined;
+}
+
 async function executeCronJob(job: CronJob): Promise<{
   taskId: string;
   teamTaskId: string;
@@ -378,6 +491,7 @@ async function executeCronJob(job: CronJob): Promise<{
       notifyTarget,
       notifyOnRuntimeStatus: payload.notifyOnRuntimeStatus,
       notifyOnTerminal: payload.notifyOnTerminal,
+      concurrencyKey: job.concurrencyKey,
       source: readPayloadSource(payload),
     },
   });

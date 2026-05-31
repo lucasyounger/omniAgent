@@ -304,6 +304,146 @@ describe('Cron store', () => {
     ]);
   });
 
+  it('records misfire policy defaults and skips missed one-time schedules', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const runOnce = await createCronJob({
+      name: 'default policy',
+      schedule: '2026-05-12 21:08',
+      task: 'default task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+    });
+    await createCronJob({
+      name: 'skip missed one-time',
+      schedule: '2026-05-12 21:08',
+      task: 'skip task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      misfirePolicy: 'skip',
+    });
+
+    const jobs = await runDueCronJobs(new Date('2026-05-12T13:10:00.000Z'));
+
+    expect(runOnce.misfirePolicy).toBe('run_once');
+    expect(jobs[0]).toMatchObject({ lastRunStatus: 'started', status: 'paused' });
+    expect(jobs[1]).toMatchObject({
+      lastRunStatus: 'skipped',
+      lastSkippedReason: 'misfire_policy_skip',
+      status: 'paused',
+    });
+  });
+
+  it('applies skip, run_once, and catch_up_limited policies to missed cron schedules', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    await createCronJob({
+      name: 'skip cron',
+      schedule: '* * * * *',
+      task: 'skip cron task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      misfirePolicy: 'skip',
+    });
+    await createCronJob({
+      name: 'run once cron',
+      schedule: '* * * * *',
+      task: 'run once cron task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      misfirePolicy: 'run_once',
+    });
+    await createCronJob({
+      name: 'catch up cron',
+      schedule: '* * * * *',
+      task: 'catch up cron task',
+      targetAgentId: 'knowledge-agent',
+      taskType: 'knowledge.task',
+      misfirePolicy: 'catch_up_limited',
+    });
+
+    const jobs = await runDueCronJobs(new Date(Date.now() + 3 * 60 * 1000));
+
+    expect(jobs[0]).toMatchObject({ lastRunStatus: 'skipped', lastSkippedReason: 'misfire_policy_skip' });
+    expect(jobs[1].lastRunStatus).toBe('started');
+    expect(jobs[2].lastRunStatus).toBe('started');
+  });
+
+  it('skips dispatch when the same concurrency key is already active', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'goal-runtime',
+      objective: 'active goal scan',
+      metadata: { concurrencyKey: 'goal.cron_scan:module_improvement:scan_due_goals' },
+    });
+    await createCronJob({
+      name: 'Daily Goal scan',
+      schedule: '0 0 * * *',
+      task: 'Scan due module improvement Goals',
+      taskType: 'goal.cron_scan',
+      targetAgentId: 'goal-runtime',
+      payload: { goalType: 'module_improvement', action: 'scan_due_goals' },
+    });
+
+    const jobs = await runDueCronJobs(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+    expect(jobs[0]).toMatchObject({
+      concurrencyKey: 'goal.cron_scan:module_improvement:scan_due_goals',
+      lastRunStatus: 'skipped',
+      lastSkippedReason: 'concurrency_key_active',
+      lastSkippedConcurrencyKey: 'goal.cron_scan:module_improvement:scan_due_goals',
+    });
+  });
+
+  it('skips restarted same-day goal scans after one active goal.cron_scan exists', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { taskRuntime } = await import('../src/mastra/runtime/task-runtime');
+    await taskRuntime.createTask({
+      sourceAgentId: 'scheduler-runtime',
+      targetAgentId: 'goal-runtime',
+      objective: 'same-day goal scan',
+      metadata: { taskType: 'goal.cron_scan', concurrencyKey: 'other-key' },
+    });
+    await createCronJob({
+      name: 'Daily Goal scan',
+      schedule: '0 0 * * *',
+      task: 'Scan due module improvement Goals',
+      taskType: 'goal.cron_scan',
+      targetAgentId: 'goal-runtime',
+      payload: { goalType: 'module_improvement', action: 'scan_due_goals' },
+      concurrencyKey: 'fresh-key',
+    });
+
+    const jobs = await runDueCronJobs(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+    expect(jobs[0]).toMatchObject({
+      lastRunStatus: 'skipped',
+      lastSkippedReason: 'goal_scan_same_day',
+      lastSkippedConcurrencyKey: 'fresh-key',
+    });
+  });
+
+  it('records the cron concurrency key on dispatched runtime task metadata', async () => {
+    const { createCronJob, runDueCronJobs } = await loadCronStore();
+    const { listRuntimeTaskRecords } = await import('../src/mastra/runtime/runtime-task-store');
+    await createCronJob({
+      name: 'Daily Goal scan',
+      schedule: '2026-05-12 21:08',
+      task: 'Scan due module improvement Goals',
+      taskType: 'goal.cron_scan',
+      targetAgentId: 'goal-runtime',
+      payload: { goalType: 'module_improvement', action: 'scan_due_goals' },
+    });
+
+    await runDueCronJobs(new Date('2026-05-12T13:08:00.000Z'));
+    const records = await listRuntimeTaskRecords();
+
+    expect(records[0].metadata).toMatchObject({
+      taskType: 'goal.cron_scan',
+      concurrencyKey: 'goal.cron_scan:module_improvement:scan_due_goals',
+    });
+  });
+
   it('creates daily goal scan job only once when enabled', async () => {
     process.env.OMNI_GOAL_DAILY_SCAN_ENABLED = 'true';
     process.env.OMNI_GOAL_DAILY_SCAN_CRON = '0 0 * * *';

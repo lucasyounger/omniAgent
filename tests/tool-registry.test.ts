@@ -3,11 +3,17 @@ import {
   codeAgentInternalTools,
   listToolIds,
   omniRouterPublicTools,
+  runtimeTaskReadTools,
+  runtimeTaskTools,
+  teamRuntimeReadTools,
+  teamRuntimeTools,
 } from '../src/mastra/tools/tool-registry';
 
 describe('tool registry boundaries', () => {
   it('keeps OmniRouter on public facades and read/status tools', () => {
     const ids = listToolIds(omniRouterPublicTools);
+    const runtimeMutationIds = withoutReadTools(runtimeTaskTools, runtimeTaskReadTools);
+    const teamMutationIds = withoutReadTools(teamRuntimeTools, teamRuntimeReadTools);
 
     expect(ids).toEqual(expect.arrayContaining([
       'list-team-members',
@@ -21,16 +27,12 @@ describe('tool registry boundaries', () => {
       'develop-pr-pool-item',
       'send-channel-notification',
     ]));
+    expect(ids).toEqual(expect.arrayContaining(listToolIds(runtimeTaskReadTools)));
+    expect(ids).toEqual(expect.arrayContaining(listToolIds(teamRuntimeReadTools)));
     expect(ids).not.toEqual(expect.arrayContaining([
       'start-code-task',
-      'create-team-task',
-      'send-agent-inbox-message',
-      'cancel-team-task',
-      'create-runtime-task',
-      'dispatch-runtime-task',
-      'create-and-dispatch-runtime-task',
-      'cancel-runtime-task',
-      'retry-runtime-task',
+      ...runtimeMutationIds,
+      ...teamMutationIds,
     ]));
   });
 
@@ -55,3 +57,11 @@ describe('tool registry boundaries', () => {
     ]));
   });
 });
+
+function withoutReadTools(
+  tools: Record<string, { id?: string }>,
+  readTools: Record<string, { id?: string }>,
+): string[] {
+  const readIds = new Set(listToolIds(readTools));
+  return listToolIds(tools).filter(id => !readIds.has(id));
+}

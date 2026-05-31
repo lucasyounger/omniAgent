@@ -148,16 +148,36 @@ export async function listDeadLetterDeliveries() {
   return (await listDeliveries()).filter(delivery => delivery.status === 'dead_letter');
 }
 
-export async function updateDeliveryStatus(deliveryId: string, status: DeliveryRecord['status'], error?: string) {
+export async function getDeliveryStatusSummary() {
+  const deliveries = await listDeliveries();
+  return deliveries.reduce(
+    (summary, delivery) => {
+      summary.total += 1;
+      summary[delivery.status] += 1;
+      return summary;
+    },
+    { total: 0, pending: 0, sending: 0, sent: 0, failed: 0, dead_letter: 0 },
+  );
+}
+
+export async function updateDeliveryStatus(
+  deliveryId: string,
+  status: DeliveryRecord['status'],
+  options: string | { error?: string; channelMessageId?: string; ackAt?: string } = {},
+) {
   const deliveries = await listDeliveries();
   const delivery = deliveries.find(item => item.deliveryId === deliveryId);
   if (!delivery) {
     throw new Error(`Delivery not found: ${deliveryId}`);
   }
+  const statusOptions = typeof options === 'string' ? { error: options } : options;
   delivery.status = status;
-  delivery.error = error;
+  delivery.error = statusOptions.error;
+  if (statusOptions.channelMessageId) {
+    delivery.channelMessageId = statusOptions.channelMessageId;
+  }
   if (status === 'sent') {
-    delivery.ackAt = new Date().toISOString();
+    delivery.ackAt = statusOptions.ackAt || new Date().toISOString();
   }
   delivery.updatedAt = new Date().toISOString();
   await writeArray(deliveriesFile, deliveries);

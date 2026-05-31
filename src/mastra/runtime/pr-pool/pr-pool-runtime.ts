@@ -178,6 +178,7 @@ export const prPoolRuntime = {
           executionMode: 'direct',
           prItemId: id,
           revisionComment: trimmedComment,
+          workspacePolicy: item.workspacePolicy,
         },
       },
     });

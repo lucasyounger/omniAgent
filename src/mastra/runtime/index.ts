@@ -21,19 +21,24 @@ export type {
 export {
   evalRunPath,
   evalRunsDir,
+  goldenEvalScenarios,
   listEvalRuns,
   readEvalRun,
   runEvalHarness,
   scoreEvalScenario,
   summarizeEvalResults,
+  summarizeLongTaskMetrics,
 } from './eval-harness';
 export type {
+  BlockedReasonDistribution,
   EvalCaseResult,
+  EvalMetricSignals,
   EvalRun,
   EvalRunSummary,
   EvalScenario,
   EvalScenarioInput,
   EvalTarget,
+  LongTaskCompletionMetrics,
   RunEvalHarnessInput,
 } from './eval-harness';
 export {
@@ -281,8 +286,22 @@ export type { ApprovalRequest, ApprovalRequestStatus } from './approval-store';
 export { createAgentMemory } from './memory';
 export { memoryRuntime, memoryRuntimeBoundary } from './memory-runtime';
 export type { MemoryRuntimeBoundary } from './memory-runtime';
-export { omniStorage, runtimeStorageBackend } from './store';
-export type { RuntimeStorageBackend, RuntimeStorageBackendKind } from './store';
+export {
+  describeRuntimeStorageCompatibility,
+  fileRuntimeStorageBackend,
+  libsqlRuntimeStorageBackend,
+  omniStorage,
+  runtimeStorageBackend,
+  runtimeStorageBackends,
+  runtimeStorageDomains,
+} from './store';
+export type {
+  RuntimeStorageBackend,
+  RuntimeStorageBackendKind,
+  RuntimeStorageCompatibilityExport,
+  RuntimeStorageDomain,
+  RuntimeStorageDomainId,
+} from './store';
 export { schedulerRuntime } from './scheduler-runtime';
 export { assertTransitionAllowed, taskRuntime, toRuntimeTask } from './task-runtime';
 export { dispatchPendingRuntimeTasks, dispatchRuntimeTask } from './task-dispatcher';

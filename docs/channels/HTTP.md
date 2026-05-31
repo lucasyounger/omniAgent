@@ -29,6 +29,18 @@ prompt instead of executing commands.
 }
 ```
 
+## Gateway Status
+
+The gateway exposes an aggregate runtime status endpoint:
+
+```text
+GET http://localhost:4120/status
+```
+
+It returns `{ ok, delivery, adapters }`. `delivery` includes `total`, `pending`,
+`sending`, `sent`, `failed`, and `dead_letter` counts from the reliable delivery
+outbox, while `adapters` mirrors the safe adapter registry status shape.
+
 ## Adapter Registry Status
 
 The gateway exposes a safe registry read endpoint:
@@ -40,16 +52,39 @@ GET http://localhost:4120/adapters/status
 It returns all built-in adapter ids (`http`, `onebot`, `qqbot`, `feishu`, `cli`,
 and `desktop`) with configuration state, adapter kind, and capabilities. The
 endpoint is status-only: it does not expose QQBot secrets, access tokens, raw
-session ids, or future adapter credentials. Feishu IM appears as a channel-adapter
-placeholder; Feishu docs, calendar, and approval remain integration-tool surfaces.
+session ids, Feishu app secrets, verification tokens, app access tokens, or
+future adapter credentials. Feishu IM appears as a channel adapter; Feishu docs,
+calendar, and approval remain integration-tool surfaces.
 `/message`, `/onebot`, and `/qqbot/status` remain on the existing compatibility
 paths.
 
-## Commands
+## Phase 7 Validation Scope
+
+The HTTP channel is the baseline local validation surface for Phase 7. It is
+implemented and locally validated; external validation is not applicable because
+it is a local webhook channel.
+
+Validation requirements:
+
+- Credentials/callbacks: use sender allowlist or `/pair`; do not expose the HTTP
+  server publicly without an authenticated reverse proxy.
+- Inbound events: `POST /message` accepts `ChannelMessage` JSON and enters the
+  shared Gateway request pipeline.
+- Compact channel flows: `/status`, `/status approvals` or `/inbox`, `/pr list`,
+  `/goal list/status`, `/task`, and scheduled digest/notification requests return
+  concise chat-safe summaries. Detailed execution data is referenced by `taskId`,
+  `runId`, `resultRef`, PR item id, or artifact refs instead of dumping long
+  artifacts into the reply.
+- Outbound delivery: RuntimeTask completion/failure, channel notifications, and
+  scheduled digest messages are queued as Delivery records with
+  `ChannelOutboundEnvelopeV2` metadata.
+- Failure observability: `/status` and `GET /status` expose pending, failed, and
+  dead-letter delivery counts for retry validation.
 
 - `/pair <token>`
 - `/help`
-- `/status`
+- `/status` returns Gateway online text plus delivery outbox counts for `pending`,
+  `failed`, and `dead_letter`.
 - `/goal create <title>` creates a durable Goal through the Goal Mastra native facade. The
   command also supports `/goal list`, `/goal status <goalId>`,
   `/goal run <goalId>`, and `/goal feedback <goalId> <text>` for listing,
@@ -58,11 +93,14 @@ paths.
 - `/req list`, `/req status <id>`, `/req confirm <id>`, `/req reject <id> <reason>`, `/req confirm-item <id> <itemId>`, `/req reject-item <id> <itemId> <reason>`, and `/req import <markdown>` manage Req library documents and two-level confirmation. Req write/import/confirmation tool calls are RuntimeTask-backed facades while list/status remain audited reads.
 - Chinese natural language Req examples include “查看待确认需求”, “确认需求 REQ-20260523-001”, “确认 REQ-20260523-001 里的 R1”, and “把这份 claudecode 需求文档导入需求库”.
 - `/pr list`, `/pr show <id>`, `/pr confirm <id>`, `/pr confirm-all`, `/pr delete <id>`, `/pr revise <id> <comment>`, `/pr pause <id>`, `/pr retry <id>`, `/pr archive <id>`, and `/pr develop <id>` remain compatibility commands. Internally they call the PR Pool Mastra tool facades, so command handling shares schema, Tool Gateway policy, and RuntimeTask dispatch behavior with Agent tool calls. Delete is approved at the channel facade and still routes through PR Pool Runtime; revise schedules a CodeAgent revision task with the user comment in the task objective/context.
-- `/status approvals` and `/inbox` show one unified pending-work view covering PR Pool draft/ready items, docs-memory update proposals, Tool Gateway approvals, and unread gateway inbox messages, with next commands for each item.
+- `/status approvals` and `/inbox` show one unified compact pending-work view covering PR Pool draft/ready items, docs-memory update proposals, Tool Gateway approvals, and unread gateway inbox messages. Replies expose counts plus ids/refs such as `/pr show <id>`, approval request ids, `memory/doc-update-proposals.jsonl`, `taskId`, `runId`, or `resultRef` instead of embedding long artifact contents.
 - `/task <workspacePath> :: <objective>` creates a `code.task`
   RuntimeTask through the shared RuntimeTask facade helper and dispatches it through Task Dispatcher. CodeAgent starts once
   the workspace path is inside `OMNI_ALLOWED_WORKSPACES`; Tool Gateway records an
-  audit event but does not require a separate approval token.
+  audit event but does not require a separate approval token. Completion and
+  failure results return through Team Runtime inbox messages addressed to
+  `channel-gateway`, where the delivery worker creates QQBot/Feishu-capable
+  outbox records with `traceId`, `taskId`, `runId`, and `resultRef`.
 
 ## Gateway Routing Pipeline
 

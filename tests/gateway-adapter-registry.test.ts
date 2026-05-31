@@ -4,6 +4,7 @@ import type { OutboundMessage } from '../src/gateway/types';
 
 const sendOneBotOutbound = vi.fn();
 const sendQQBotOutbound = vi.fn();
+const sendFeishuOutbound = vi.fn();
 const startQQBotAdapter = vi.fn();
 const getQQBotAdapterStatus = vi.fn((): Record<string, unknown> => ({
   configured: false,
@@ -15,6 +16,26 @@ const getQQBotAdapterStatus = vi.fn((): Record<string, unknown> => ({
 vi.mock('../src/gateway/delivery', () => ({
   sendOneBotOutbound,
   sendQQBotOutbound,
+}));
+
+vi.mock('../src/gateway/feishu-adapter', () => ({
+  getFeishuAdapterStatus: (config: GatewayConfig) => ({
+    id: 'feishu',
+    displayName: 'Feishu IM',
+    kind: 'channel',
+    configured: Boolean(config.feishuAppId && config.feishuAppSecret && config.feishuVerificationToken),
+    enabled: Boolean(config.feishuAppId && config.feishuAppSecret && config.feishuVerificationToken),
+    state: config.feishuAppId && config.feishuAppSecret && config.feishuVerificationToken ? 'ready' : 'disabled',
+    capabilities: { inbound: true, outbound: Boolean(config.feishuAppId && config.feishuAppSecret && config.feishuVerificationToken), start: false },
+    metadata: {
+      protocol: 'im',
+      boundary: 'channel_adapter',
+      integrationTools: ['feishu_docs', 'feishu_calendar', 'feishu_approval'],
+      hasToken: false,
+    },
+  }),
+  isFeishuConfigured: (config: GatewayConfig) => Boolean(config.feishuAppId && config.feishuAppSecret && config.feishuVerificationToken),
+  sendFeishuOutbound,
 }));
 
 vi.mock('../src/gateway/qqbot-adapter', () => ({
@@ -52,7 +73,7 @@ describe('Gateway adapter registry', () => {
       expect.objectContaining({ id: 'http', configured: true, enabled: true, state: 'ready' }),
       expect.objectContaining({ id: 'onebot', configured: false, enabled: false, state: 'disabled' }),
       expect.objectContaining({ id: 'qqbot', configured: false, enabled: false, state: 'disabled' }),
-      expect.objectContaining({ id: 'feishu', kind: 'channel', configured: false, enabled: false, state: 'not_implemented' }),
+      expect.objectContaining({ id: 'feishu', kind: 'channel', configured: false, enabled: false, state: 'disabled' }),
       expect.objectContaining({ id: 'cli', configured: false, enabled: false, state: 'not_implemented' }),
       expect.objectContaining({ id: 'desktop', configured: false, enabled: false, state: 'not_implemented' }),
     ]));
@@ -84,8 +105,8 @@ describe('Gateway adapter registry', () => {
       kind: 'channel',
       configured: false,
       enabled: false,
-      state: 'not_implemented',
-      capabilities: { inbound: false, outbound: false, start: false },
+      state: 'disabled',
+      capabilities: { inbound: true, outbound: false, start: false },
       metadata: {
         protocol: 'im',
         boundary: 'channel_adapter',
@@ -135,12 +156,23 @@ describe('Gateway adapter registry', () => {
       text: 'hello',
     };
 
-    await expect(sendViaGatewayAdapter(oneBotMessage, baseConfig({ oneBotHttpUrl: 'http://127.0.0.1:5700' }))).resolves.toBe(true);
-    await expect(sendViaGatewayAdapter(qqbotMessage, baseConfig({ qqbotAppId: 'app-id', qqbotClientSecret: 'secret' }))).resolves.toBe(true);
-    await expect(sendViaGatewayAdapter({ ...oneBotMessage, target: { ...oneBotMessage.target, channel: 'unknown' } }, baseConfig())).resolves.toBe(false);
+    const feishuMessage: OutboundMessage = {
+      target: { channel: 'feishu', accountId: 'default', conversationId: 'openid', messageType: 'dm' },
+      text: 'hello',
+    };
+
+    await expect(sendViaGatewayAdapter(oneBotMessage, baseConfig({ oneBotHttpUrl: 'http://127.0.0.1:5700' }))).resolves.toEqual({});
+    await expect(sendViaGatewayAdapter(qqbotMessage, baseConfig({ qqbotAppId: 'app-id', qqbotClientSecret: 'secret' }))).resolves.toEqual({});
+    await expect(sendViaGatewayAdapter(feishuMessage, baseConfig({
+      feishuAppId: 'app-id',
+      feishuAppSecret: 'app-secret',
+      feishuVerificationToken: 'verify-token',
+    }))).resolves.toEqual({});
+    await expect(sendViaGatewayAdapter({ ...oneBotMessage, target: { ...oneBotMessage.target, channel: 'unknown' } }, baseConfig())).resolves.toBeUndefined();
 
     expect(sendOneBotOutbound).toHaveBeenCalledWith(oneBotMessage, expect.objectContaining({ oneBotHttpUrl: 'http://127.0.0.1:5700' }));
     expect(sendQQBotOutbound).toHaveBeenCalledWith(qqbotMessage);
+    expect(sendFeishuOutbound).toHaveBeenCalledWith(feishuMessage, expect.objectContaining({ feishuAppId: 'app-id' }));
   });
 
   it('starts only configured startable adapters', async () => {

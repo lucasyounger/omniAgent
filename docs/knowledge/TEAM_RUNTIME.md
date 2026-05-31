@@ -63,6 +63,24 @@ under `~/.omni/storage/`. R6 keeps Team Runtime, RuntimeTask, Cron, Goal, PR Poo
 Gateway, Req, and docs-memory records file-readable until each store receives an
 explicit compatibility adapter or migration path.
 
+Phase 9 adds a runtime storage compatibility contract in
+`src/mastra/runtime/storage-backend.ts`. The contract exposes both the legacy
+file backend descriptor and the active LibSQL backend descriptor, plus runtime
+storage domains for Team Runtime, RuntimeTask, PR Pool, Goal, Req, Scheduler, and
+Gateway delivery. `describeRuntimeStorageCompatibility()` returns a
+file-readable JSON-safe debug export with covered domains and legacy file roots;
+it is descriptive only and does not migrate records or change existing callers.
+
+## Local Runtime Dashboard
+
+The gateway exposes `GET /runtime/dashboard` as the shared read-only runtime
+projection and `GET /runtime/dashboard/ui` as a lightweight local HTML view over
+that same projection. The UI renders Goal timeline, PR Pool board, Approval
+inbox, Executor runs, and Artifacts sections. It must stay a local read model:
+links may point back to projection endpoints, but dashboard rendering must not
+introduce business mutation paths or bypass RuntimeTask, Tool Gateway, PR Pool,
+or approval boundaries.
+
 ## Rules
 
 - Runtime lifecycle changes should go through `src/mastra/runtime/task-runtime.ts`.
@@ -133,7 +151,24 @@ approval linkage.
 - Invalid runtime transitions throw before task metadata is changed.
 - RuntimeTask records preserve `resultRef`, `approvalRequestId`, and
   `approvalToken` linkage alongside the append-only runtime timeline.
-- Composite task workflow executes Planner `ExecutionPlan` objects by creating Runtime Tasks for ready steps and dispatching them through existing Task Dispatcher handlers. Dependencies are honored, ready steps in the same `parallelGroup` can run concurrently, and failures return the completed step IDs plus failed step and reason.
+- Execution Engine is the durable entrypoint for direct RuntimeTask execution,
+  Planner `ExecutionPlan` objects, and Capability Planner plans. It persists a
+  WorkflowRun record under `~/.omni/runs/workflow/{runId}.json` with source,
+  plan id/goal, normalized step results, original input, output, and terminal or
+  paused timestamps so clients can inspect multi-step work without replaying
+  dispatcher state. Capability Planner plans preserve deterministic known chains
+  while leaving extra independent capabilities dependency-free and in the same
+  initial parallel group, so mixed plans can start independent work alongside the
+  first serial-chain step. Composite task workflow executes Planner `ExecutionPlan`
+  objects by creating Runtime Tasks for ready steps and dispatching them through
+  existing Task Dispatcher handlers. Dependencies are honored, ready steps in
+  the same `parallelGroup` can run concurrently, and failures return the
+  completed step IDs plus failed step, task id when one exists, and reason.
+  Approval or user-confirmation waits are represented as paused WorkflowRuns
+  with `pausedAt`, `failedStepId`, `failureReason`, and a
+  `waiting_user_confirm` step. After the linked RuntimeTask is approved back to
+  `pending`, `resumeWorkflowRun` re-dispatches the waiting step, skips already
+  succeeded dependencies, and continues remaining plan steps.
 - AI Dev E2E `dry_run` creates RuntimeTask bindings for each workflow lane and
   feeds each task id, terminal dry-run status, and result ref back into the
   workflow output. Each `shadow` or `dry_run` invocation also persists a compact

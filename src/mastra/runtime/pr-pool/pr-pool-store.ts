@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { formatCstDateTime } from '../../../lib/time';
 import { prPoolRoot, prPoolRunsRoot } from '../../lib/paths';
+import { getToolPolicy } from '../policy-center';
+import type { ToolGatewayPolicy } from '../types';
 
 export type PRItemStatus =
   | 'draft'
@@ -706,6 +708,7 @@ export function buildPrItemBriefMarkdown(item: PRItem): string {
 
 export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
   const design = item.design4Plus1;
+  const executorPolicy = getToolPolicy('start-code-task');
   return [
     '# CodeAgent PR Brief',
     '',
@@ -717,6 +720,10 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     '- Command: resolved at dispatch time from explicit payload or executor defaults',
     item.run.codeAgentBriefPath ? `- Brief Path: ${item.run.codeAgentBriefPath}` : undefined,
     item.run.codeTaskId ? `- Current Code Task: ${item.run.codeTaskId}` : undefined,
+    '',
+    '## Executor Policy',
+    '',
+    ...formatExecutorPolicy(executorPolicy),
     '',
     '## Retry Context',
     '',
@@ -744,6 +751,17 @@ export function buildCodeAgentPrBriefMarkdown(item: PRItem): string {
     .filter((line): line is string => line !== undefined)
     .join('\n');
 }
+
+function formatExecutorPolicy(policy: ToolGatewayPolicy | undefined): string[] {
+  return [
+    `- Allowed Commands: ${policy?.allowedCommands?.join(', ') || 'not restricted'}`,
+    `- Denied Commands: ${policy?.deniedCommands?.join(', ') || 'n/a'}`,
+    `- Dangerous Commands: ${policy?.dangerousCommands?.join(', ') || 'n/a'}`,
+    `- Network Allowed: ${policy?.networkAllowed === false ? 'no' : 'yes'}`,
+    `- Network Blocked Hosts: ${policy?.networkBlockedHosts?.join(', ') || 'n/a'}`,
+  ];
+}
+
 export async function listArchivedItems(): Promise<PRArchiveEntry[]> {
   await ensureStore();
   const entries = await fs.readdir(archiveRoot, { withFileTypes: true });

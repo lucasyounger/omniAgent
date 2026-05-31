@@ -149,7 +149,7 @@ work is delegated, executed, reported, and recovered across all agents.
   working on a task. Unsupported target agents and handler placeholders that are
   not executable are transitioned to runtime `failed` with a visible reason
   instead of remaining indefinitely `pending`/queued.
-- Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails.
+- Composite task workflow executes Planner `ExecutionPlan` objects by creating one Runtime Task per step and dispatching each step through existing Task Dispatcher handlers. It respects step dependencies, can run ready steps in the same `parallelGroup` concurrently, and returns partial results with the failed step when a dispatch fails. Capability Planner now emits dependency-free roots for independent capabilities, deterministic serial chains for known capability sequences, and mixed plans when independent capabilities are requested alongside a serial chain.
 - AI Dev E2E workflow currently runs in dry-run/shadow mode. It builds a
   Context Pack and returns the full intake → context → clarify → plan → approval
   → PR Pool ingest → execute → verify → review → reconcile → memory writeback

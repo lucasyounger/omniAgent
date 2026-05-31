@@ -59,6 +59,9 @@ export const internalOnlyTools = {
   ...runtimeTaskTools,
 };
 
+export { runtimeTaskTools } from './runtime-task-tools';
+export { teamRuntimeTools } from './team-runtime-tools';
+
 export function listToolIds(tools: Record<string, { id?: string }>): string[] {
   return Object.values(tools)
     .map(tool => tool.id)

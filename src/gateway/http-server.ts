@@ -4,8 +4,9 @@ import { capabilityRegistry, getCapabilityClientSnapshot, routeLightweightCapabi
 import { listGatewayAdapterStatuses } from './adapter-registry';
 import type { GatewayConfig } from './config';
 import { readRuntimeDashboardData } from '../mastra/runtime/dashboard';
+import type { RuntimeDashboardData } from '../mastra/runtime/dashboard';
 import { sendOutbound } from './delivery';
-import { listDeadLetterDeliveries, listDeliveries } from './gateway-store';
+import { listDeadLetterDeliveries, listDeliveries, getDeliveryStatusSummary } from './gateway-store';
 import { processRequest } from './gateway';
 import { listRecentRouteTraces } from './message-handler';
 import { getQQBotAdapterStatus } from './qqbot-adapter';
@@ -16,6 +17,11 @@ export function startGatewayHttpServer(config: GatewayConfig) {
     try {
       if (req.method === 'GET' && req.url === '/health') {
         sendJson(res, 200, { ok: true, service: 'omni-gateway' });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/status') {
+        sendJson(res, 200, { ok: true, delivery: await getDeliveryStatusSummary(), adapters: listGatewayAdapterStatuses(config) });
         return;
       }
 
@@ -31,6 +37,11 @@ export function startGatewayHttpServer(config: GatewayConfig) {
 
       if (req.method === 'GET' && req.url === '/runtime/dashboard') {
         sendJson(res, 200, { ok: true, dashboard: await readRuntimeDashboardData() });
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/runtime/dashboard/ui') {
+        sendHtml(res, 200, renderRuntimeDashboardHtml(await readRuntimeDashboardData()));
         return;
       }
 
@@ -231,4 +242,56 @@ async function readJson(req: http.IncomingMessage) {
 function sendJson(res: http.ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(payload));
+}
+
+function sendHtml(res: http.ServerResponse, status: number, body: string) {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(body);
+}
+
+function renderRuntimeDashboardHtml(dashboard: RuntimeDashboardData) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OmniAgent Runtime Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #172033; background: #f6f7fb; }
+    header, section { background: white; border: 1px solid #d8deea; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+    h1, h2 { margin-top: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .item { border-top: 1px solid #eef1f6; padding: .5rem 0; }
+    .meta { color: #617089; font-size: .9rem; }
+    code { background: #eef1f6; border-radius: 4px; padding: .1rem .3rem; }
+    a { color: #2358d4; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OmniAgent Runtime Dashboard</h1>
+    <p class="meta">Generated ${escapeHtml(dashboard.generatedAt)} from the read-only <a href="/runtime/dashboard">/runtime/dashboard</a> projection.</p>
+  </header>
+  <main class="grid">
+    <section><h2>Goal timeline</h2>${renderItems(dashboard.goalRuns.recent, run => `${escapeHtml(run.goalId)} · ${escapeHtml(run.status)}<div class="meta">${escapeHtml(run.finishedAt || run.startedAt || '')}</div>`)}</section>
+    <section><h2>PR Pool board</h2>${renderItems(dashboard.prPool.recent, item => `${escapeHtml(item.title)} <code>${escapeHtml(item.status)}</code><div class="meta">${escapeHtml(item.id)}</div>`)}</section>
+    <section><h2>Approval inbox</h2>${renderItems(dashboard.approvals.pending, item => `${escapeHtml(item.toolId)} <code>${escapeHtml(item.risk)}</code><div class="meta">${escapeHtml(item.requestId)}</div>`)}</section>
+    <section><h2>Executor runs</h2>${renderItems(dashboard.executorRuns.recent, run => `${escapeHtml(run.runId)} <code>${escapeHtml(run.status)}</code><div class="meta">${escapeHtml(run.startedAt || run.updatedAt || '')}</div>`)}</section>
+    <section><h2>Artifacts</h2>${renderItems(dashboard.artifacts.recent, artifact => `${escapeHtml(artifact.title)} <code>${escapeHtml(artifact.type)}</code><div class="meta">${escapeHtml(artifact.id)}</div>`)}</section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderItems<T>(items: T[], render: (item: T) => string) {
+  if (!items.length) return '<p class="meta">No records.</p>';
+  return items.map(item => `<div class="item">${render(item)}</div>`).join('');
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }

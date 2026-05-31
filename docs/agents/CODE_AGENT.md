@@ -32,6 +32,11 @@ execution through Team Runtime.
   `claude_code` defaults to `cc --dangerously-skip-permissions`, `opencode`
   resolves to `opencode`, `codex` resolves to `codex`, and `custom` uses the
   explicit command override path.
+- CodeAgent PR Briefs include the Tool Gateway executor policy metadata for
+  `start-code-task`: allowed commands, denied commands, dangerous commands,
+  whether network access is allowed, and blocked network hosts. This gives
+  executor sessions the same command/network policy skeleton that Tool Gateway
+  audits and enforces.
 - Executor defaults can be configured with `OMNI_CODE_AGENT_EXECUTOR`,
   `OMNI_CLAUDE_COMMAND`, `OMNI_OPENCODE_COMMAND`, `OMNI_CODEX_COMMAND`,
   `OMNI_CODE_AGENT_COMMAND`, `OMNI_CODE_AGENT_ARGS`, `OMNI_OPENCODE_ARGS`,
@@ -69,7 +74,10 @@ execution through Team Runtime.
   without copying full diffs or raw transcripts.
 - Writes Team Runtime events for progress.
 - Writes final Team Runtime result to `~/.omni/runs/team/results/{runId}.json`.
-- Sends completion or failure inbox messages.
+- Sends completion or failure inbox messages. For Gateway-originated `/task`
+  requests, those inbox messages return to `channel-gateway`; the Gateway
+  delivery worker then creates traceable QQBot or Feishu outbox records using
+  the original channel source metadata.
 - For PR Pool ready/scheduled develop handoffs, CodeAgent should execute within
   the provided PR Pool contract, complete the slice end-to-end in one run when
   possible, split large work into internal sequential steps, update docs/tests,

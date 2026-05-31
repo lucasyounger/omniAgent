@@ -9,6 +9,11 @@ export type GatewayConfig = {
   oneBotHttpUrl?: string;
   qqbotAppId?: string;
   qqbotClientSecret?: string;
+  feishuAppId?: string;
+  feishuAppSecret?: string;
+  feishuVerificationToken?: string;
+  feishuEncryptKey?: string;
+  feishuSigningSecret?: string;
 };
 
 export function getGatewayConfig(): GatewayConfig {
@@ -24,5 +29,10 @@ export function getGatewayConfig(): GatewayConfig {
     oneBotHttpUrl: process.env.OMNI_ONEBOT_HTTP_URL,
     qqbotAppId: process.env.OMNI_QQBOT_APPID,
     qqbotClientSecret: process.env.OMNI_QQBOT_CLIENTSECRET,
+    feishuAppId: process.env.OMNI_FEISHU_APP_ID,
+    feishuAppSecret: process.env.OMNI_FEISHU_APP_SECRET,
+    feishuVerificationToken: process.env.OMNI_FEISHU_VERIFICATION_TOKEN,
+    feishuEncryptKey: process.env.OMNI_FEISHU_ENCRYPT_KEY,
+    feishuSigningSecret: process.env.OMNI_FEISHU_SIGNING_SECRET,
   };
 }

@@ -4,10 +4,62 @@ import {
   getQQBotAdapterStatus,
   normalizeQQBotC2CMessage,
   normalizeQQBotGroupAtMessage,
+  qqbotC2CEventToInboundEnvelopeV2,
+  qqbotGroupAtEventToInboundEnvelopeV2,
 } from '../src/gateway/qqbot-adapter';
 
 describe('QQBot adapter', () => {
-  it('normalizes C2C message events with user_openid', () => {
+  it('maps C2C message events to inbound envelope v2', () => {
+    const raw = {
+      id: 'msg-v2-1',
+      content: ' hello v2 ',
+      author: {
+        id: 'legacy-id',
+        user_openid: 'user-openid',
+        username: 'Lucas',
+      },
+    };
+
+    expect(qqbotC2CEventToInboundEnvelopeV2(raw, '2026-05-13T08:00:00.000Z')).toMatchObject({
+      protocolVersion: 2,
+      id: 'msg-v2-1',
+      identity: { channel: 'qqbot', accountId: 'default' },
+      conversation: { id: 'user-openid', type: 'dm' },
+      sender: {
+        id: 'user-openid',
+        displayName: 'Lucas',
+        metadata: { legacyId: 'legacy-id', userOpenid: 'user-openid' },
+      },
+      text: 'hello v2',
+      receivedAt: '2026-05-13T08:00:00.000Z',
+      raw,
+    });
+  });
+
+  it('maps group-at message events to inbound envelope v2', () => {
+    const raw = {
+      id: 'msg-v2-2',
+      group_openid: 'group-openid',
+      content: '<@123456> 帮我查状态',
+      author: {
+        id: 'member-openid',
+        username: 'Member',
+      },
+    };
+
+    expect(qqbotGroupAtEventToInboundEnvelopeV2(raw, '2026-05-13T08:01:00.000Z')).toMatchObject({
+      protocolVersion: 2,
+      id: 'msg-v2-2',
+      identity: { channel: 'qqbot', accountId: 'default' },
+      conversation: { id: 'group-openid', type: 'group' },
+      sender: { id: 'member-openid', displayName: 'Member' },
+      text: '帮我查状态',
+      receivedAt: '2026-05-13T08:01:00.000Z',
+      raw,
+    });
+  });
+
+  it('preserves v1 ChannelMessage compatibility over inbound envelope v2', () => {
     const message = normalizeQQBotC2CMessage(
       {
         id: 'msg-1',

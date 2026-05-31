@@ -109,6 +109,10 @@ describe('PR pool store', () => {
     const codeAgentBriefPath = await store.writeCodeAgentPrBrief(archiveItem);
     expect(codeAgentBriefPath).toBe(path.join(tempRoot, '.omni', 'pr-pool', 'active', archiveItem.id, 'code-agent-pr-brief.md'));
     await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('# CodeAgent PR Brief');
+    await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('## Executor Policy');
+    await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('- Allowed Commands: cc, opencode, codex');
+    await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('- Dangerous Commands: rm -rf, git reset --hard, git push --force');
+    await expect(fs.readFile(codeAgentBriefPath, 'utf8')).resolves.toContain('- Network Allowed: yes');
     await expect(fs.readdir(path.join(tempRoot, '.omni', 'runs', 'pr-pool', archiveItem.id))).rejects.toThrow();
     const legacyRunDir = path.join(tempRoot, '.omni', 'runs', 'pr-pool', archiveItem.id);
     await fs.mkdir(legacyRunDir, { recursive: true });

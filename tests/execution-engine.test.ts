@@ -165,7 +165,104 @@ describe('Execution Engine', () => {
     });
     expect(run.stepResults).toHaveLength(2);
     expect(run.stepResults[0]).toMatchObject({ stepId: 'step-1', status: 'succeeded' });
-    expect(run.stepResults[1]).toMatchObject({ stepId: 'step-2', status: 'failed' });
+    expect(run.stepResults[1]).toMatchObject({ stepId: 'step-2', status: 'failed', taskId: expect.any(String) });
+  });
+
+  it('resumes a paused multi-step ExecutionPlan and continues remaining steps', async () => {
+    const { createWorkflowRun, resumeWorkflowRun, taskRuntime } = await loadEngine();
+    const plan: ExecutionPlan = {
+      planId: 'plan-resume',
+      messageId: 'msg-resume',
+      mode: 'composite',
+      goal: 'Resume approved work',
+      steps: [
+        {
+          stepId: 'step-1',
+          capabilityId: 'goal.create',
+          taskType: 'goal.create',
+          input: { title: 'Already completed goal' },
+          expectedOutput: 'Create goal',
+        },
+        {
+          stepId: 'step-2',
+          capabilityId: 'goal.list',
+          taskType: 'goal.list',
+          dependencies: ['step-1'],
+          expectedOutput: 'List goals after approval',
+        },
+        {
+          stepId: 'step-3',
+          capabilityId: 'goal.list',
+          taskType: 'goal.list',
+          dependencies: ['step-2'],
+          expectedOutput: 'Continue remaining work',
+        },
+      ],
+    };
+    const approvedTask = await taskRuntime.createTask({
+      sourceAgentId: 'workflow-engine',
+      targetAgentId: 'goal-runtime',
+      objective: 'List goals after approval',
+      metadata: {
+        taskType: 'goal.list',
+        payload: {},
+        executionPlanId: plan.planId,
+        executionPlanStepId: 'step-2',
+        capabilityId: 'goal.list',
+        approvalToken: 'approval-token-test',
+      },
+    });
+    const pausedRun = await createWorkflowRun({
+      source: 'execution_plan',
+      planId: plan.planId,
+      goal: plan.goal,
+      input: plan,
+      status: 'paused',
+      pausedAt: new Date().toISOString(),
+      failureReason: 'Approval required for goal.list.',
+      failedStepId: 'step-2',
+      stepResults: [
+        {
+          stepId: 'step-1',
+          capabilityId: 'goal.create',
+          taskType: 'goal.create',
+          status: 'succeeded',
+          handler: 'goal-handler',
+          result: { goalId: 'goal-1' },
+        },
+        {
+          stepId: 'step-2',
+          capabilityId: 'goal.list',
+          taskType: 'goal.list',
+          taskId: approvedTask.id,
+          status: 'waiting_user_confirm',
+          reason: 'Approval required for goal.list.',
+        },
+      ],
+    });
+
+    const resumed = await resumeWorkflowRun(pausedRun.id);
+
+    expect(resumed).toMatchObject({
+      source: 'execution_plan',
+      planId: 'plan-resume',
+      status: 'succeeded',
+    });
+    expect(resumed.pausedAt).toBeUndefined();
+    expect(resumed.failedStepId).toBeUndefined();
+    expect(resumed.failureReason).toBeUndefined();
+    expect(resumed.stepResults.map(step => [step.stepId, step.status])).toEqual([
+      ['step-1', 'succeeded'],
+      ['step-2', 'succeeded'],
+      ['step-3', 'succeeded'],
+    ]);
+    expect(resumed.stepResults[1]).toMatchObject({
+      taskId: approvedTask.id,
+      handler: 'goal-handler',
+    });
+    expect(resumed.output).toMatchObject({
+      completedStepIds: ['step-1', 'step-2', 'step-3'],
+    });
   });
 
   it('runs multi-step ExecutionPlan code steps once the workspace is allowed', async () => {

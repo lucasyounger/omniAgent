@@ -27,6 +27,7 @@ export type CreateCapabilityPlanInput = {
 const ORDERED_CHAINS = [
   ['repository_analysis', 'architecture_modeling', 'document_generation'],
   ['repository_analysis', 'architecture_modeling', 'report_generation'],
+  ['goal_management', 'req_management', 'pr_management', 'message_delivery'],
   ['pr_management', 'report_generation', 'message_delivery'],
 ];
 
@@ -36,7 +37,10 @@ export function createCapabilityPlan(input: CreateCapabilityPlanInput): Capabili
     throw new Error('Capability plan requires valid registered capability ids.');
   }
 
-  const orderedCapabilityIds = orderCapabilities(capabilityIds);
+  const serialChain = findOrderedChain(capabilityIds);
+  const orderedCapabilityIds = orderCapabilities(capabilityIds, serialChain);
+  const dependencies = createStepDependencies(orderedCapabilityIds, serialChain);
+  const executionMode = resolveExecutionMode(orderedCapabilityIds.length, dependencies);
   const steps = orderedCapabilityIds.map((capabilityId, index): PlanStep => {
     const capability = capabilityRegistry.getById(capabilityId);
     const taskType = capability?.taskTypes[0];
@@ -49,25 +53,50 @@ export function createCapabilityPlan(input: CreateCapabilityPlanInput): Capabili
         objective: input.goal,
         targetAgentId: taskType ? defaultTargetAgentIdForTaskType(taskType) : undefined,
       },
-      parallelGroup: orderedCapabilityIds.length === 1 ? 1 : undefined,
+      parallelGroup: dependencies[`step-${index + 1}`].length === 0 ? 1 : undefined,
     };
   });
 
   return {
     goal: input.goal,
     steps,
-    dependencies: Object.fromEntries(steps.map((step, index) => [step.id, index === 0 ? [] : [steps[index - 1].id]])),
+    dependencies,
     requiredCapabilities: orderedCapabilityIds,
-    executionMode: orderedCapabilityIds.length === 1 ? 'single' : 'serial',
+    executionMode,
   };
+}
+
+function findOrderedChain(capabilityIds: string[]): string[] | undefined {
+  return ORDERED_CHAINS.find(candidate => candidate.every(capabilityId => capabilityIds.includes(capabilityId)));
+}
+
+function createStepDependencies(capabilityIds: string[], serialChain?: string[]): Record<string, string[]> {
+  if (!serialChain) {
+    return Object.fromEntries(capabilityIds.map((_, index) => [`step-${index + 1}`, []]));
+  }
+
+  const chainStepByCapabilityId = new Map(serialChain.map((capabilityId, index) => [capabilityId, `step-${index + 1}`]));
+  return Object.fromEntries(capabilityIds.map((capabilityId, index) => {
+    if (!serialChain.includes(capabilityId)) return [`step-${index + 1}`, []];
+    const chainIndex = serialChain.indexOf(capabilityId);
+    return [`step-${index + 1}`, chainIndex === 0 ? [] : [chainStepByCapabilityId.get(serialChain[chainIndex - 1])!]];
+  }));
+}
+
+function resolveExecutionMode(stepCount: number, dependencies: Record<string, string[]>): CapabilityPlan['executionMode'] {
+  if (stepCount === 1) return 'single';
+
+  const dependencyCounts = Object.values(dependencies).map(dependency => dependency.length);
+  if (dependencyCounts.every(count => count === 0)) return 'parallel';
+  if (dependencyCounts.filter(count => count === 0).length === 1) return 'serial';
+  return 'mixed';
 }
 
 function normalizeCapabilityIds(capabilities: Array<string | RouteCapabilitySelection>): string[] {
   return Array.from(new Set(capabilities.map(capability => typeof capability === 'string' ? capability : capability.capabilityId)));
 }
 
-function orderCapabilities(capabilityIds: string[]): string[] {
-  const chain = ORDERED_CHAINS.find(candidate => candidate.every(capabilityId => capabilityIds.includes(capabilityId)));
+function orderCapabilities(capabilityIds: string[], chain?: string[]): string[] {
   if (!chain) return capabilityIds;
   return [...chain, ...capabilityIds.filter(capabilityId => !chain.includes(capabilityId))];
 }

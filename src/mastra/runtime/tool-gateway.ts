@@ -197,15 +197,52 @@ function validatePolicyGuards(policy: ToolGatewayPolicy, input: unknown) {
     }
   }
 
-  if (policy.deniedCommands?.length) {
-    const denied = policy.deniedCommands.map(command => command.toLowerCase());
-    for (const command of collectStringFields(input, /command|cmd|shell|script/i)) {
+  const commands = collectStringFields(input, /command|cmd|shell|script/i);
+  if (policy.allowedCommands?.length) {
+    const allowed = policy.allowedCommands.map(command => command.toLowerCase());
+    for (const command of commands) {
+      const normalized = command.toLowerCase();
+      const matched = allowed.some(allowedCommand => normalized === allowedCommand || normalized.startsWith(`${allowedCommand} `));
+      if (!matched) {
+        throw new ToolGatewayBlockedError(`Command is outside allowed policy scope: ${command}`);
+      }
+    }
+  }
+
+  const deniedCommands = [...(policy.deniedCommands || []), ...(policy.dangerousCommands || [])];
+  if (deniedCommands.length) {
+    const denied = deniedCommands.map(command => command.toLowerCase());
+    for (const command of commands) {
       const normalized = command.toLowerCase();
       const matched = denied.find(deniedCommand => normalized.includes(deniedCommand));
       if (matched) {
         throw new ToolGatewayBlockedError(`Command is denied by policy: ${matched}`);
       }
     }
+  }
+
+  const networkTargets = collectStringFields(input, /url|uri|host|hostname|endpoint|network/i);
+  if (policy.networkAllowed === false && networkTargets.length) {
+    throw new ToolGatewayBlockedError(`Network access is denied by policy: ${networkTargets[0]}`);
+  }
+
+  if (policy.networkBlockedHosts?.length) {
+    const blockedHosts = policy.networkBlockedHosts.map(host => host.toLowerCase());
+    for (const target of networkTargets) {
+      const host = readNetworkHost(target).toLowerCase();
+      const matched = blockedHosts.find(blockedHost => host === blockedHost || host.endsWith(`.${blockedHost}`));
+      if (matched) {
+        throw new ToolGatewayBlockedError(`Network host is denied by policy: ${matched}`);
+      }
+    }
+  }
+}
+
+function readNetworkHost(target: string): string {
+  try {
+    return new URL(target).hostname || target;
+  } catch {
+    return target;
   }
 }
 

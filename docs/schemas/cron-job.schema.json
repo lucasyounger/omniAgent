@@ -35,6 +35,21 @@
       }
     },
     "status": { "type": "string", "enum": ["active", "paused"] },
+    "misfirePolicy": {
+      "type": "string",
+      "enum": ["skip", "run_once", "catch_up_limited"],
+      "description": "How due-job scans handle missed schedule ticks. Defaults to run_once for new records."
+    },
+    "concurrencyKey": {
+      "type": "string",
+      "description": "Optional duplicate-prevention key. Goal scans derive goal.cron_scan:<goalType>:<action>; PR pool scans derive prpool:<taskType>:<id>."
+    },
+    "lastSkippedAt": { "type": "string" },
+    "lastSkippedReason": {
+      "type": "string",
+      "enum": ["misfire_policy_skip", "concurrency_key_active", "goal_scan_same_day"]
+    },
+    "lastSkippedConcurrencyKey": { "type": "string" },
     "createdAt": { "type": "string" },
     "updatedAt": { "type": "string" },
     "lastRunAt": { "type": "string" },

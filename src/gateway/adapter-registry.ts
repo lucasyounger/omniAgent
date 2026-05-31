@@ -1,7 +1,8 @@
 import type { GatewayConfig } from './config';
 import { sendOneBotOutbound, sendQQBotOutbound } from './delivery';
+import { getFeishuAdapterStatus, isFeishuConfigured, sendFeishuOutbound } from './feishu-adapter';
 import { getQQBotAdapterStatus, startQQBotAdapter } from './qqbot-adapter';
-import type { GatewayAdapter, GatewayAdapterId, GatewayAdapterKind, GatewayAdapterStatus, OutboundMessage } from './types';
+import type { GatewayAdapter, GatewayAdapterId, GatewayAdapterKind, GatewayAdapterStatus, GatewayDeliveryAck, OutboundMessage } from './types';
 
 const builtInAdapters: GatewayAdapter[] = [
   {
@@ -64,11 +65,15 @@ const builtInAdapters: GatewayAdapter[] = [
     start: startQQBotAdapter,
     send: async message => sendQQBotOutbound(message),
   },
-  placeholderAdapter('feishu', 'Feishu IM', {
-    protocol: 'im',
-    boundary: 'channel_adapter',
-    integrationTools: ['feishu_docs', 'feishu_calendar', 'feishu_approval'],
-  }),
+  {
+    id: 'feishu',
+    displayName: 'Feishu IM',
+    kind: 'channel',
+    capabilities: { inbound: true, outbound: true, start: false },
+    isConfigured: isFeishuConfigured,
+    status: getFeishuAdapterStatus,
+    send: sendFeishuOutbound,
+  },
   placeholderAdapter('cli', 'CLI Channel'),
   placeholderAdapter('desktop', 'Desktop Channel'),
 ];
@@ -111,11 +116,11 @@ export async function startConfiguredGatewayAdapters(
   }
 }
 
-export async function sendViaGatewayAdapter(message: OutboundMessage, config: GatewayConfig): Promise<boolean> {
+export async function sendViaGatewayAdapter(message: OutboundMessage, config: GatewayConfig): Promise<GatewayDeliveryAck | undefined> {
   const adapter = getGatewayAdapter(message.target.channel);
-  if (!adapter?.send || !adapter.isConfigured(config)) return false;
-  await adapter.send(message, config);
-  return true;
+  if (!adapter?.send || !adapter.isConfigured(config)) return undefined;
+  const ack = await adapter.send(message, config);
+  return ack || {};
 }
 
 function placeholderAdapter(id: GatewayAdapterId, displayName: string, metadata?: Record<string, unknown>): GatewayAdapter {

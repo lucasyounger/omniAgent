@@ -23,6 +23,17 @@ exist, then continues the requested create/list/update/delete operation.
 - `workspacePath`: legacy optional workspace for code tasks.
 - `payload`: structured payload copied into Runtime task metadata.
 - `status`: `active` or `paused`.
+- `misfirePolicy`: missed-run behavior, defaulting to `run_once` for new records.
+  `skip` records a skipped run instead of dispatching missed one-time, daily, or
+  cron ticks; `run_once` dispatches one current due RuntimeTask; `catch_up_limited`
+  is accepted as a typed policy and currently dispatches one current due
+  RuntimeTask without per-tick fan-out.
+- `concurrencyKey`: optional duplicate-prevention key. Goal scans derive
+  `goal.cron_scan:<goalType>:<action>`; PR Pool scans derive
+  `prpool:<taskType>:<id>`.
+- `lastSkippedAt`, `lastSkippedReason`, `lastSkippedConcurrencyKey`: skip audit
+  fields for `misfire_policy_skip`, `concurrency_key_active`, or
+  `goal_scan_same_day` decisions.
 - `lastRunAt`, `lastRunTaskId`, `lastRunStatus`, `lastRunError`: execution state.
 - `lastRunTeamTaskId`, `lastRunTeamRunId`: Team Runtime coordination ids.
   `lastRunTeamRunId` is optional because Cron now creates a task but does not
@@ -43,12 +54,18 @@ cadence is `OMNI_MASTRA_CRON_SCAN_CRON` or `* * * * *`, with optional
 
 R5 migration policy:
 
-- Misfires use skip-missed-runs semantics: a restarted process scans current due
-  records, but does not enqueue one RuntimeTask for every missed scheduler tick.
+- Misfires are governed by each job's `misfirePolicy`: `skip` records skipped
+  missed runs, while `run_once` and `catch_up_limited` dispatch one current due
+  RuntimeTask without enqueueing one task for every missed scheduler tick.
 - Concurrency and duplicate prevention use Mastra Scheduler's schedule-row claim
-  in Mastra-driver mode plus cron-store `lastRunAt` due checks.
-- One-time jobs still pause after a started run, preserving existing repeat
-  protection.
+  in Mastra-driver mode plus cron-store `concurrencyKey` checks against active
+  RuntimeTasks. Goal scan keys derive from goal type and action; PR Pool keys
+  derive from task type and pool/item id.
+- Restarted daily `goal.cron_scan` schedules skip dispatch when an active
+  same-day goal scan already exists, preventing duplicate daily scans after
+  process restarts or delayed scans.
+- One-time jobs still pause after a started or skipped run, preserving existing
+  repeat protection.
 
 Supported due checks in the current version:
 

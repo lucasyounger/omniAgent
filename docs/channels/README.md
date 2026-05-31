@@ -6,6 +6,36 @@ The gateway follows the same core idea as local-first agent gateways: channel
 adapters handle messaging protocols, while OmniAgent execution still flows
 through Team Runtime.
 
+## Phase 7 Validation Matrix
+
+Phase 7 tracks three separate states for every channel surface:
+
+- **Implemented**: code path exists in the repository and is wired into the Gateway
+  adapter registry or channel handler.
+- **Locally validated**: covered by local tests, HTTP fixtures, or deterministic
+  adapter/unit tests without relying on a live third-party account.
+- **Externally validated**: manually exercised against the real external service
+  with live credentials, reachable callbacks/websocket sessions, inbound events,
+  outbound delivery, and observable retry/dead-letter behavior. Do not mark this
+  state without recording a reproducible external validation note.
+
+| Adapter | Implemented | Locally validated | Externally validated | Credential / callback coverage | Flow coverage |
+| --- | --- | --- | --- | --- | --- |
+| HTTP | Yes | Yes | N/A local channel | Sender allowlist or pairing token; `POST /message` and `GET /status` are local endpoints. | goal, task, approval inbox, status, PR Pool board, scheduled digest/notification via delivery outbox |
+| OneBot | Yes | Partial | Not recorded | `POST /onebot`; local OneBot-compatible bridge config required for live sends. | status and command handling through Gateway compatibility path; delivery retry/dead-letter through shared outbox |
+| QQBot | Yes | Yes | Not recorded | `OMNI_QQBOT_APPID`, `OMNI_QQBOT_CLIENTSECRET`, websocket session, C2C/group event ids, official send API. | goal, task, approval/status replies, scheduled digest/notification pushback through `channel-gateway` |
+| Feishu | Yes | Yes | Not recorded | `OMNI_FEISHU_APP_ID`, `OMNI_FEISHU_APP_SECRET`, verification token, signing/encrypt secret, Feishu IM callback URL. | goal, task, approval/status replies, markdown/text outbound, scheduled digest/notification pushback |
+| CLI | Placeholder | Registry status only | Not recorded | No chat transport implemented yet. | Not supported as a Gateway chat channel |
+| Desktop | Placeholder | Registry status only | Not recorded | No chat transport implemented yet. | Not supported as a Gateway chat channel |
+
+Validation evidence must cover, per adapter where supported:
+
+1. credentials/callbacks are configured without leaking secrets in `/adapters/status`;
+2. inbound events normalize into the shared Gateway request pipeline;
+3. goal/task/approval/status/digest commands produce compact channel replies;
+4. outbound delivery stores `ChannelOutboundEnvelopeV2` target metadata;
+5. failed sends advance through retry and dead-letter observable states.
+
 ## Current Implementation
 
 - HTTP webhook adapter: `POST /message`
@@ -14,8 +44,9 @@ through Team Runtime.
   `OMNI_QQBOT_CLIENTSECRET` are configured
 - Pairing or allowlist authorization
 - `/task <workspacePath> :: <objective>` for async `code.task` CodeAgent execution through the shared RuntimeTask facade helper after the
-  workspace passes `OMNI_ALLOWED_WORKSPACES`; execution is audited but does not
-  require a second Tool Gateway approval.
+  workspace passes `OMNI_ALLOWED_WORKSPACES`; non-PR-pool channel tasks use the
+  safer patch-proposal execution path unless a confirmed PR Pool item provides
+  the reviewed direct-execution context.
 - `/goal create/list/status/run/feedback` for durable Goal Runtime management
   from paired or allowlisted channels. Create/run/feedback commands call Goal native
   facades, so channel commands share Tool Gateway audit and RuntimeTask-backed
@@ -56,9 +87,10 @@ through Team Runtime.
 - `/status approvals` and `/inbox` provide a unified review queue for PR Pool draft/ready items, docs-memory update proposals, Tool Gateway approvals, and unread gateway inbox messages.
 - Adapter Registry exposes the current and planned channel surfaces through one
   safe status/start/send facade. Built-ins are `http`, `onebot`, `qqbot`,
-  `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior while
-  Feishu IM, CLI, and Desktop are explicit channel-adapter placeholders until
-  their transports are implemented. Feishu docs, calendar, and approval remain
+  `feishu`, `cli`, and `desktop`; HTTP/OneBot/QQBot wrap existing behavior,
+  Feishu IM provides the minimal webhook/token/inbound/outbound chat transport,
+  and CLI/Desktop remain explicit channel-adapter placeholders until their
+  transports are implemented. Feishu docs, calendar, and approval remain
   integration tools rather than channel transports. Registry status responses never
   include credentials, access tokens, or raw session ids.
 - Delivery worker for Team Runtime results addressed to `channel-gateway`
@@ -73,7 +105,7 @@ through Team Runtime.
   for NapCat-style local QQ bridges.
 - Official QQ Bot channel: websocket event adapter plus official HTTP send APIs
   when `OMNI_QQBOT_APPID` and `OMNI_QQBOT_CLIENTSECRET` are configured.
-- Feishu IM channel: reserved adapter id `feishu` for future message receive/send
+- Feishu IM channel: adapter id `feishu` for minimal Feishu message receive/send
   transport. Feishu docs, calendar, and approval are integration-tool surfaces and
   must not be modeled as chat channels.
 - Goal Runtime QQ feedback helpers: mock adapters used by Goal Runtime tests and

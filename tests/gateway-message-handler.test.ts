@@ -165,7 +165,7 @@ describe('Gateway message handler', () => {
     expect(replies[0].text).toContain('\u683c\u5f0f\u9519\u8bef');
   });
 
-  it('creates task commands as directly dispatched RuntimeTasks in allowed workspaces', async () => {
+  it('creates task commands as patch proposal RuntimeTasks in allowed workspaces', async () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { listApprovalRequests } = await import('../src/mastra/runtime/approval-store');
@@ -188,16 +188,16 @@ describe('Gateway message handler', () => {
       sourceAgentId: 'channel-gateway',
       targetAgentId: 'code-agent',
       objective: 'change files',
-      status: 'running',
+      status: 'succeeded',
       metadata: {
         taskType: 'code.task',
         payload: {
           workspacePath: tempRoot,
           objective: 'change files',
-          executionMode: 'direct',
         },
       },
     });
+    expect(task?.metadata?.payload).not.toHaveProperty('executionMode');
     expect(requests).toHaveLength(0);
   });
   it('creates channel reminder cron jobs directly from natural language', async () => {
@@ -957,6 +957,31 @@ describe('Gateway message handler', () => {
     process.env.OMNI_ALLOWED_WORKSPACES = tempRoot;
     const { handleChannelMessage } = await loadHandler();
     const { prPoolRuntime } = await import('../src/mastra/runtime/pr-pool/pr-pool-runtime');
+    const { createApprovalRequest } = await import('../src/mastra/runtime/approval-store');
+    const { sendAgentInboxMessage } = await import('../src/mastra/lib/team-runtime-store');
+    await fs.mkdir(path.join(tempRoot, '.omni', 'memory'), { recursive: true });
+    await fs.writeFile(
+      path.join(tempRoot, '.omni', 'memory', 'doc-update-proposals.jsonl'),
+      `${JSON.stringify({ id: 'doc-proposal-1', risk: 'medium', targetFiles: ['docs/channels/HTTP.md'] })}\n`,
+      'utf8',
+    );
+    await createApprovalRequest({
+      toolId: 'dangerous-tool',
+      policy: { capability: 'gateway.admin', risk: 'dangerous', requireApproval: true },
+      context: { actorId: 'trusted', channel: 'http', requestId: 'approval-compact-1' },
+      toolInput: { secret: 'redacted' },
+      reason: 'needs confirmation',
+    });
+    await sendAgentInboxMessage({
+      recipientAgentId: 'channel-gateway',
+      sourceAgentId: 'code-agent',
+      taskId: 'task-compact-1',
+      runId: 'run-compact-1',
+      type: 'team.run.completed',
+      summary: 'Large artifact is available by ref',
+      resultRef: 'omni://runs/team/results/run-compact-1.json',
+      payload: { output: 'long artifact body should stay out of inbox reply' },
+    });
     const draft = await prPoolRuntime.create({
       title: 'Inbox draft',
       objective: 'Review inbox draft',
@@ -982,8 +1007,13 @@ describe('Gateway message handler', () => {
     const deleteReply = await handleChannelMessage(message(`/pr delete ${draft.id}`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
     const reviseReply = await handleChannelMessage(message(`/pr revise ${completed.id} add focused tests`, 'trusted'), { ...baseConfig(), allowSenders: ['trusted'] });
 
-    expect(inbox[0].text).toContain('待确认 Inbox');
-    expect(inbox[0].text).toContain(draft.id);
+    expect(inbox[0].text).toContain('待确认 Inbox (compact):');
+    expect(inbox[0].text).toContain('Summary: pr_draft=1, pr_ready=0, tool_approvals=1, gateway_inbox=1, doc_refs=1');
+    expect(inbox[0].text).toContain(`${draft.id} | Inbox draft | refs: /pr show ${draft.id}`);
+    expect(inbox[0].text).toContain('doc-proposal-1 | medium | refs: memory/doc-update-proposals.jsonl');
+    expect(inbox[0].text).toContain('approval-compact-1 | dangerous-tool | dangerous | refs: approval request');
+    expect(inbox[0].text).toContain('refs: omni://runs/team/results/run-compact-1.json');
+    expect(inbox[0].text).not.toContain('long artifact body should stay out of inbox reply');
     expect(deleteReply[0].text).toContain('已删除');
     expect(reviseReply[0].text).toContain('已创建修订任务');
     await expect(prPoolRuntime.get(draft.id)).resolves.toMatchObject({ status: 'deleted' });

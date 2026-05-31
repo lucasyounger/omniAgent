@@ -2,7 +2,18 @@ import type { ToolGatewayPolicy } from '../types';
 import type { ToolPolicyCenter, ToolPolicyRecord, ToolPolicySummary } from './policy-center.schema';
 
 const staticPolicies: ToolPolicyRecord[] = [
-  policy('start-code-task', { risk: 'medium', capability: 'code.execute_task', audit: true }, 'Start code execution inside an allowed workspace.'),
+  policy(
+    'start-code-task',
+    {
+      risk: 'medium',
+      capability: 'code.execute_task',
+      audit: true,
+      allowedCommands: ['cc', 'opencode', 'codex'],
+      dangerousCommands: ['rm -rf', 'git reset --hard', 'git push --force'],
+      networkAllowed: true,
+    },
+    'Start code execution inside an allowed workspace.',
+  ),
   policy('get-code-task-status', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'Read code task status.'),
   policy('list-code-tasks', { risk: 'safe', capability: 'code.read_task_status', audit: true }, 'List code tasks.'),
   policy('create-cron-job', { risk: 'medium', capability: 'schedule.write', audit: true }, 'Create scheduled job records.'),

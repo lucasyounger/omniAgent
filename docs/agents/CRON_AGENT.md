@@ -23,10 +23,18 @@ TaskRuntime.
 - Default scan interval is `OMNI_CRON_POLL_INTERVAL_MS` or 30000 ms for the
   legacy poller. Mastra-driver scans use `OMNI_MASTRA_CRON_SCAN_CRON` or
   `* * * * *` plus optional `OMNI_MASTRA_CRON_SCAN_TIMEZONE`.
-- Misfire policy is skip-missed-runs: the next scan dispatches jobs that are due
-  at scan time, but does not enqueue one RuntimeTask per missed tick.
-- Duplicate-trigger protection relies on Mastra Scheduler row claiming in
-  Mastra-driver mode plus cron-store `lastRunAt` checks for due jobs.
+- `misfirePolicy` controls missed due ticks with typed values `skip`, `run_once`,
+  and `catch_up_limited`; new records default to `run_once`.
+- `skip` records a skipped run instead of dispatching missed one-time, daily, or
+  cron ticks; `run_once` dispatches one current due RuntimeTask; `catch_up_limited`
+  is accepted as a typed policy and currently dispatches one current due RuntimeTask
+  without per-tick fan-out.
+- Duplicate-trigger protection uses optional `concurrencyKey` values. Goal scans
+  derive `goal.cron_scan:<goalType>:<action>`; PR Pool scans derive
+  `prpool:<taskType>:<id>`. Active records with the same key are skipped and
+  audited on the cron job.
+- Restarted daily `goal.cron_scan` jobs also skip when another same-day active
+  goal scan already exists, even if the new schedule has a different key.
 - Supports one-time schedules containing `YYYY-MM-DD HH:mm`.
 - Supports daily schedules containing `daily HH:mm`, `every day HH:mm`,
   `每天 HH:mm`, or `每日 HH:mm`.
@@ -34,7 +42,10 @@ TaskRuntime.
 - Invokes Task Dispatcher after creating the Runtime Task.
 - Does not directly start code executor CLIs or any specialist agent implementation.
 - Supports `channel-gateway` scheduled messages through `taskType:
-  channel.message` and payload source metadata.
+  channel.message` and payload source metadata. Due job completion or failure
+  still returns through Team Runtime result/inbox notifications; Gateway turns
+  those inbox items into delivery outbox records instead of using a Cron-specific
+  delivery protocol.
 - Supports structured `taskType`, `targetAgentId`, and `payload` fields while
   preserving legacy `task`, `targetAgent`, and `workspacePath` records.
 - Schedule maintenance can also enter through Runtime Tasks handled by

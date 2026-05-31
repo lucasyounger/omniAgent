@@ -23,6 +23,11 @@ Tool Gateway is the policy boundary for tool execution. It supports:
 - optional capability checks; dangerous non-approval calls require either an
   approval token or an explicit matching capability
 - optional denied-command checks
+- optional allowed-command allowlists that block command, cmd, shell, or script
+  fields outside configured prefixes
+- optional dangerous-command checks that always block matching command text
+- optional network checks: `networkAllowed: false` blocks URL/host/endpoint
+  fields, and `networkBlockedHosts` blocks exact hosts plus subdomains
 - optional allowed-path checks
 
 Audit records are written to `~/.omni/runs/gateway/tool-audit.jsonl` with one of

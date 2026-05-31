@@ -115,6 +115,31 @@ export async function executeCapabilityPlan(plan: CapabilityPlan): Promise<Workf
   });
 }
 
+export async function resumeWorkflowRun(runId: string): Promise<WorkflowRunRecord> {
+  const run = await getWorkflowRun(runId);
+  if (run.status !== 'paused') {
+    throw new Error(`Workflow run is ${run.status}, not paused.`);
+  }
+
+  const resumed = await updateWorkflowRun(run.id, {
+    status: 'running',
+    pausedAt: undefined,
+    failureReason: undefined,
+    failedStepId: undefined,
+  });
+
+  if (resumed.source === 'runtime_task') {
+    return resumeRuntimeTaskRun(resumed);
+  }
+
+  if (resumed.source === 'execution_plan' || resumed.source === 'capability_plan') {
+    const plan = workflowRunToExecutionPlan(resumed);
+    return resumeExecutionPlanRun(resumed, plan);
+  }
+
+  throw new Error(`Workflow run source cannot be resumed: ${resumed.source}`);
+}
+
 export async function getWorkflowRun(id: string): Promise<WorkflowRunRecord> {
   return JSON.parse(await fs.readFile(workflowRunPath(id), 'utf8')) as WorkflowRunRecord;
 }
@@ -202,6 +227,105 @@ function createWorkflowRunId(): string {
   return `workflow-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+async function resumeRuntimeTaskRun(run: WorkflowRunRecord): Promise<WorkflowRunRecord> {
+  const step = findResumableStep(run);
+  if (!step.taskId) {
+    throw new Error(`Workflow run ${run.id} has no task to resume.`);
+  }
+
+  const dispatch = await dispatchRuntimeTask(step.taskId);
+  const nextStep = dispatchResultToWorkflowStep(step.stepId, dispatch, step);
+  return updateWorkflowRun(run.id, workflowCompletionFromStep(nextStep, dispatch));
+}
+
+function workflowRunToExecutionPlan(run: WorkflowRunRecord): ExecutionPlan {
+  if (run.source === 'capability_plan') {
+    return capabilityPlanToExecutionPlan(run.input as CapabilityPlan);
+  }
+
+  return run.input as ExecutionPlan;
+}
+
+async function resumeExecutionPlanRun(run: WorkflowRunRecord, plan: ExecutionPlan): Promise<WorkflowRunRecord> {
+  const previousStepResults = run.stepResults.filter(step => step.status === 'succeeded');
+  const resumedStep = findResumableStep(run);
+  if (!resumedStep.taskId) {
+    throw new Error(`Workflow run ${run.id} has no task to resume.`);
+  }
+
+  const dispatch = await dispatchRuntimeTask(resumedStep.taskId);
+  const nextStep = dispatchResultToWorkflowStep(resumedStep.stepId, dispatch, resumedStep);
+  const stepResults = [...previousStepResults, nextStep];
+
+  if (nextStep.status !== 'succeeded') {
+    return updateWorkflowRun(run.id, workflowCompletionFromStepResults(stepResults, nextStep, dispatch));
+  }
+
+  return continueExecutionPlanRun(run, plan, stepResults);
+}
+
+async function continueExecutionPlanRun(
+  run: WorkflowRunRecord,
+  plan: ExecutionPlan,
+  stepResults: WorkflowStepExecutionResult[],
+): Promise<WorkflowRunRecord> {
+  const result = await executeCompositePlan(skipCompletedPlanSteps(plan, stepResults));
+  const remainingStepResults = result.stepResults.map(compositeStepToWorkflowStep);
+  const allStepResults = [...stepResults, ...remainingStepResults];
+  const completionPatch: Partial<WorkflowRunRecord> = {
+    status: result.status,
+    failureReason: result.failureReason,
+    failedStepId: result.failedStepId,
+    stepResults: allStepResults,
+    output: {
+      ...result,
+      completedStepIds: allStepResults.filter(step => step.status === 'succeeded').map(step => step.stepId),
+      stepResults: allStepResults,
+    },
+  };
+
+  if (result.status === 'paused') {
+    completionPatch.pausedAt = new Date().toISOString();
+  } else {
+    completionPatch.completedAt = new Date().toISOString();
+  }
+
+  return updateWorkflowRun(run.id, completionPatch);
+}
+
+function findResumableStep(run: WorkflowRunRecord): WorkflowStepExecutionResult {
+  const step = [...run.stepResults].reverse().find(result => result.status === 'waiting_user_confirm' || result.status === 'failed');
+  if (!step) {
+    throw new Error(`Workflow run ${run.id} has no resumable step.`);
+  }
+  return step;
+}
+
+function workflowCompletionFromStepResults(
+  stepResults: WorkflowStepExecutionResult[],
+  step: WorkflowStepExecutionResult,
+  dispatch: DispatchResult,
+): Partial<WorkflowRunRecord> {
+  const completion = workflowCompletionFromStep(step, dispatch);
+  return {
+    ...completion,
+    stepResults,
+  };
+}
+
+function skipCompletedPlanSteps(plan: ExecutionPlan, stepResults: WorkflowStepExecutionResult[]): ExecutionPlan {
+  const completedStepIds = new Set(stepResults.filter(step => step.status === 'succeeded').map(step => step.stepId));
+  return {
+    ...plan,
+    steps: plan.steps
+      .filter(step => !completedStepIds.has(step.stepId))
+      .map(step => ({
+        ...step,
+        dependencies: (step.dependencies || []).filter(dependency => !completedStepIds.has(dependency)),
+      })),
+  };
+}
+
 function dispatchResultToWorkflowStep(
   stepId: string,
   dispatch: DispatchResult,
@@ -247,6 +371,7 @@ function workflowCompletionFromStep(
     return {
       status: 'paused',
       pausedAt: new Date().toISOString(),
+      failedStepId: step.stepId,
       failureReason: step.reason,
       stepResults: [step],
       output: dispatch,

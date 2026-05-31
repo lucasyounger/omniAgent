@@ -110,12 +110,37 @@ stable contract.
   - connector registration and invocation boundaries
 - `tests/eval-harness.test.ts`
   - eval case loading and scoring harness
+  - Phase 8 golden scenario dataset for module improvement, topic research, PR Pool code slice, memory writeback, and channel task flows
+  - long-task completion metric aggregation for goal-to-requirement, requirement-to-PR-Pool, verified commit, memory writeback, blocked reasons, context tokens, and artifact completeness
 - `tests/runtime-dashboard.test.ts`
   - runtime dashboard data aggregation
+  - latest and recent eval long-task metrics exposure
 - `tests/registry.test.ts`
   - agent/workflow/tool registry behavior
 - `tests/tool-policy-center.test.ts`
   - centralized tool policy definitions and decisions
+
+## Phase 8 Eval Quality Gate
+
+The eval harness exports a stable golden scenario dataset that exercises the
+long-task product loop across module improvement, topic research, PR Pool code
+slice, memory writeback, and channel task flows. Each scenario declares expected
+artifacts, runtime events, status transitions, verification requirements, and
+metric signals so deterministic mock targets can verify the dataset without a
+live model provider.
+
+Every eval run summary includes the long-task completion metrics gate:
+
+- `goal_to_req_success_rate`
+- `req_to_prpool_success_rate`
+- `prpool_to_verified_commit_success_rate`
+- `memory_writeback_acceptance_rate`
+- `blocked_reason_distribution`
+- `average_context_pack_tokens`
+- `artifact_completeness_score`
+
+The runtime dashboard surfaces these metrics both on the latest eval run and as
+a compact recent metrics list, so regressions are visible from `/runtime/dashboard`.
 
 ## Add Tests When
 

@@ -129,6 +129,11 @@ export type GatewayAdapterStatus = {
   metadata?: Record<string, unknown>;
 };
 
+export type GatewayDeliveryAck = {
+  channelMessageId?: string;
+  ackAt?: string;
+};
+
 export type GatewayAdapter = {
   id: GatewayAdapterId;
   displayName: string;
@@ -137,7 +142,7 @@ export type GatewayAdapter = {
   isConfigured: (config: import('./config').GatewayConfig) => boolean;
   status?: (config: import('./config').GatewayConfig) => GatewayAdapterStatus;
   start?: (config: import('./config').GatewayConfig) => Promise<void> | void;
-  send?: (message: OutboundMessage, config: import('./config').GatewayConfig) => Promise<void>;
+  send?: (message: OutboundMessage, config: import('./config').GatewayConfig) => Promise<GatewayDeliveryAck | void>;
 };
 
 export type ChannelSession = {

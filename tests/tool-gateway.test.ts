@@ -140,6 +140,76 @@ describe('Tool Gateway', () => {
     expect(records.map(record => record.status)).toEqual(['blocked', 'blocked']);
   });
 
+  it('blocks commands outside allowlist and dangerous commands', async () => {
+    const { executeWithToolGateway, ToolGatewayBlockedError } = await loadToolGateway();
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    await expect(
+      executeWithToolGateway(
+        'allowed-command-tool',
+        { risk: 'medium', capability: 'test.command', audit: true, allowedCommands: ['npm test'] },
+        { command: 'npm test -- tests/tool-gateway.test.ts' },
+        execute,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    await expect(
+      executeWithToolGateway(
+        'blocked-allowlist-tool',
+        { risk: 'medium', capability: 'test.command', audit: true, allowedCommands: ['npm test'] },
+        { command: 'npm install left-pad' },
+        execute,
+      ),
+    ).rejects.toBeInstanceOf(ToolGatewayBlockedError);
+
+    await expect(
+      executeWithToolGateway(
+        'dangerous-command-tool',
+        { risk: 'medium', capability: 'test.command', audit: true, dangerousCommands: ['rm -rf'] },
+        { command: 'rm -rf docs' },
+        execute,
+      ),
+    ).rejects.toBeInstanceOf(ToolGatewayBlockedError);
+
+    const records = await readAuditRecords();
+    expect(records.map(record => record.status)).toEqual(['succeeded', 'blocked', 'blocked']);
+  });
+
+  it('blocks network targets when network policy denies them', async () => {
+    const { executeWithToolGateway, ToolGatewayBlockedError } = await loadToolGateway();
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    await expect(
+      executeWithToolGateway(
+        'network-denied-tool',
+        { risk: 'medium', capability: 'test.network', audit: true, networkAllowed: false },
+        { url: 'https://example.com/api' },
+        execute,
+      ),
+    ).rejects.toBeInstanceOf(ToolGatewayBlockedError);
+
+    await expect(
+      executeWithToolGateway(
+        'network-blocked-host-tool',
+        { risk: 'medium', capability: 'test.network', audit: true, networkBlockedHosts: ['example.com'] },
+        { endpoint: 'https://api.example.com/v1' },
+        execute,
+      ),
+    ).rejects.toBeInstanceOf(ToolGatewayBlockedError);
+
+    await expect(
+      executeWithToolGateway(
+        'network-unconfigured-tool',
+        { risk: 'medium', capability: 'test.network', audit: true },
+        { url: 'https://example.com/api' },
+        execute,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const records = await readAuditRecords();
+    expect(records.map(record => record.status)).toEqual(['blocked', 'blocked', 'succeeded']);
+  });
+
   it('blocks dangerous calls without approval or explicit capability', async () => {
     const { executeWithToolGateway, ToolGatewayBlockedError } = await loadToolGateway();
     const execute = vi.fn(async () => ({ ok: true }));

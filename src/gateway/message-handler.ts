@@ -57,7 +57,7 @@ import {
 } from './conversation-semantic-state';
 import { formatCstDateTime, formatCstTime, parseCstDateTime, parseCstDailyTime, utcDailyToCst } from '../lib/time';
 import type { GatewayConfig } from './config';
-import { getSession, pairSession } from './gateway-store';
+import { getDeliveryStatusSummary, getSession, pairSession } from './gateway-store';
 import type { ChannelMessage, OutboundMessage, UnifiedRequest } from './types';
 import { toUnifiedRequest } from './types';
 import { routeRule } from './rule-router';
@@ -108,7 +108,7 @@ export async function handleUnifiedRequest(request: UnifiedRequest, message: Cha
     }
 
     if (rule.command === '/status') {
-      return [reply(message, 'Omni Gateway 在线。可以使用 /task <workspace> :: <objective> 创建异步任务。')];
+      return [reply(message, await handleGatewayStatusCommand())];
     }
 
     if (rule.command === '/goal') {
@@ -210,6 +210,14 @@ async function resolveOrchestratorDecision(message: ChannelMessage, config: Gate
   return { decision: passthroughDecision, trace };
 }
 
+
+async function handleGatewayStatusCommand() {
+  const delivery = await getDeliveryStatusSummary();
+  return [
+    'Omni Gateway 在线。可以使用 /task <workspace> :: <objective> 创建异步任务。',
+    `Delivery: pending=${delivery.pending}, failed=${delivery.failed}, dead_letter=${delivery.dead_letter}`,
+  ].join('\n');
+}
 
 async function callNativeTool<TInput, TOutput>(tool: { execute?: unknown }, input: TInput): Promise<TOutput> {
   if (typeof tool.execute !== 'function') {
@@ -879,7 +887,6 @@ async function handleTaskCommand(message: ChannelMessage, raw: string) {
       workspacePath,
       objective,
       contextBrief: `Requested from ${message.channel} conversation ${message.conversationId}. Reply result through Omni Gateway.`,
-      executionMode: 'direct',
     },
     metadata: {
       source: channelSourceFromMessage(message),
@@ -1018,17 +1025,18 @@ async function handleApprovalsInbox(): Promise<string> {
     readDocUpdateProposals(),
   ]);
   const lines = [
-    '待确认 Inbox:',
+    '待确认 Inbox (compact):',
+    `Summary: pr_draft=${prDrafts.length}, pr_ready=${prReady.length}, tool_approvals=${approvals.length}, gateway_inbox=${inbox.length}, doc_refs=${docProposals.length}`,
     'PR Pool draft:',
-    ...(prDrafts.length ? prDrafts.map(item => `- ${item.id} | ${item.title} | /pr show ${item.id} | /pr confirm ${item.id} | /pr revise ${item.id} <comment> | /pr delete ${item.id}`) : ['- None.']),
+    ...(prDrafts.length ? prDrafts.map(item => `- ${item.id} | ${item.title} | refs: /pr show ${item.id}`) : ['- None.']),
     'PR Pool ready:',
-    ...(prReady.length ? prReady.map(item => `- ${item.id} | ${item.title} | /pr show ${item.id} | /pr develop ${item.id} | /pr revise ${item.id} <comment> | /pr delete ${item.id}`) : ['- None.']),
-    'Doc update proposals:',
-    ...(docProposals.length ? docProposals.map(item => `- ${item.id} | ${item.risk} | ${item.targetFiles.join(', ')} | 审阅 memory/doc-update-proposals.jsonl`) : ['- None.']),
+    ...(prReady.length ? prReady.map(item => `- ${item.id} | ${item.title} | refs: /pr show ${item.id} | /pr develop ${item.id}`) : ['- None.']),
+    'Doc update refs:',
+    ...(docProposals.length ? docProposals.map(item => `- ${item.id} | ${item.risk} | refs: memory/doc-update-proposals.jsonl`) : ['- None.']),
     'Tool Gateway approvals:',
-    ...(approvals.length ? approvals.map(item => `- ${item.requestId} | ${item.toolId} | ${item.risk} | 通过 approval 工具处理`) : ['- None.']),
+    ...(approvals.length ? approvals.map(item => `- ${item.requestId} | ${item.toolId} | ${item.risk} | refs: approval request`) : ['- None.']),
     'Gateway inbox:',
-    ...(inbox.length ? inbox.map(item => `- ${item.messageId} | ${item.type} | ${item.summary}`) : ['- None.']),
+    ...(inbox.length ? inbox.map(item => `- ${item.messageId} | ${item.type} | refs: ${item.resultRef || item.taskId || item.runId || 'team inbox'}`) : ['- None.']),
   ];
   return lines.join('\n');
 }

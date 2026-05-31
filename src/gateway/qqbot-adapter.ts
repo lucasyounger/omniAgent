@@ -1,7 +1,7 @@
 import type { GatewayConfig } from './config';
 import { sendOutbound } from './delivery';
 import { processRequest } from './gateway';
-import { toUnifiedRequest, type ChannelMessage } from './types';
+import { toUnifiedRequest, type ChannelInboundEnvelopeV2, type ChannelMessage } from './types';
 
 const CONNECT_READY_TIMEOUT_MS = 20_000;
 
@@ -349,6 +349,16 @@ function handleGroupAtMessage(d: Record<string, unknown>): void {
 }
 
 export function normalizeQQBotC2CMessage(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelMessage | undefined {
+  const envelope = qqbotC2CEventToInboundEnvelopeV2(d, receivedAt);
+  return envelope ? toChannelMessage(envelope) : undefined;
+}
+
+export function normalizeQQBotGroupAtMessage(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelMessage | undefined {
+  const envelope = qqbotGroupAtEventToInboundEnvelopeV2(d, receivedAt);
+  return envelope ? toChannelMessage(envelope) : undefined;
+}
+
+export function qqbotC2CEventToInboundEnvelopeV2(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelInboundEnvelopeV2 | undefined {
   const author = d.author as { id?: string; user_openid?: string; username?: string } | undefined;
   const userOpenid = author?.user_openid || author?.id;
   const content = typeof d.content === 'string' ? d.content.trim() : '';
@@ -359,19 +369,22 @@ export function normalizeQQBotC2CMessage(d: Record<string, unknown>, receivedAt 
   }
 
   return {
-    channel: 'qqbot',
-    accountId: 'default',
-    conversationId: userOpenid,
-    senderId: userOpenid,
-    senderDisplayName: author.username,
-    messageId: id,
+    protocolVersion: 2,
+    id,
+    identity: { channel: 'qqbot', accountId: 'default' },
+    conversation: { id: userOpenid, type: 'dm' },
+    sender: {
+      id: userOpenid,
+      displayName: author.username,
+      metadata: { legacyId: author.id, userOpenid: author.user_openid },
+    },
     text: content,
-    messageType: 'dm',
     receivedAt,
+    raw: d,
   };
 }
 
-export function normalizeQQBotGroupAtMessage(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelMessage | undefined {
+export function qqbotGroupAtEventToInboundEnvelopeV2(d: Record<string, unknown>, receivedAt = new Date().toISOString()): ChannelInboundEnvelopeV2 | undefined {
   const groupOpenid = typeof d.group_openid === 'string' ? d.group_openid : '';
   const author = d.author as { id?: string; username?: string } | undefined;
   const rawContent = typeof d.content === 'string' ? d.content : '';
@@ -387,15 +400,32 @@ export function normalizeQQBotGroupAtMessage(d: Record<string, unknown>, receive
   }
 
   return {
-    channel: 'qqbot',
-    accountId: 'default',
-    conversationId: groupOpenid,
-    senderId: author.id,
-    senderDisplayName: author.username,
-    messageId: id,
+    protocolVersion: 2,
+    id,
+    identity: { channel: 'qqbot', accountId: 'default' },
+    conversation: { id: groupOpenid, type: 'group' },
+    sender: {
+      id: author.id,
+      displayName: author.username,
+    },
     text: content,
-    messageType: 'group',
     receivedAt,
+    raw: d,
+  };
+}
+
+function toChannelMessage(envelope: ChannelInboundEnvelopeV2): ChannelMessage {
+  return {
+    channel: envelope.identity.channel,
+    accountId: envelope.identity.accountId,
+    conversationId: envelope.conversation.id,
+    senderId: envelope.sender.id,
+    senderDisplayName: envelope.sender.displayName,
+    messageId: envelope.id,
+    text: envelope.text,
+    messageType: envelope.conversation.type,
+    receivedAt: envelope.receivedAt,
+    routeTraceDebug: envelope.routeTraceDebug,
   };
 }
 

@@ -29,7 +29,11 @@ export type ToolGatewayPolicy = {
   audit?: boolean;
   sandboxRequired?: boolean;
   allowedPaths?: string[];
+  allowedCommands?: string[];
   deniedCommands?: string[];
+  dangerousCommands?: string[];
+  networkAllowed?: boolean;
+  networkBlockedHosts?: string[];
   scopes?: string[];
 };
 

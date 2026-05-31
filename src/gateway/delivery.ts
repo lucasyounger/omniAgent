@@ -9,7 +9,7 @@ import {
 import type { GatewayConfig } from './config';
 import { createDelivery, listDeliveries, markDeliveryAttempt, updateDeliveryStatus } from './gateway-store';
 import { getQQBotAccessToken } from './qqbot-adapter';
-import type { ChannelOutboundEnvelopeV2, ChannelTarget, OutboundMessage } from './types';
+import { outboundEnvelopeV2ToMessage, outboundMessageToEnvelopeV2, type ChannelOutboundEnvelopeV2, type ChannelTarget, type GatewayDeliveryAck, type OutboundMessage } from './types';
 
 type ChannelSourceMetadata = {
   kind?: string;
@@ -30,12 +30,14 @@ type SourceMetadata = {
   };
 };
 
-export async function sendOutbound(message: OutboundMessage, config: GatewayConfig) {
-  if (await sendViaGatewayAdapter(message, config)) {
-    return;
+export async function sendOutbound(message: OutboundMessage, config: GatewayConfig): Promise<GatewayDeliveryAck> {
+  const ack = await sendViaGatewayAdapter(message, config);
+  if (ack) {
+    return ack;
   }
 
   console.log(`[gateway:${message.target.channel}] -> ${message.target.conversationId}: ${message.text}`);
+  return {};
 }
 
 export function startDeliveryWorker(config: GatewayConfig) {
@@ -139,16 +141,30 @@ async function deliverQueuedDeliveries(config: GatewayConfig) {
 }
 
 async function attemptDelivery(deliveryId: string, message: OutboundMessage, config: GatewayConfig) {
+  const startedAt = Date.now();
+  await updateDeliveryStatus(deliveryId, 'sending');
   try {
-    await updateDeliveryStatus(deliveryId, 'sending');
-    await sendOutbound(message, config);
-    await updateDeliveryStatus(deliveryId, 'sent');
+    const ack = await sendOutbound(message, config);
+    const sent = await updateDeliveryStatus(deliveryId, 'sent', ack);
+    logDeliveryAttempt(sent, Date.now() - startedAt);
   } catch (error) {
-    await markDeliveryAttempt({
+    const failed = await markDeliveryAttempt({
       deliveryId,
       error: error instanceof Error ? error.message : String(error),
     });
+    logDeliveryAttempt(failed, Date.now() - startedAt);
   }
+}
+
+function logDeliveryAttempt(delivery: { deliveryId: string; traceId: string; channel: string; attempt: number; status: string }, latencyMs: number) {
+  console.info('[gateway] delivery attempt', {
+    deliveryId: delivery.deliveryId,
+    traceId: delivery.traceId,
+    channel: delivery.channel,
+    attempt: delivery.attempt,
+    latency: latencyMs,
+    status: delivery.status,
+  });
 }
 
 function channelTargetFromMetadata(metadata: SourceMetadata): ChannelTarget | undefined {
@@ -205,26 +221,39 @@ export async function sendOneBotOutbound(message: OutboundMessage, config: Gatew
   }
 }
 
-export async function sendQQBotOutbound(message: OutboundMessage) {
+export async function sendQQBotOutbound(message: OutboundMessage): Promise<GatewayDeliveryAck> {
+  return sendQQBotOutboundEnvelope(outboundMessageToEnvelopeV2(message));
+}
+
+export async function sendQQBotOutboundEnvelope(envelope: ChannelOutboundEnvelopeV2): Promise<GatewayDeliveryAck> {
   const token = getQQBotAccessToken();
   if (!token) {
     throw new Error('QQ Bot access token not available');
   }
 
-  const request = buildQQBotMessageRequest(message, token);
-  console.log(`[qqbot] sending ${message.target.messageType} message to ${message.target.conversationId}`);
+  const request = buildQQBotEnvelopeMessageRequest(envelope, token);
+  console.log(`[qqbot] sending ${envelope.target.conversation.type} message to ${envelope.target.conversation.id}`);
   const response = await fetch(request.endpoint, request.init);
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => 'unknown');
     throw new Error(`QQBot send failed: HTTP ${response.status} ${errorBody}`);
   }
+
+  const body = await response.json().catch(() => undefined) as { id?: unknown; message_id?: unknown } | undefined;
+  const channelMessageId = typeof body?.id === 'string' ? body.id : typeof body?.message_id === 'string' ? body.message_id : undefined;
+  return { channelMessageId };
 }
 
 export function buildQQBotMessageRequest(message: OutboundMessage, token: string) {
-  const isGroup = message.target.messageType === 'group';
-  const conversationId = message.target.conversationId;
-  const senderId = message.target.senderId;
+  return buildQQBotEnvelopeMessageRequest(outboundMessageToEnvelopeV2(message), token);
+}
+
+export function buildQQBotEnvelopeMessageRequest(envelope: ChannelOutboundEnvelopeV2, token: string) {
+  const message = outboundEnvelopeV2ToMessage(envelope);
+  const isGroup = envelope.target.conversation.type === 'group';
+  const conversationId = envelope.target.conversation.id;
+  const senderId = envelope.target.recipient?.id;
   const endpoint = isGroup
     ? `https://api.sgroup.qq.com/v2/groups/${conversationId}/messages`
     : `https://api.sgroup.qq.com/v2/users/${senderId || conversationId}/messages`;
